@@ -104,4 +104,3 @@
 
 ;; (count (filter #(second %) (list-array (nth (iterate evolve-array (vector-array 8 (read-input large-input))) 6))))
 ;; 240
-
