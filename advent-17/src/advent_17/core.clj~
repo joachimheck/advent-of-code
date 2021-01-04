@@ -1,0 +1,46 @@
+(ns advent-17.core)
+
+(require '[clojure.pprint :as pp])
+(require '[clojure.repl :refer :all])
+(require '[clojure.string :as str])
+
+(def small-input "resources/small-input.txt")
+(def large-input "resources/large-input.txt")
+
+(defrecord Point [x y z])
+
+(defn vector-array [size]
+  (vec (repeat (* size size size) false)))
+  
+(def cubes (reduce #(assoc %1 (* %2 %2 %2) %2) {} (range 1 16)))
+
+(defn array-size [arr]
+  (get cubes (count arr)))
+
+(defn print-array [arr]
+  (let [size (array-size arr)]
+    (doseq [array
+            (for [z (range size)]
+              (concat (list (str "z=" z))
+                      (for [y (range size)]
+                        (apply str
+                               (for [x (range size)]
+                                 (if (get-array arr x y z) \# \.))))
+                      (list "")))
+            line array]
+      (println line))))
+
+(defn get-array [arr x y z]
+  (let [size (array-size arr)]
+    (get arr (+ (* size size z) (* size y) x))))
+
+(defn set-array [arr x y z v]
+  (let [size (array-size arr)]
+    (assoc arr (+ (* size size z) (* size y) x) v)))
+           
+(defn read-input [f]
+  (with-open [rdr (clojure.java.io/reader f)]
+    (for [[y line] (map-indexed list (doall (line-seq rdr)))
+          [x c] (map-indexed list line)
+          :when (= \# c)]
+      (->Point x y 1))))
