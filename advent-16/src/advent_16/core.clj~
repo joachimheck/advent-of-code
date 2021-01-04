@@ -1,0 +1,36 @@
+(ns advent-16.core)
+
+(require '[clojure.pprint :as pp])
+(require '[clojure.repl :refer :all])
+(require '[clojure.string :as str])
+
+(def small-input "resources/small-input.txt")
+(def large-input "resources/large-input.txt")
+
+(defrecord Notes [fields my-ticket nearby-tickets])
+
+(defn- parse-line [notes-sec l]
+  (let [notes (first notes-sec)
+        sec (second notes-sec)]
+    (cond (empty? l) notes-sec
+          (= "your ticket:" l) (list notes :my-ticket)
+          (= "nearby tickets:" l) (list notes :nearby-tickets)
+          :else
+          (case sec
+            :fields (let [matches (rest (re-matches #"(.+): (\d+)-(\d+) or (\d+)-(\d+)" l))]
+                      (list
+                       (assoc notes
+                              :fields
+                              (assoc (:fields notes)
+                                     (first matches)
+                                     (partition 2 (map #(Long/parseLong %) (rest matches)))))
+                       sec))
+            :my-ticket (list (assoc notes :my-ticket (vec (map #(Long/parseLong %) (str/split l #",")))) sec)
+            :nearby-tickets (list
+                             (assoc notes :nearby-tickets
+                                    (conj (:nearby-tickets notes) (vec (map #(Long/parseLong %) (str/split l #",")))))
+                             sec)))))
+
+(defn- read-notes [f]
+  (with-open [rdr (clojure.java.io/reader f)]
+    (first (reduce parse-line (list (->Notes {} [] []) :fields) (line-seq rdr)))))
