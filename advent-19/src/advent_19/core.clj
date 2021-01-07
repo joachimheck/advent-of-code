@@ -5,7 +5,9 @@
 (require '[clojure.string :as str])
 
 (def small-input "resources/small-input.txt")
+(def small-input-2 "resources/small-input-2.txt")
 (def large-input "resources/large-input.txt")
+(def large-input-2 "resources/large-input-2.txt")
 
 (defn parse-section [s]
   (let [cleaned (str/replace (str/trim s) "\"" "")]
@@ -25,35 +27,60 @@
            :messages (doall (reduce conj [] (line-seq rdr))))))
 
 ;; Algorithm: s matches r0 if s matches r0-1 as m1, s-m1 matches r0-2 as m2, etc.
-(defn is-leaf? [r]
-  (and (= 1 (count r)) (string? (first r))))
+(defn rule-type [r]
+  (if (= 1 (count r))
+    (if (string? (first r))
+      :leaf ; ("a")
+      :single) ; ((1 2))
+    :multiple)) ; ((1 2) (3 4))
 
-(def test-rules '{0 ((1 2) (2 1)) 1 ("a") 2 ("b")})
+(defn match-leaf [s rs]
+  (when (str/starts-with? s (first rs)) (subs s 1)))
 
-;; TODO: rewrite as for comprehension?
+(defn match-single
+  ;; Match each rule list in 'rule, in order
+  [rules s rule lvl]
+  ;; (println (repeat lvl "  ") "match-seq-rs" s rule)
+  (reduce (fn [acc2 subrule]
+            ;; (println (repeat lvl "  ") "acc2" acc2 "subrule" subrule)
+            (let [match (match-rule rules acc2 subrule (inc lvl))]
+              ;; (println (repeat lvl "  ") "match?" match "new-acc" match)
+              ;; (when match (subs acc2 (count match)))))
+              (when match match)))
+          s rule))
+
+(defn match-multiple
+  [rules s rs lvl]
+  ;; process each rule list in 'rs
+  (let [x (doall (map #(match-single rules s % lvl) rs))]
+    ;; (println (repeat lvl "  ") "match-multiple" "x" x)
+    ;; (if (> (count (keep identity x)) 1) (println "Multiple matches found!" x))
+    ;; TODO: somehow return all the matches.
+    (first (keep identity x))))
+
 (defn match-rule
   "Returns nil for a mismatch, the leftover characters in s otherwise."
-  ([rules s]
-   (let [match (match-rule rules s 0 0)]
-     (and (not (nil? match)) (empty? match))))
+  ([rules s] (= "" (match-rule rules s 0 0)))
   ([rules s rnum lvl]
    (if (nil? s) nil
-      (let [r (get rules rnum)]
-        (println "match-rule" lvl s rnum r (if (is-leaf? r) "leaf" "not leaf"))
-        (if (is-leaf? r)
-          (when (str/starts-with? s (first r)) (first r))
-          ;; process each rule list in 'r
-          (reduce (fn [acc1 rule]
-                    (println "acc1" acc1 "rule" rule)
-;; TODO - don't return a boolean here, return the remainder of the string
-;; problem - what if both match?                    
-                    (or acc1
-                        ;; process each rule in 'rule
-                        (reduce (fn [acc2 subrule]
-                                  (println "acc2" acc2 "subrule" subrule)
-                                  (let [match (match-rule rules acc2 subrule (inc lvl))]
-                                    (when match (subs acc2 1))))
-                                s rule)))
-                  false r))))))
+       (let [rs (get rules rnum)]
+         ;; (println (repeat lvl "  ") "match-rule" s rnum "=" rs "type" (rule-type rs)))
+         (case (rule-type rs)
+           :leaf (match-leaf s rs)
+           :single (match-single rules s (first rs) lvl)
+           :multiple (match-multiple rules s rs lvl)
+           )))))
 
-;;(match-rule (get (read-input small-input) :rules) "ababbb")
+(def test-rules '{0 ((1 3)) 1 ((2 2) (2 3)) 2 ("a") 3 ("b")})
+
+;; (let [input (read-input small-input)] (map #(list % (match-rule (get input :rules) %)) (get input :messages)))
+;; (("ababbb" true)
+;;  ("bababa" false)
+;;  ("abbbab" true)
+;;  ("aaabbb" false)
+;;  ("aaaabbb" false))
+;; (let [input (read-input small-input)] (reduce #(if (match-rule (get input :rules) %2) (inc %1) %1) 0 (get input :messages)))
+;; 2
+
+;; (let [input (read-input large-input)] (reduce #(if (match-rule (get input :rules) %2) (inc %1) %1) 0 (get input :messages)))
+;; 180
