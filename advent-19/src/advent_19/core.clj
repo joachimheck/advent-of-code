@@ -34,45 +34,49 @@
       :single) ; ((1 2))
     :multiple)) ; ((1 2) (3 4))
 
-(defn match-leaf [s rs]
-  (when (str/starts-with? s (first rs)) (subs s 1)))
+(defn match-leaf
+  ;; Match a leaf rule (1: "a")
+  [s rs lvl]
+  ;; (println (repeat lvl "  ") "match-leaf" s rs (first rs) (str/starts-with? s (first rs)))
+  (when (str/starts-with? s (first rs)) (list (subs s 1))))
 
 (defn match-single
-  ;; Match each rule list in 'rule, in order
+  ;; Match each subrule in rule, in order (1: 2 3)
   [rules s rule lvl]
-  ;; (println (repeat lvl "  ") "match-seq-rs" s rule)
-  (reduce (fn [acc2 subrule]
-            ;; (println (repeat lvl "  ") "acc2" acc2 "subrule" subrule)
-            (let [match (match-rule rules acc2 subrule (inc lvl))]
-              ;; (println (repeat lvl "  ") "match?" match "new-acc" match)
-              ;; (when match (subs acc2 (count match)))))
-              (when match match)))
-          s rule))
+  ;; (println (repeat lvl "  ") "match-single" s rule)
+  (reduce (fn [acc subrule]
+            ;; ;; (println (repeat lvl "  ") "acc" acc "subrule" subrule)
+            (let [matches (doall (flatten (map #(match-rule rules % subrule (inc lvl)) acc)))]
+              ;; (println (repeat lvl "  ") "match-single" "matches" matches)
+                  matches))
+          (list s)
+          rule))
 
 (defn match-multiple
+  ;; Match each rule in rs (1: 2 3 | 4 5)
   [rules s rs lvl]
-  ;; process each rule list in 'rs
+  ;; (println (repeat lvl "  ") "match-multiple" s rs)
   (let [x (doall (map #(match-single rules s % lvl) rs))]
-    ;; (println (repeat lvl "  ") "match-multiple" "x" x)
-    ;; (if (> (count (keep identity x)) 1) (println "Multiple matches found!" x))
-    ;; TODO: somehow return all the matches.
-    (first (keep identity x))))
+    ;; (if (> (count (keep identity x)) 1) ;; (println "Multiple matches found!" x))
+    (keep identity x)))
 
 (defn match-rule
   "Returns nil for a mismatch, the leftover characters in s otherwise."
-  ([rules s] (= "" (match-rule rules s 0 0)))
+  ([rules s] (boolean (some #{""} (match-rule rules s 0 0))))
   ([rules s rnum lvl]
    (if (nil? s) nil
        (let [rs (get rules rnum)]
-         ;; (println (repeat lvl "  ") "match-rule" s rnum "=" rs "type" (rule-type rs)))
+         ;; (println (repeat lvl "  ") "match-rule" s rnum "=" rs "type" (rule-type rs))
          (case (rule-type rs)
-           :leaf (match-leaf s rs)
+           :leaf (match-leaf s rs lvl)
            :single (match-single rules s (first rs) lvl)
            :multiple (match-multiple rules s rs lvl)
            )))))
 
 (def test-rules '{0 ((1 3)) 1 ((2 2) (2 3)) 2 ("a") 3 ("b")})
 
+;; Part 1 - only single matches.
+;; 
 ;; (let [input (read-input small-input)] (map #(list % (match-rule (get input :rules) %)) (get input :messages)))
 ;; (("ababbb" true)
 ;;  ("bababa" false)
@@ -84,3 +88,11 @@
 
 ;; (let [input (read-input large-input)] (reduce #(if (match-rule (get input :rules) %2) (inc %1) %1) 0 (get input :messages)))
 ;; 180
+
+
+
+;; Part 2 - handle multiple matches
+;; (let [input (read-input small-input-2)] (reduce #(if (match-rule (get input :rules) %2) (inc %1) %1) 0 (get input :messages)))
+;; 12
+;; advent-19.core> (let [input (read-input large-input-2)] (reduce #(if (match-rule (get input :rules) %2) (inc %1) %1) 0 (get input :messages)))
+;; 323
