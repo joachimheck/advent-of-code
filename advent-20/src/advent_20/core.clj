@@ -10,23 +10,24 @@
 (defn read-input [f]
   (with-open [rdr (clojure.java.io/reader f)]
     (doall
-     (let [tiles {}]
-       (reduce
-        #(assoc %1 (:id %2) %2)
-        tiles
-        (map
-         (fn [tile-lines]
-           (assoc tiles
-                  :id (Long/parseLong (second (re-matches #"Tile (\d+):" (first tile-lines))))
-                  :lines (rest tile-lines)))
-         (remove #(= 1 (count %)) (partition-by #(empty? %) (line-seq rdr)))))))))
+     (reduce
+      (fn [[l m] tile-lines]
+        (let [id (Long/parseLong (second (re-matches #"Tile (\d+):" (first tile-lines))))
+              lines (rest tile-lines)]
+          (list (conj l id) (assoc m id lines))))
+      '([] {})
+      (remove #(= 1 (count %)) (partition-by #(empty? %) (line-seq rdr)))))))
+
+(def input (read-input small-input))
+(def tids (first input))
+(def tmap (second input))
 
 ;; Part 1
 ;; Match tiles up by their borders. The borders may need to be reversed to match.
 (defn borders
-  ([tile] (borders tile false))
-  ([tile rev?]
-   (let [lines (:lines tile)
+  ([tid] (borders tid false))
+  ([tid rev?]
+   (let [lines (get tmap tid)
          borders (list
                   (first lines)
                   (last lines)
@@ -36,26 +37,26 @@
        (concat borders (map str/reverse borders))
        borders))))
 
-(defn find-matching-borders [t ts]
-  (list (:id t)
-        (for [t2 (vals ts)
+(defn find-matching-borders [ts t]
+  (list t
+        (for [t2 ts
               :when (not= t2 t)
               b1 (borders t true)
               b2 (borders t2)
               :when (= b1 b2)]
-          (list (:id t2) b2))))
+          (list t2 b2))))
 
-(defn find-neighbor-ids [t ts]
-  (map first (second (find-matching-borders t ts))))
+(defn find-neighbors [ts t]
+  (map first (second (find-matching-borders ts t))))
 
 (defn multiply-corners [ts]
-  (->> (vals ts)
-       (map #(list (:id %) (find-neighbor-ids % ts))) ; tiles/neighbors
+  (->> ts
+       (map #(list % (find-neighbors ts %))) ; tiles/neighbors
        (filter #(= 2 (count (second %)))) ; corners (2 neighbors)
        (map first) ; id strings
        (reduce * 1)))
 
-;; (multiply-corners (read-input small-input))
+;; (multiply-corners tids)
 ;; 20899048083289
 
 
@@ -63,14 +64,13 @@
 ;; Part 2
 ;; I didn't actually assemble the image in part 1 so I have to do that now
 ;; Then look for sea monsters!
-(defn find-neighbors [t ts]
-  (map #(get ts %) (find-neighbor-ids t ts)))
-
 (defn with-neighbors [ts n]
-  (->> (vals ts)
-       (map #(list (:id %) (find-neighbors % ts))) ; tiles/neighbors
+  (->> ts
+       (map #(list % (find-neighbors ts %))) ; tiles/neighbors
        (filter #(= n (count (second %))))
-       (map #(get ts (first %)))))
+       (map first)
+       ;; (map #(get ts (first %)))
+       ))
 
 (defn find-corners [ts] (with-neighbors ts 2))
 (defn find-sides [ts] (with-neighbors ts 3))
@@ -81,21 +81,46 @@
 ;; find its other neighbor, etc
 ;; until we get back to the start tile
 
-(defn find-next-border-tile [t prev ts]
-  (first (remove #(= % prev) (find-neighbors t ts))))
+(defn find-next-border-tile [ts t prev]
+  (first (remove #(= % prev) (find-neighbors ts t))))
 
-(defn border-tiles-map [ts]
-  (reduce
-   #(assoc %1 (:id %2) %2)
-   {}
-   (concat (find-corners ts) (find-sides ts))))
-
-(defn assemble-tiles [ts]
-  (let [border-tiles (border-tiles-map ts)
-        start-corner (first (find-corners ts))
-        neighbor (first (find-neighbors start-corner border-tiles))]
-    (let [next-neighbor (find-next-border-tile neighbor start-corner border-tiles)]
-      (list start-corner neighbor next-neighbor))
-    ))
-;; TODO call this recursively, until reaching the start, to get all the tiles
+(defn find-border
+  ([ts]
+   (if (= 1 (count ts)) ts
+       (let [border-tiles (concat (find-corners ts) (find-sides ts))
+             start-corner (first border-tiles)]
+         (find-border border-tiles start-corner start-corner nil))))
+  ([ts start t prev]
+   (let [next (find-next-border-tile ts t prev)]
+     (if (= next start) (list t)
+         (cons t (find-rest-of-border ts start next t))))))
     
+;; OK, I need to find the border tiles in successive rings.
+;; Start with the outer tiles like I've done.
+;; After that ignore those tiles when counting neighbors and look for the next ring in
+;; Recurse until all tiles have been used up.
+;; Somehow match the position and orientation of the tiles.
+
+
+;(remove #(some #{tids} %) (find-border tids))
+
+(defn rings
+  ([ts] (rings [] ts))
+  ([rings ts]
+   (if (empty? ts) rings
+       (let [border (find-border ts)]
+         (assemble-tiles
+          (conj rings border)
+          (remove (set (find-border ts)) ts)
+          )))))
+
+
+(defn print-tile-row [ts n]
+  (doall
+  (for [out-l (partition
+               n
+               (for [i (range 10)
+                     t ts
+                     ls (list (get tmap t))]
+                 (nth ls i)))]
+    (println (str/join " " out-l)))))
