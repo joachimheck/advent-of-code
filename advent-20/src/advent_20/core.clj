@@ -21,18 +21,23 @@
 (def input (read-input small-input))
 (def tids (first input))
 (def tmap (second input))
+(def sides '(:top :right :bottom :left))
 
 ;; Part 1
 ;; Match tiles up by their borders. The borders may need to be reversed to match.
+(defn get-border [tile side]
+  (case side
+    :top (first tile)
+    :right (reduce #(str %1 (last %2)) "" tile)
+    :bottom (last tile)
+    :left (reduce #(str %1 (first %2)) "" tile)))
+
 (defn borders
   ([tid] (borders tid false))
   ([tid rev?]
    (let [lines (get tmap tid)
-         borders (list
-                  (first lines)
-                  (last lines)
-                  (reduce #(str %1 (first %2)) "" lines)
-                  (reduce #(str %1 (last %2)) "" lines))]
+         borders (for [side sides]
+                   (get-border lines side))]
      (if rev?
        (concat borders (map str/reverse borders))
        borders))))
@@ -93,7 +98,7 @@
   ([ts start t prev]
    (let [next (find-next-border-tile ts t prev)]
      (if (= next start) (list t)
-         (cons t (find-rest-of-border ts start next t))))))
+         (cons t (find-border ts start next t))))))
     
 ;; OK, I need to find the border tiles in successive rings.
 ;; Start with the outer tiles like I've done.
@@ -104,23 +109,63 @@
 
 ;(remove #(some #{tids} %) (find-border tids))
 
-(defn rings
-  ([ts] (rings [] ts))
+(defn find-rings
+  ([ts] (find-rings [] ts))
   ([rings ts]
    (if (empty? ts) rings
        (let [border (find-border ts)]
-         (assemble-tiles
+         (find-rings
           (conj rings border)
           (remove (set (find-border ts)) ts)
           )))))
 
 
-(defn print-tile-row [ts n]
-  (doall
-  (for [out-l (partition
-               n
-               (for [i (range 10)
-                     t ts
-                     ls (list (get tmap t))]
-                 (nth ls i)))]
-    (println (str/join " " out-l)))))
+(defn print-tile-row [ts]
+  (print-tiles (map #(get tmap %) ts)))
+
+(defn print-tiles [tiles]
+  (map println
+       (concat
+        (for [i (range 10)]
+          (str/join
+           " "
+           (for [t tiles]
+             (nth t i))))
+        '(""))))
+
+(defn flip-horizontal [tlines]
+  (map str/reverse tlines))
+
+(defn flip-vertical [tlines]
+  (reverse tlines))
+
+(defn flip-diagonal [tlines]
+  (let [size (count (first tlines))
+        joined (str/join tlines)]
+    (map str/join
+         (for [i (range size)]
+           (for [j (range size)]
+             (let [idx (+ (* j size) i)]
+             (subs joined idx (inc idx))))))))
+
+(defn rotate
+  "Rotates the tile clockwise 90 degrees."
+  [tlines]
+  (let [size (count (first tlines))
+        joined (str/join tlines)]
+    (map str/join
+         (for [i (range size)]
+           (for [j (reverse (range size))]
+             (let [idx (+ (* j size) i)]
+               (subs joined idx (inc idx))))))))
+
+
+
+;; (borders (first (take 2 (first (find-rings tids)))))
+;; 1951 2311
+
+(for [v1 (map vector sides (borders 1951))
+      ;;v2 (map vector sides (borders 2311))
+      v2 (map vector sides (borders 2729))
+      :when (= (second v1) (second v2))]
+  v1)
