@@ -33,11 +33,9 @@
     :left (reduce #(str %1 (first %2)) "" tile)))
 
 (defn borders
-  ([tid] (borders tid false))
-  ([tid rev?]
-   (let [lines (get tmap tid)
-         borders (for [side sides]
-                   (get-border lines side))]
+  ([tile] (borders tile false))
+  ([tile rev?]
+   (let [borders (map #(get-border tile %) sides)]
      (if rev?
        (concat borders (map str/reverse borders))
        borders))))
@@ -46,8 +44,8 @@
   (list t
         (for [t2 ts
               :when (not= t2 t)
-              b1 (borders t true)
-              b2 (borders t2)
+              b1 (borders (get tmap t) true)
+              b2 (borders (get tmap t2))
               :when (= b1 b2)]
           (list t2 b2))))
 
@@ -120,9 +118,6 @@
           )))))
 
 
-(defn print-tile-row [ts]
-  (print-tiles (map #(get tmap %) ts)))
-
 (defn print-tiles [tiles]
   (map println
        (concat
@@ -132,6 +127,9 @@
            (for [t tiles]
              (nth t i))))
         '(""))))
+
+(defn print-tile-row [ts]
+  (print-tiles (map #(get tmap %) ts)))
 
 (defn flip-horizontal [tlines]
   (map str/reverse tlines))
@@ -161,11 +159,73 @@
 
 
 
-;; (borders (first (take 2 (first (find-rings tids)))))
-;; 1951 2311
+;; 1951 2311 3079
+;; 2729 1427 2473
+;; 2971 1489 1171
 
-(for [v1 (map vector sides (borders 1951))
-      ;;v2 (map vector sides (borders 2311))
-      v2 (map vector sides (borders 2729))
-      :when (= (second v1) (second v2))]
-  v1)
+;; (borders (first (take 2 (first (find-rings tids)))))
+
+;; Just get the matching border between two tiles
+(defn get-border-between [tile1 tile2]
+  (some (set (borders tile1 true)) (borders tile2)))
+
+(defn borders-indexed [tile]
+  (map vector sides (borders tile)))
+
+(defn get-side [tile bdr]
+  (first
+   (first
+    (filter (fn [x]
+              ;;(println (set (list bdr (str/reverse bdr))) x)
+              (some (set (list bdr (str/reverse bdr))) x)
+) (borders-indexed tile)))))
+
+(defn get-flips [tile]
+  (concat (take 4 (iterate rotate tile))
+          (take 4 (iterate rotate (flip-horizontal tile)))))
+
+;; nbrs are in clockwise order.
+(defn get-adjusted-tile [tile expected-sides nbrs]
+  (let [flips (get-flips tile)]
+    (first (keep (fn [tile]
+                   (if (= expected-sides
+                          (list (get-side tile (get-border-between (first nbrs) tile))
+                                (get-side tile (get-border-between tile (second nbrs)))))
+                     tile))
+                 flips))))
+
+(defn get-expected-sides [i side-size]
+  (let [sides-list (partition 3 (take 12 (cycle (reverse sides))))
+        side-idx (quot i (dec side-size))
+        pos (mod i (dec side-size))
+        [s1 s2 s3] (nth sides-list side-idx)]
+    (if (= 0 pos) (list s2 s3)
+        (list s1 s3))))
+
+(def blank-tile (repeat 10 "----------"))
+
+(map print-tiles
+     ;;(second
+     (let [adjusteds
+           (let [triplets (partition 3 1 (let [rings (find-rings tids)
+                                               ring (first rings)]
+                                           (concat (list (last ring)) ring (list (first ring)))))
+                 side-size 3]
+             (map-indexed
+              ;;#(list %1 %2)
+              (fn [i [n1 t n2]]
+                (get-adjusted-tile
+                 (get tmap t)
+                 (get-expected-sides i side-size)
+                 (list (get tmap n1) (get tmap n2))))
+              triplets)
+             )]
+       (list
+        (take 3 adjusteds)
+        (concat (list (last adjusteds)) (list blank-tile) (list (nth adjusteds 3)))
+        (reverse (take 3 (take-last 4 adjusteds)))
+        )
+       )
+     )
+
+;; (get-adjusted-tile (get tmap 1951) '(:bottom :right) (map (partial get tmap) '(2729 2311)))
