@@ -117,6 +117,54 @@
           (remove (set (find-border ts)) ts)
           )))))
 
+;(defn find-grid
+;  [ts]
+
+(defn rotate-until-first [l e]
+  (if (or (empty? l) (= e (first l))) l
+      (rotate-until-first (concat (list (last l)) (butlast l)) e)))
+
+(defn arrange-rings
+  ([rings] (arrange-rings [] rings))
+  ([arranged rings]
+   (cond (empty? arranged) (arrange-rings [(first rings)] (rest rings))
+         (empty? rings) arranged
+         :else
+         (let [outer (last arranged)
+               inner (first rings)
+               corner (list (last outer) (second outer))
+               first-inner (first (first
+                                   (filter #(every? (set (second %)) corner)
+                                           (map #(list % (find-neighbors tids %)) inner))))]
+           (arrange-rings (conj arranged (rotate-until-first inner first-inner)) (rest rings))
+           ;;  (some (set corner)
+           ;;  (list corner (first inner))
+           ))))
+
+
+(defn ring-coords
+  ([size] (ring-coords size [0 0]))
+  ([size [x y]]
+   (cond (= size 1) '([0 0])
+         (= [x y] [0 1]) (list [0 1])
+         (and (= y 0) (< x (dec size))) (concat (list [x y]) (ring-coords size [(inc x) y]))
+         (and (= x (dec size)) (< y (dec size))) (concat (list [x y]) (ring-coords size [x (inc y)]))
+         (and (= y (dec size)) (> x 0)) (concat (list [x y]) (ring-coords size [(dec x) y]))
+         (and (= x 0) (> y 0)) (concat (list [x y]) (ring-coords size [x (dec y)])))))
+
+
+(defn get-coordinates [rings size]
+  (apply concat
+         (let [rings (find-rings tids)
+               size 3]
+           (for [;;ring rings
+                 i (range (count rings))
+                 ]
+             (let [ring (nth rings i)
+                   shifted-coords (map (fn [[x y]] [(+ x i) (+ y i)]) (ring-coords (- size (* 2 i))))
+                   ]
+               (map vector shifted-coords ring)
+               )))))
 
 (defn print-tiles [tiles]
   (map println
@@ -229,3 +277,8 @@
      )
 
 ;; (get-adjusted-tile (get tmap 1951) '(:bottom :right) (map (partial get tmap) '(2729 2311)))
+
+
+"TODO"
+;; Now I know the location of each tile. For each tile, get its neighbors and their locations,
+;; then orient the tile using the relative positions of its neighbors.
