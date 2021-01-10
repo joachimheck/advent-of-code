@@ -117,59 +117,14 @@
           (remove (set (find-border ts)) ts)
           )))))
 
-;(defn find-grid
-;  [ts]
-
 (defn rotate-until-first [l e]
   (if (or (empty? l) (= e (first l))) l
       (rotate-until-first (concat (list (last l)) (butlast l)) e)))
 
-(defn arrange-rings
-  ([rings] (arrange-rings [] rings))
-  ([arranged rings]
-   (cond (empty? arranged) (arrange-rings [(first rings)] (rest rings))
-         (empty? rings) arranged
-         :else
-         (let [outer (last arranged)
-               inner (first rings)
-               corner (list (last outer) (second outer))
-               first-inner (first (first
-                                   (filter #(every? (set (second %)) corner)
-                                           (map #(list % (find-neighbors tids %)) inner))))]
-           (arrange-rings (conj arranged (rotate-until-first inner first-inner)) (rest rings))
-           ;;  (some (set corner)
-           ;;  (list corner (first inner))
-           ))))
-
-
-(defn ring-coords
-  ([size] (ring-coords size [0 0]))
-  ([size [x y]]
-   (cond (= size 1) '([0 0])
-         (= [x y] [0 1]) (list [0 1])
-         (and (= y 0) (< x (dec size))) (concat (list [x y]) (ring-coords size [(inc x) y]))
-         (and (= x (dec size)) (< y (dec size))) (concat (list [x y]) (ring-coords size [x (inc y)]))
-         (and (= y (dec size)) (> x 0)) (concat (list [x y]) (ring-coords size [(dec x) y]))
-         (and (= x 0) (> y 0)) (concat (list [x y]) (ring-coords size [x (dec y)])))))
-
-
-(defn get-coordinates [rings size]
-  (apply concat
-         (let [rings (find-rings tids)
-               size 3]
-           (for [;;ring rings
-                 i (range (count rings))
-                 ]
-             (let [ring (nth rings i)
-                   shifted-coords (map (fn [[x y]] [(+ x i) (+ y i)]) (ring-coords (- size (* 2 i))))
-                   ]
-               (map vector shifted-coords ring)
-               )))))
-
 (defn print-tiles [tiles]
   (map println
        (concat
-        (for [i (range 10)]
+        (for [i (range (count (first tiles)))]
           (str/join
            " "
            (for [t tiles]
@@ -205,17 +160,9 @@
              (let [idx (+ (* j size) i)]
                (subs joined idx (inc idx))))))))
 
-
-
-;; 1951 2311 3079
-;; 2729 1427 2473
-;; 2971 1489 1171
-
-;; (borders (first (take 2 (first (find-rings tids)))))
-
 ;; Just get the matching border between two tiles
 (defn get-border-between [tile1 tile2]
-  (some (set (borders tile1 true)) (borders tile2)))
+  (some (set (borders tile1 false)) (borders tile2 true)))
 
 (defn borders-indexed [tile]
   (map vector sides (borders tile)))
@@ -225,60 +172,106 @@
    (first
     (filter (fn [x]
               ;;(println (set (list bdr (str/reverse bdr))) x)
-              (some (set (list bdr (str/reverse bdr))) x)
-) (borders-indexed tile)))))
+              (some (set (list bdr (str/reverse bdr))) x)) (borders-indexed tile)))))
 
 (defn get-flips [tile]
   (concat (take 4 (iterate rotate tile))
           (take 4 (iterate rotate (flip-horizontal tile)))))
 
-;; nbrs are in clockwise order.
-(defn get-adjusted-tile [tile expected-sides nbrs]
+;; nbrs are in clockwise order from top, may be nil.
+(defn adjust-tile [tile nbrs]
   (let [flips (get-flips tile)]
-    (first (keep (fn [tile]
-                   (if (= expected-sides
-                          (list (get-side tile (get-border-between (first nbrs) tile))
-                                (get-side tile (get-border-between tile (second nbrs)))))
-                     tile))
+    (first (keep (fn [flip]
+                   (let [bdrs (borders flip false)]
+                     (when (reduce #(and %1 %2)
+                                   (for [i (range (count sides))]
+                                     (or (nil? (nth nbrs i))
+                                         (= (nth bdrs i) (get-border-between flip (nth nbrs i))))))
+                       flip)))
                  flips))))
 
-(defn get-expected-sides [i side-size]
-  (let [sides-list (partition 3 (take 12 (cycle (reverse sides))))
-        side-idx (quot i (dec side-size))
-        pos (mod i (dec side-size))
-        [s1 s2 s3] (nth sides-list side-idx)]
-    (if (= 0 pos) (list s2 s3)
-        (list s1 s3))))
 
-(def blank-tile (repeat 10 "----------"))
+;; (defn get-expected-sides [i side-size]
+;;   (let [sides-list (partition 3 (take 12 (cycle (reverse sides))))
+;;         side-idx (quot i (dec side-size))
+;;         pos (mod i (dec side-size))
+;;         [s1 s2 s3] (nth sides-list side-idx)]
+;;     (if (= 0 pos) (list s2 s3)
+;;         (list s1 s3))))
 
-(map print-tiles
-     ;;(second
-     (let [adjusteds
-           (let [triplets (partition 3 1 (let [rings (find-rings tids)
-                                               ring (first rings)]
-                                           (concat (list (last ring)) ring (list (first ring)))))
-                 side-size 3]
-             (map-indexed
-              ;;#(list %1 %2)
-              (fn [i [n1 t n2]]
-                (get-adjusted-tile
-                 (get tmap t)
-                 (get-expected-sides i side-size)
-                 (list (get tmap n1) (get tmap n2))))
-              triplets)
-             )]
-       (list
-        (take 3 adjusteds)
-        (concat (list (last adjusteds)) (list blank-tile) (list (nth adjusteds 3)))
-        (reverse (take 3 (take-last 4 adjusteds)))
-        )
-       )
-     )
+;; (def blank-tile (repeat 10 "----------"))
 
-;; (get-adjusted-tile (get tmap 1951) '(:bottom :right) (map (partial get tmap) '(2729 2311)))
+(defn arrange-rings
+  ([rings] (arrange-rings [] rings))
+  ([arranged rings]
+   (cond (empty? arranged) (arrange-rings [(first rings)] (rest rings))
+         (empty? rings) arranged
+         :else
+         (let [outer (last arranged)
+               inner (first rings)
+               corner (list (last outer) (second outer))
+               first-inner (first (first
+                                   (filter #(every? (set (second %)) corner)
+                                           (map #(list % (find-neighbors tids %)) inner))))]
+           (arrange-rings (conj arranged (rotate-until-first inner first-inner)) (rest rings))))))
+
+(defn ring-coords
+  ([size] (ring-coords size [0 0]))
+  ([size [x y]]
+   (cond (= size 1) '([0 0])
+         (= [x y] [0 1]) (list [0 1])
+         (and (= y 0) (< x (dec size))) (concat (list [x y]) (ring-coords size [(inc x) y]))
+         (and (= x (dec size)) (< y (dec size))) (concat (list [x y]) (ring-coords size [x (inc y)]))
+         (and (= y (dec size)) (> x 0)) (concat (list [x y]) (ring-coords size [(dec x) y]))
+         (and (= x 0) (> y 0)) (concat (list [x y]) (ring-coords size [x (dec y)])))))
 
 
-"TODO"
-;; Now I know the location of each tile. For each tile, get its neighbors and their locations,
-;; then orient the tile using the relative positions of its neighbors.
+(defn get-coordinates [rings size]
+  (reduce
+   #(assoc %1 (second %2) (first %2))
+   {}
+   (apply concat
+          (for [i (range (count rings))]
+            (let [ring (nth rings i)
+                  shifted-coords (map (fn [[x y]] [(+ x i) (+ y i)]) (ring-coords (- size (* 2 i))))]
+              (map list ring shifted-coords)
+              )))))
+
+(defn adjacent-coords [[x y]]
+  (vector [x (dec y)] [(inc x) y] [x (inc y)] [(dec x) y]))
+
+(defn neighbors [coord-map [x y]]
+  (map (partial get coord-map) (adjacent-coords [x y])))
+
+(defn arrange-tiles [size]
+  (let [rings (find-rings tids)
+        coords (get-coordinates rings size)]
+    (->> coords
+         (map #(list % (neighbors coords (first %))))
+         (map (fn [[[[x y] t] nbrs]] (list [[x y] t] (adjust-tile (get tmap t) (map #(get tmap %) nbrs)))))
+         (reduce (fn [acc [[[x y] t] lines]] (assoc acc [x y] lines)) {})
+         (#(for [y (range size) x (range size)] (get % [x y])))
+         )))
+
+(defn combine-tiles [size tiles]
+  (->> tiles
+       (map #(rest (butlast %))) ; Remove top and bottom
+       ;; Remove first and last character
+       (map (fn [lines]
+              (map (fn [l]
+                     (subs l 1 (- (count l) 1))) lines)))
+       (partition size) ; Group by rows
+       ;; Join rows to form wide tile
+       (map
+        (fn [[t1 t2 t3]]
+          (map
+           (fn [l1 l2 l3] (str/join (list l1 l2 l3)))
+           t1 t2 t3)
+          ))
+       
+       ;; Join lines to form tall tile
+       (reduce concat)
+       ))
+
+(let [size 3]
+  (print-tiles (list (combine-tiles size (arrange-tiles size)))))
