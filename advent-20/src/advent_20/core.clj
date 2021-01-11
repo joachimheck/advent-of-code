@@ -273,5 +273,53 @@
        (reduce concat)
        ))
 
-(let [size 3]
-  (print-tiles (list (combine-tiles size (arrange-tiles size)))))
+(def sea-monster
+  '("                  # "
+    "#    ##    ##    ###"
+    " #  #  #  #  #  #   "))
+
+(def test-input
+  '("......................#."
+    "......................#."
+    "....#....##....##....###"
+    ".....#..#..#..#..#..#..."))
+
+(for [j (range 0 (- (count test-input) 2))]
+  (let [lines (take 3 (drop j test-input))]
+    (for [y (range 3)
+          i (range 0 (- (count (first test-input)) 19))]
+      (subs (nth lines y) i (+ 20 i))
+
+      )))
+
+
+
+
+
+(->> test-input
+     (partition 3 1)
+     (map
+      (fn [x]
+        (->> x
+;;println
+             (map #(partition 12 %))
+             (map first)
+             )))
+)
+
+(map #(partition 2 %) '("abcde" "fghij" "klmno"))
+(partition 12 "......................#.")
+
+
+
+
+(let [size (int-sqrt (count tids))]
+  (combine-tiles size (arrange-tiles size)))
+
+;; width of sea-monster => 20
+;; width of image => 24
+
+(partition 3 1 "abcdefg")
+
+;; (let [size (int-sqrt (count tids))]
+;;   (print-tiles (list (combine-tiles size (arrange-tiles size)))))
