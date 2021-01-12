@@ -68,6 +68,18 @@
 ;; Part 2
 ;; I didn't actually assemble the image in part 1 so I have to do that now
 ;; Then look for sea monsters!
+;; The eventual operations:
+;; Find the corners, then their neighbors, and build the outer ring.
+;; Remove the outer ring, repeat above to build succesive rings.
+;; Align rings by checking neighbors
+;; Compute grid coordinates for tiles
+;; Process tiles in grid order, removing outer character ring.
+;; Merge lines of tiles by partitioning them by the width of the tile array.
+;; Now we have the whole image.
+;; Partition the image into three-line (height of sea monster) groups.
+;; Partition the groups into 20 (width of sea monster) character wide frames.
+;; Check whether sea-monster matches frame.
+;; Sum sea monster count, count hashes in image, subtract.
 (defn with-neighbors [ts n]
   (->> ts
        (map #(list % (find-neighbors ts %))) ; tiles/neighbors
@@ -78,12 +90,6 @@
 
 (defn find-corners [ts] (with-neighbors ts 2))
 (defn find-sides [ts] (with-neighbors ts 3))
-
-;; To map the edges:
-;; start at a corner
-;; take a neighbor
-;; find its other neighbor, etc
-;; until we get back to the start tile
 
 (defn find-next-border-tile [ts t prev]
   (first (remove #(= % prev) (find-neighbors ts t))))
@@ -98,15 +104,6 @@
    (let [next (find-next-border-tile ts t prev)]
      (if (= next start) (list t)
          (cons t (find-border ts start next t))))))
-    
-;; OK, I need to find the border tiles in successive rings.
-;; Start with the outer tiles like I've done.
-;; After that ignore those tiles when counting neighbors and look for the next ring in
-;; Recurse until all tiles have been used up.
-;; Somehow match the position and orientation of the tiles.
-
-
-;(remove #(some #{tids} %) (find-border tids))
 
 (defn find-rings
   ([ts] (find-rings [] ts))
@@ -192,30 +189,35 @@
                        flip)))
                  flips))))
 
+(defn inner-ring-corner [inner corner]
+  (first (first
+          (filter #(every? (set (second %)) corner)
+                  (map #(list % (find-neighbors tids %)) inner)))))
 
-;; (defn get-expected-sides [i side-size]
-;;   (let [sides-list (partition 3 (take 12 (cycle (reverse sides))))
-;;         side-idx (quot i (dec side-size))
-;;         pos (mod i (dec side-size))
-;;         [s1 s2 s3] (nth sides-list side-idx)]
-;;     (if (= 0 pos) (list s2 s3)
-;;         (list s1 s3))))
+(defn has-neighbor [t t2]
+  (some #{t2} (find-neighbors tids t)))
 
-;; (def blank-tile (repeat 10 "----------"))
+(defn arrange-inner-ring [inner outer]
+  (if (= 1 (count inner))
+    inner
+    (let [corner (list (last outer) (second outer))
+          first-inner (inner-ring-corner inner corner)
+          corner-matched (rotate-until-first inner first-inner)]
+      (let [next-outer (nth outer 2)]
+        (if (has-neighbor (second corner-matched) next-outer)
+          corner-matched
+          (rotate-until-first (reverse corner-matched) first-inner)
+          )))))
 
-;; (defn arrange-rings
-;;   ([rings] (arrange-rings [] rings))
-;;   ([arranged rings]
-;;    (cond (empty? arranged) (arrange-rings [(first rings)] (rest rings))
-;;          (empty? rings) arranged
-;;          :else
-;;          (let [outer (last arranged)
-;;                inner (first rings)
-;;                corner (list (last outer) (second outer))
-;;                first-inner (first (first
-;;                                    (filter #(every? (set (second %)) corner)
-;;                                            (map #(list % (find-neighbors tids %)) inner))))]
-;;            (arrange-rings (conj arranged (rotate-until-first inner first-inner)) (rest rings))))))
+(defn arrange-rings
+  ([rings] (arrange-rings [] rings))
+  ([arranged rings]
+   (cond (empty? arranged) (arrange-rings [(first rings)] (rest rings))
+         (empty? rings) arranged
+         :else
+         (let [outer (last arranged)
+               inner (first rings)]
+           (arrange-rings (conj arranged (arrange-inner-ring inner outer)) (rest rings))))))
 
 (defn ring-coords
   ([size] (ring-coords size [0 0]))
@@ -226,7 +228,6 @@
          (and (= x (dec size)) (< y (dec size))) (concat (list [x y]) (ring-coords size [x (inc y)]))
          (and (= y (dec size)) (> x 0)) (concat (list [x y]) (ring-coords size [(dec x) y]))
          (and (= x 0) (> y 0)) (concat (list [x y]) (ring-coords size [x (dec y)])))))
-
 
 (defn get-coordinates [rings size]
   (reduce
@@ -246,7 +247,7 @@
   (map (partial get coord-map) (adjacent-coords [x y])))
 
 (defn arrange-tiles [size]
-  (let [rings (find-rings tids)
+  (let [rings (arrange-rings (find-rings tids))
         coords (get-coordinates rings size)]
     (->> coords
          (map #(list % (neighbors coords (first %))))
@@ -254,22 +255,6 @@
          (reduce (fn [acc [[[x y] t] lines]] (assoc acc [x y] lines)) {})
          (#(for [y (range size) x (range size)] (get % [x y])))
          )))
-
-
-;; (let [size 12
-;;       rings (find-rings tids)
-;;       coords (get-coordinates rings size)]
-
-;;   (->> coords
-;;        (reduce (fn [acc [[x y] t]] (assoc acc [x y] t)) {})
-;;        ((fn [map] (for [y (range size) x (range size)] (get map [x y]))))
-;; ;;       (keep identity)
-;; ;;       (count)
-;;        )
-;;   )
-
-
-
 
 (defn combine-tiles [size tiles]
   (->> tiles
@@ -281,12 +266,8 @@
        (partition size) ; Group by rows
        ;; Join rows to form wide tile
        (map
-        (fn [[t1 t2 t3]]
-          (map
-           (fn [l1 l2 l3] (str/join (list l1 l2 l3)))
-           t1 t2 t3)
-          ))
-       
+        (fn [tiles]
+          (map str/join (apply (partial map list) tiles))))
        ;; Join lines to form tall tile
        (reduce concat)
        ))
@@ -295,13 +276,6 @@
   '("                  # "
     "#    ##    ##    ###"
     " #  #  #  #  #  #   "))
-
-(def test-input
-  '("......................#."
-    "......................#."
-    "......................#."
-    "....#....##....##....###"
-    ".....#..#..#..#..#..#..."))
 
 (defn int-sqrt [square]
   (some #(when (= square (* % %)) %) (range square)))
@@ -313,14 +287,6 @@
         true)
        ))
 
-(for [j (range 0 (- (count test-input) 2))]
-  (let [lines (take 3 (drop j test-input))]
-    (for [y (range 3)
-          i (range 0 (- (count (first test-input)) 19))]
-      (subs (nth lines y) i (+ 20 i))
-
-      )))
-
 (defn count-sea-monsters [image]
   (->> image
        (partition 3 1)
@@ -330,7 +296,6 @@
                (map #(map (partial apply str) (partition 20 1 %)))
                ((fn [row] (for [i (range 3)] (nth row i))))
                ((fn [segs] (apply #(map list %1 %2 %3) segs)))
-
                (map (fn [frame]
                       (list
                        frame
@@ -339,42 +304,23 @@
                           (nth sea-monster i)
                           (nth frame i))
                          ))))
-
-               (keep (fn [[f [a b c]]] (when (and a b c) true)))
-
-
-               )))
+               (keep (fn [[f [a b c]]] (when (and a b c) true))))))
        (map count)
-       (reduce +)
-       ))
+       (reduce +)))
 
-;; (count-sea-monsters test-input)
+(defn count-hashes [tile]
+  (reduce + (map (fn [line] (count (keep #{\#} line))) tile)))
 
-;;(print-tiles (list
-;;(let [size (int-sqrt (count tids))]
-;;  (combine-tiles size (arrange-tiles size)))
-;;))
+(defn compute-water-roughness []
+  (let [size (int-sqrt (count tids))]
+    (->> (arrange-tiles size)
+         (combine-tiles size)
+         get-flips
+         (map (fn [flip] (list (count-sea-monsters flip) (count-hashes flip) flip)))
+         (keep #(when (> (first %) 0) %))
+         first
+         ;; 15 hashes per sea monster
+         (#(- (second %) (* 15 (first %)))))))
 
-;; (map count-sea-monsters
-;;      (get-flips
-;;       (let [size (int-sqrt (count tids))]
-;;         (combine-tiles size (arrange-tiles size)))))
-;; (0 0 0 0 0 0 0 2)
-
-;; (print-tiles (list
-;; (let [size (int-sqrt (count tids))]
-;;   (combine-tiles size
-;;                  (arrange-tiles size)
-;; )
-;; )
-;; ))
-
-;; (map count-sea-monsters
-;;      (get-flips
-;;       (let [size (int-sqrt (count tids))]
-;;         (combine-tiles size (arrange-tiles size)))))
-
-;; (get-coordinates (find-rings tids) 12)
-;; (arrange-tiles 12)
-
-"TODO: fix adjust-tile; it's returning nil for some tiles."
+;; (compute-water-roughness)
+;; 1792
