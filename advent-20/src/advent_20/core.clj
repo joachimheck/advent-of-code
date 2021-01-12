@@ -18,7 +18,8 @@
       '([] {})
       (remove #(= 1 (count %)) (partition-by #(empty? %) (line-seq rdr)))))))
 
-(def input (read-input small-input))
+;;(def input (read-input small-input))
+(def input (read-input large-input))
 (def tids (first input))
 (def tmap (second input))
 (def sides '(:top :right :bottom :left))
@@ -152,12 +153,13 @@
 (defn rotate
   "Rotates the tile clockwise 90 degrees."
   [tlines]
-  (let [size (count (first tlines))
+  (let [xsize (count (first tlines))
+        ysize (count tlines)
         joined (str/join tlines)]
     (map str/join
-         (for [i (range size)]
-           (for [j (reverse (range size))]
-             (let [idx (+ (* j size) i)]
+         (for [i (range xsize)]
+           (for [j (reverse (range ysize))]
+             (let [idx (+ (* j xsize) i)]
                (subs joined idx (inc idx))))))))
 
 ;; Just get the matching border between two tiles
@@ -201,19 +203,19 @@
 
 ;; (def blank-tile (repeat 10 "----------"))
 
-(defn arrange-rings
-  ([rings] (arrange-rings [] rings))
-  ([arranged rings]
-   (cond (empty? arranged) (arrange-rings [(first rings)] (rest rings))
-         (empty? rings) arranged
-         :else
-         (let [outer (last arranged)
-               inner (first rings)
-               corner (list (last outer) (second outer))
-               first-inner (first (first
-                                   (filter #(every? (set (second %)) corner)
-                                           (map #(list % (find-neighbors tids %)) inner))))]
-           (arrange-rings (conj arranged (rotate-until-first inner first-inner)) (rest rings))))))
+;; (defn arrange-rings
+;;   ([rings] (arrange-rings [] rings))
+;;   ([arranged rings]
+;;    (cond (empty? arranged) (arrange-rings [(first rings)] (rest rings))
+;;          (empty? rings) arranged
+;;          :else
+;;          (let [outer (last arranged)
+;;                inner (first rings)
+;;                corner (list (last outer) (second outer))
+;;                first-inner (first (first
+;;                                    (filter #(every? (set (second %)) corner)
+;;                                            (map #(list % (find-neighbors tids %)) inner))))]
+;;            (arrange-rings (conj arranged (rotate-until-first inner first-inner)) (rest rings))))))
 
 (defn ring-coords
   ([size] (ring-coords size [0 0]))
@@ -253,6 +255,22 @@
          (#(for [y (range size) x (range size)] (get % [x y])))
          )))
 
+
+;; (let [size 12
+;;       rings (find-rings tids)
+;;       coords (get-coordinates rings size)]
+
+;;   (->> coords
+;;        (reduce (fn [acc [[x y] t]] (assoc acc [x y] t)) {})
+;;        ((fn [map] (for [y (range size) x (range size)] (get map [x y]))))
+;; ;;       (keep identity)
+;; ;;       (count)
+;;        )
+;;   )
+
+
+
+
 (defn combine-tiles [size tiles]
   (->> tiles
        (map #(rest (butlast %))) ; Remove top and bottom
@@ -281,8 +299,19 @@
 (def test-input
   '("......................#."
     "......................#."
+    "......................#."
     "....#....##....##....###"
     ".....#..#..#..#..#..#..."))
+
+(defn int-sqrt [square]
+  (some #(when (= square (* % %)) %) (range square)))
+
+(defn match-hashes [exp target]
+  (->> (map vector exp target)
+       (reduce
+        (fn [acc [e t]] (and acc (or (not= e \#) (= t \#))))
+        true)
+       ))
 
 (for [j (range 0 (- (count test-input) 2))]
   (let [lines (take 3 (drop j test-input))]
@@ -292,34 +321,60 @@
 
       )))
 
+(defn count-sea-monsters [image]
+  (->> image
+       (partition 3 1)
+       (map
+        (fn [three-lines]
+          (->> three-lines
+               (map #(map (partial apply str) (partition 20 1 %)))
+               ((fn [row] (for [i (range 3)] (nth row i))))
+               ((fn [segs] (apply #(map list %1 %2 %3) segs)))
+
+               (map (fn [frame]
+                      (list
+                       frame
+                       (for [i (range 3)]
+                         (match-hashes
+                          (nth sea-monster i)
+                          (nth frame i))
+                         ))))
+
+               (keep (fn [[f [a b c]]] (when (and a b c) true)))
 
 
+               )))
+       (map count)
+       (reduce +)
+       ))
 
+;; (count-sea-monsters test-input)
 
-(->> test-input
-     (partition 3 1)
-     (map
-      (fn [x]
-        (->> x
-;;println
-             (map #(partition 12 %))
-             (map first)
-             )))
-)
+;;(print-tiles (list
+;;(let [size (int-sqrt (count tids))]
+;;  (combine-tiles size (arrange-tiles size)))
+;;))
 
-(map #(partition 2 %) '("abcde" "fghij" "klmno"))
-(partition 12 "......................#.")
+;; (map count-sea-monsters
+;;      (get-flips
+;;       (let [size (int-sqrt (count tids))]
+;;         (combine-tiles size (arrange-tiles size)))))
+;; (0 0 0 0 0 0 0 2)
 
-
-
-
-(let [size (int-sqrt (count tids))]
-  (combine-tiles size (arrange-tiles size)))
-
-;; width of sea-monster => 20
-;; width of image => 24
-
-(partition 3 1 "abcdefg")
-
+;; (print-tiles (list
 ;; (let [size (int-sqrt (count tids))]
-;;   (print-tiles (list (combine-tiles size (arrange-tiles size)))))
+;;   (combine-tiles size
+;;                  (arrange-tiles size)
+;; )
+;; )
+;; ))
+
+;; (map count-sea-monsters
+;;      (get-flips
+;;       (let [size (int-sqrt (count tids))]
+;;         (combine-tiles size (arrange-tiles size)))))
+
+;; (get-coordinates (find-rings tids) 12)
+;; (arrange-tiles 12)
+
+"TODO: fix adjust-tile; it's returning nil for some tiles."
