@@ -63,13 +63,77 @@
          (keep (set l1) l2))
        coll)))
 
-(let [foods (read-input small-input)
-      foods-by-allergen (foods-by-allergen foods)]
+(defn intersect-ingredients
+  "Finds sets of ingredients that may contain the allergens."
+  [foods-by-allergen]
   (map
    (fn [k] (list k (intersection (get foods-by-allergen k))))
-   (keys foods-by-allergen))
-)
+   (keys foods-by-allergen)))
 
-;; TODO: reduce that list by removing allergens that match only one
-;; ingredient - along with that ingredient from the remaining
-;; allergen/ingredient lists.
+(defn singles-map
+  "Returns a map of elements with only one ingredient."
+  [intersected]
+  (->> intersected
+       (filter (fn [[a foods]] (= 1 (count foods))))
+       (reduce (fn [acc [allergen [ingredient]]] (assoc acc allergen ingredient)) {})
+       ))  
+
+(defn remove-singles [singles-map intersected]
+  (remove (fn [[allergen _]] (get singles-map allergen)) intersected))
+
+(defn remove-single-ingredients
+  "Removes ingredients already associated with an allergen."
+  [singles-map remaining]
+  (let [to-remove (set (vals singles-map))]
+    (map (fn [[allergen ingredients]]
+           (list allergen (remove to-remove ingredients)))
+         remaining)))
+
+(defn reduce-ingredients
+  "Reduces the number of ingredients containing allergens."
+  [singles intersected-ingredients]
+  (println singles intersected-ingredients)
+  (if (empty? intersected-ingredients) singles
+    (let [singles (merge singles (singles-map intersected-ingredients))]
+      (reduce-ingredients
+       singles
+       (remove-single-ingredients
+        singles
+        (remove-singles singles intersected-ingredients))))))
+  
+(defn ingredients [input]
+  (->> input
+       (map first)
+       flatten))
+
+
+;; (let [input (read-input small-input)
+;;       allerfoods (vals (reduce-ingredients {} (intersect-ingredients (foods-by-allergen input))))
+;;       ingredients (ingredients input)
+;;       safe (remove (set allerfoods) ingredients)]
+;;   (count safe))
+;; => 5
+
+;; (let [input (read-input large-input)
+;;       allerfoods (vals (reduce-ingredients {} (intersect-ingredients (foods-by-allergen input))))
+;;       ingredients (ingredients input)
+;;       safe (remove (set allerfoods) ingredients)]
+;;   (count safe))
+;; => 2282
+
+
+
+
+;; Part 2
+;; Seems like I already did the work for this - maybe I did something extra in part 1?
+
+;; (let [input (read-input small-input)
+;;       pairs (reduce-ingredients {} (intersect-ingredients (foods-by-allergen input)))]
+;;   (str/join "," (vals (sort pairs))))
+;; => "mxmxvkd,sqjhc,fvjkl"
+
+;; (let [input (read-input large-input)
+;;       pairs (reduce-ingredients {} (intersect-ingredients (foods-by-allergen input)))]
+;;   (str/join "," (vals (sort pairs))))
+;; => "vrzkz,zjsh,hphcb,mbdksj,vzzxl,ctmzsr,rkzqs,zmhnj"
+
