@@ -57,13 +57,15 @@
 ;; 6 <7-1000000> 4 3 2 5 1 -- pick up [7 8 9] dest 5 next 10
 ;; 10 <11-1000000> 4 3 2 5 7 8 9 1 6
 
-(defn expand-range [[min max]]
-  (if (< (- max min) 4)
-    (for [i (range (inc (- max min)))] (+ i min))
-    (conj
-     (apply vector
-      (flatten (for [i (range 3)] (+ i min))))
-     (vector (+ 3 min) max))))
+(defn expand-range
+  ([[min max :as range]] (expand-range range 4))
+  ([[min max] n]
+   (if (< (- max min) (inc n))
+     (for [i (range (inc (- max min)))] (+ i min))
+     (conj
+      (apply vector
+             (flatten (for [i (range n)] (+ i min))))
+      (vector (+ n min) max)))))
              
 (defn expand-ranges [cups]
   (reduce concat []
@@ -73,34 +75,57 @@
                    [e]))
                cups)))
 
-(defn contract-ranges [[a b & rest]]
-  (println a b rest (apply (partial vector (vector a b)) rest))
-  (if (empty? rest) (concat a b)
-      (cond (and (number? a) (number? b))
-            (if (= (inc a) b)
-              (contract-ranges (apply (partial vector (vector a b)) rest))
-              (concat a (contract-ranges (concat b rest))))
+(defn contract-ranges
+  ;;  (println a b rest (apply (partial vector (vector a b)) rest))
+  [[a b & rest]]
+  (cond (nil? a) []
+        (nil? b) [a]
+        (and (number? a) (number? b))
+        (if (= (inc a) b)
+          (contract-ranges (apply (partial vector (vector a b)) rest))
+          (vec (concat [a] (contract-ranges (vec (concat [b] rest))))))
 
-            (and (number? a) (vector? b))
-            (if (= (inc a) (first b))
-              (contract-ranges (concat (vector a (second b)) rest))
-              (concat a (contract-ranges (concat b rest))))
+        (and (number? a) (vector? b))
+        (if (= (inc a) (first b))
+          (contract-ranges (apply (partial vector (vector a (second b))) rest))
+          (vec (concat [a] (contract-ranges (vec (concat [b] rest))))))
 
-            (and (vector? a) (number? b))
-            (if (= (inc (second a)) b)
-              (contract-ranges (concat (vector (first a) b) rest))
-              (concat a (contract-ranges (concat b rest))))
+        (and (vector? a) (number? b))
+        (if (= (inc (second a)) b)
+          (contract-ranges (apply (partial vector (vector (first a) b)) rest))
+          (vec (concat [a] (contract-ranges (vec (concat [b] rest))))))
 
-            (and (vector? a) (vector? b))
-            (if (= (inc (second a)) (first b))
-              (contract-ranges (concat (vector (first a) (second b)) rest))
-              (concat a (contract-ranges (concat b rest)))))))
+        (and (vector? a) (vector? b))
+        (if (= (inc (second a)) (first b))
+          (contract-ranges (apply (partial vector (vector (first a) (second b))) rest))
+          (vec (concat [a] (contract-ranges (concat [b] rest)))))))
 
-(take 4 (iterate contract-ranges [1 2 3 [4 10] 11 [12 150]]))
+(defn break-range-at [[a b :as rng] n]
+  (cond (< (- b a) 5)
+        (apply vector (for [i (range a (inc b))] i))
+        (= a n) [n [(inc n) b]]
+        (= b n) [[a (dec n)] b]
+        (= (inc a) n) [a n [(inc n) b]]
+        (= (dec b) n) [[a (dec n)] n b]
+        :else [[a (dec n)] n [(inc n) b]]))
+
+(let [v [1 2 [5 10] 12 13]
+      n 6]
+  (if (some #{n} v)
+    v
+    (mapcat (fn [e]
+              (if (number? e) [e]
+                  (let [[a b] e]
+                    (if (<= a n b)
+                      (break-range-at e n)
+                      e))))
+            v)))
+
+
+;; (take 4 (iterate contract-ranges [1 2 3 [4 10] 11 [12 150]]))
 (partition 2 (contract-ranges [1 2 3 [4 10] 11 [12 150]]))
-
-(let [a [1 2] b '(3 4)]
-  (apply (partial vector a) b))
+(contract-ranges [11 1 2 3 [4 10] [12 150]])
+(expand-ranges [[1 10]])
 
 (defn move-cups-2 [cups-compressed]
   (let [cups (expand-ranges cups-compressed)
@@ -108,9 +133,10 @@
         to-move (subvec cups 1 4)
         destination (destination current (set to-move))
         removed (subvec cups 4)
-        dest-idx (.indexOf removed destination)
-        until-dest (subvec removed 0 dest-idx)
-        after-dest (subvec removed (inc dest-idx))
+        expanded (expand-range-around removed destination)
+        dest-idx (.indexOf expanded destination)
+        until-dest (subvec expanded 0 dest-idx)
+        after-dest (subvec expanded (inc dest-idx))
         ]
       (println cups current to-move destination removed until-dest after-dest)
       (into [] (concat
