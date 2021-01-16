@@ -72,33 +72,48 @@
       [[incx y] [x incy] [decx incy] [decx y] [decx decy] [x decy]]
       [[incx y] [incx incy] [x incy] [decx y] [x decy] [incx decy]])))
 
+(defn tile-and-surrounding [tile]
+  (conj (surrounding-tiles tile) tile))
+
 (defn count-black-neighbors [tile black-tiles]
   (count (filter (set black-tiles) (surrounding-tiles tile))))
 
 (defn new-color [black-tiles tile]
-  (let [neighbors (count-black-neighbors tile black-tiles)]
-    (if (some #{tile} black-tiles) ;; black tile
-      (if (or (= neighbors 0) (> neighbors 2))
-        :white
-        :black)
-      (if (= neighbors 2)
-        :black
-        :white))))
+  (let [neighbors (count-black-neighbors tile black-tiles)
+        color (if (some #{tile} black-tiles) :black :white)]
+    (list color
+          (if (= color :black)
+            (if (or (= neighbors 0) (> neighbors 2))
+              :white
+              :black)
+            (if (= neighbors 2)
+              :black
+              :white)))))
 
 (defn get-active-tiles [tiles]
-  (reduce into #{} (map surrounding-tiles tiles)))
+  (reduce into #{} (map tile-and-surrounding tiles)))
 
 (defn process-tiles [black-tiles]
   (->> black-tiles
-       ((fn [tiles]
-          (println (count tiles) "tiles")
-          tiles))
-       ((fn [tiles] (time (get-active-tiles tiles))))
-       ((fn [tiles] (time (keep (fn [tile] (when (= :black (new-color black-tiles tile)) tile)) tiles))))
        ((fn [tiles] (time (set tiles))))
+       ((fn [tiles] (time (get-active-tiles tiles))))
+       ((fn [tiles] (time (map (fn [tile] (list tile (new-color black-tiles tile))) tiles))))
+       ((fn [tile-colors-list] (time (remove
+                                      (fn [[tile [old-color new-color]]]
+                                        (= old-color new-color))
+                                      tile-colors-list))))
+
+       ((fn make-groups [tile-colors-list] (time
+                                            (group-by
+                                             (fn old-color [[_ [old-color _]]] old-color) tile-colors-list))))
+
+       ((fn proc-groups [groups] (time (apply disj
+                                  (apply conj black-tiles (map first (get groups :white)))
+                                  (map first (get groups :black))))))
+       ((fn count-tiles [tiles]
+          (println (count black-tiles) "black tiles" (count tiles) "active tiles")
+          tiles))
        ))
-
-
 
 ;; (time (count (nth (iterate process-tiles (flip-tiles (parse-input (read-input small-input)))) 10)))
 ;; => 37
