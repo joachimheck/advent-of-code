@@ -33,18 +33,17 @@
                 (vector destination)
                 to-move
                 after-dest
-                (vector current)
-                       ))))
+                (vector current)))))
 
-(defn move-repeat [cups n]
-  (let [cups (nth (iterate move-cups cups) n)
+(defn move-repeat [cups n move-f]
+  (let [cups (nth (iterate move-f cups) n)
         one-idx (.indexOf cups 1)]
     (str/join
      (concat
       (subvec cups (inc one-idx))
       (subvec cups 0 one-idx)))))
 
-;; (move-repeat puzzle-input 100)
+;; (move-repeat puzzle-input 100 move-cups)
 ;; "46978532"
 
 
@@ -68,12 +67,12 @@
       (vector (+ n min) max)))))
              
 (defn expand-ranges [cups]
-  (reduce concat []
-          (map (fn [e]
-                 (if (vector? e)
-                   (expand-range e)
-                   [e]))
-               cups)))
+  (vec (reduce concat []
+               (map (fn [e]
+                      (if (vector? e)
+                        (expand-range e)
+                        [e]))
+                    cups))))
 
 (defn contract-ranges
   ;;  (println a b rest (apply (partial vector (vector a b)) rest))
@@ -109,8 +108,7 @@
         (= (dec b) n) [[a (dec n)] n b]
         :else [[a (dec n)] n [(inc n) b]]))
 
-(let [v [1 2 [5 10] 12 13]
-      n 6]
+(defn expand-range-around [v n]
   (if (some #{n} v)
     v
     (mapcat (fn [e]
@@ -136,13 +134,69 @@
         expanded (expand-range-around removed destination)
         dest-idx (.indexOf expanded destination)
         until-dest (subvec expanded 0 dest-idx)
-        after-dest (subvec expanded (inc dest-idx))
-        ]
-      (println cups current to-move destination removed until-dest after-dest)
-      (into [] (concat
-                until-dest
-                (vector destination)
-                to-move
-                after-dest
-                (vector current)
-                       ))))
+        after-dest (subvec expanded (inc dest-idx))]
+    ;; (println cups current to-move destination removed until-dest after-dest)
+    (contract-ranges (into [] (concat
+                               until-dest
+                               (vector destination)
+                               to-move
+                               after-dest
+                               (vector current))))))
+
+;; (move-repeat puzzle-input 100 move-cups-2)
+;; => "46978532"
+
+(def puzzle-input-2 [2 1 5 6 9 4 7 8 3 [10 1000000]])
+
+;;(time (move-repeat puzzle-input-2 200 move-cups-2))
+;;(time (nth (iterate move-cups-2 puzzle-input-2) 200))
+(take 200 (map count (iterate move-cups-2 puzzle-input-2)))
+
+
+;; Following a hint from https://www.reddit.com/r/adventofcode/comments/kixn6z/2020_day_23_part_2python/
+;; I think I'll try a linked list.
+
+(defn make-list [input]
+  (reduce (fn [acc [k v]] (assoc acc k v))
+          {}
+          (partition 2 1 (conj input (first input)))))
+
+(defn make-long-list [input end]
+  (reduce (fn [acc [k v]] (assoc acc k v))
+          {}
+          (partition 2 1 (concat [end] input [(inc (apply max input))]))))
+
+;; (make-list input-1)
+;; (make-long-list input-1 12345)
+
+(defn get-or-next [m k]
+  (let [v (get m k)]
+    (if v v (inc k))))
+
+(defn move-cups-list
+  ([[cups current]] (move-cups-list cups current))
+  ([cups current]
+   ;; (println "move-cups-list" cups current)
+   (let [[a b c after-trio] (drop 1 (take 5 (iterate (partial get-or-next cups) current)))
+         dest (destination current (set (list a b c)))
+         after-dest (get-or-next cups dest)]
+     (list (assoc cups
+                  current after-trio
+                  dest a
+                  c after-dest)
+           after-trio))))
+
+(defn move-repeat-list [cups start n]
+  (let [out-length (dec (count cups))
+        result (first (nth (iterate move-cups-list (list cups start)) n))]
+;;result
+    (take
+     2
+     ;;(dec (count result))
+     (iterate (partial get-or-next result) (get-or-next result 1)))
+))
+
+;; (str/join (move-repeat-list (make-list input-1) (first input-1) 100))
+;; "67384529"
+
+;; (time (move-repeat-list (make-long-list input-1 1000000) (first input-1) 10000000))
