@@ -80,40 +80,23 @@
 
 (defn new-color [black-tiles tile]
   (let [neighbors (count-black-neighbors tile black-tiles)
-        color (if (some #{tile} black-tiles) :black :white)]
-    (list color
-          (if (= color :black)
-            (if (or (= neighbors 0) (> neighbors 2))
-              :white
-              :black)
-            (if (= neighbors 2)
-              :black
-              :white)))))
+        color (if (some (set black-tiles) [tile]) :black :white)]
+    (if (= color :black)
+      (if (or (= neighbors 0) (> neighbors 2))
+        :white
+        :black)
+      (if (= neighbors 2)
+        :black
+        :white))))
 
 (defn get-active-tiles [tiles]
   (reduce into #{} (map tile-and-surrounding tiles)))
 
 (defn process-tiles [black-tiles]
   (->> black-tiles
-       ((fn [tiles] (time (set tiles))))
-       ((fn [tiles] (time (get-active-tiles tiles))))
-       ((fn [tiles] (time (map (fn [tile] (list tile (new-color black-tiles tile))) tiles))))
-       ((fn [tile-colors-list] (time (remove
-                                      (fn [[tile [old-color new-color]]]
-                                        (= old-color new-color))
-                                      tile-colors-list))))
-
-       ((fn make-groups [tile-colors-list] (time
-                                            (group-by
-                                             (fn old-color [[_ [old-color _]]] old-color) tile-colors-list))))
-
-       ((fn proc-groups [groups] (time (apply disj
-                                  (apply conj black-tiles (map first (get groups :white)))
-                                  (map first (get groups :black))))))
-       ((fn count-tiles [tiles]
-          (println (count black-tiles) "black tiles" (count tiles) "active tiles")
-          tiles))
-       ))
+       get-active-tiles
+       (keep (fn [tile] (when (= (new-color black-tiles tile) :black) tile)))
+       set))
 
 ;; (time (count (nth (iterate process-tiles (flip-tiles (parse-input (read-input small-input)))) 10)))
 ;; => 37
@@ -123,8 +106,10 @@
 ;; => 2208
 ;; "Elapsed time: 58719.7325 msecs"
 ;; "Elapsed time: 24193.9398 msecs" - various improvements, especially making black-tiles a set
+;; "Elapsed time: 982.7369 msecs" - flipped the some statement in new-color
 
-;; for timing
-;;(time (count (nth (iterate process-tiles (flip-tiles (parse-input (read-input small-input)))) 30)))
+;; (time (count (nth (iterate process-tiles (flip-tiles (parse-input (read-input large-input)))) 100)))
+;; => 4147
+;; "Elapsed time: 2142.2312 msecs"
 
-(time (count (nth (iterate process-tiles (flip-tiles (parse-input (read-input small-input)))) 30)))
+
