@@ -2,9 +2,7 @@
   (:require [clojure.pprint :as pp]
             [clojure.repl :refer :all]
             [clojure.string :as str]
-            [clojure.set :as set]
-            [joachimheck.aoc.util :as util]
-            ))
+            [clojure.set :as set]))
 
 ;; Part 1
 ;; Generate new password from old by incrementing to the next valid value.
