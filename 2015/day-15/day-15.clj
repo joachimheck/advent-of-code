@@ -52,36 +52,37 @@
   (= n
      (reduce +
              (map
-              (fn [ingredient-name]
-                (get (get ingredients ingredient-name) "calories"))
-              (keys amounts)))))
+              (fn [[ingredient-name amount]]
+                (* amount (get (get ingredients ingredient-name) "calories")))
+              amounts))))
 
-(defn combo-amounts-inner [ingredients remaining-amount]
+(defn combo-amounts-inner [tsps ingredients]
   (if (empty? ingredients) '(())
-      (for [i (range (max (inc remaining-amount) 0))
-            more (combo-amounts-inner (rest ingredients) (- remaining-amount i))]
+      (for [i (range (max (inc tsps) 0))
+            more (combo-amounts-inner (- tsps i) (rest ingredients))]
         (merge (assoc {} (first (first ingredients)) i) more))))
 
-(defn combo-amounts [calories ingredients]
-  (let [n 100]
-    (filter
-     #(and (amounts-sum-to? % n)
-           (or (nil? calories)
-               (has-calories? ingredients % calories)))
-     (combo-amounts-inner ingredients n))))
+(defn combo-amounts [tsps calories ingredients]
+  (filter
+   #(and (amounts-sum-to? % tsps)
+         (or (nil? calories)
+             (has-calories? ingredients % calories)))
+   (combo-amounts-inner tsps ingredients)))
 
-(defn find-best-recipe [ingredients max calories]
+(time (count (combo-amounts 100 500 real-ingredients)))
+
+
+(defn find-best-recipe [ingredients calories]
  (->> ingredients
-      (combo-amounts calories)
+      (combo-amounts 100 calories)
       (map (partial score-recipe ingredients))
       (remove #(= 0 %))
-      (take max)
       sort
       reverse
       (take 3)
       ))
 
-;; (time (find-best-recipe real-ingredients 1000000 nil))
+;; (time (find-best-recipe real-ingredients nil))
 ;; => "Elapsed time: 22069.7049 msecs"
 ;; (18965440 18957312 18939200)
 
@@ -90,4 +91,7 @@
 ;; Part 2
 ;; 500 calorie recipes only.
 
-;; (time (find-best-recipe real-ingredients 100 1000000))
+;; (time (find-best-recipe real-ingredients 500))
+;; => (15862900 15713280 15628800)
+;; "Elapsed time: 15797.4983 msecs"
+
