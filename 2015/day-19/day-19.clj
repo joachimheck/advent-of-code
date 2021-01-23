@@ -133,8 +133,15 @@
 ;; I'm trying it backward again.
 
 
-(defn reduce-molecule [molecule inv-txs limit]
-  (let [inv-keys (reverse (sort-by count (keys inv-txs)))]
+(defn reduce-molecule [molecule txs inv-txs limit]
+  (let [atom-pattern #"([A-Z][a-z]|[A-Z])"
+        final-atoms (set/difference
+                     (set (flatten (map (fn [s] (map second (re-seq atom-pattern s))) (keys inv-txs))))
+                     (set (keys txs)))
+        inv-keys (reverse (sort-by count
+                                   (remove (fn [k] (not (includes-atom? k final-atoms))) (keys inv-txs))))
+        ]
+(println "final-atoms" final-atoms "removed" (remove (fn [k] (not (includes-atom? k final-atoms))) (keys inv-txs)))
     (loop [i 0
            mol molecule]
       (if (< limit i)
@@ -147,11 +154,64 @@
                    (str/replace mol first-match (first (get inv-txs first-match)))))
           )))))
 
+(defn ->atoms [molecule]
+  (let [atom-pattern #"([A-Z][a-z]|[A-Z])"]
+    (map second (re-seq atom-pattern molecule))))
+
+(defn final-atoms [mappable-atoms molecules]
+(println "final-atoms" mappable-atoms molecules)
+  (let [atom-pattern #"([A-Z][a-z]|[A-Z])"]
+    (set/difference
+     (set (flatten (map ->atoms molecules)))
+     (set mappable-atoms))))
+
+(defn includes-atom? [molecule atoms]
+  (some (set atoms) (->atoms molecule)))
+
+(defn mols-to-remove [products final-atoms]
+;;(println "mols-to-remove" products final-atoms)
+ (reverse (sort-by count (remove
+                          (fn [m] (not (includes-atom? m final-atoms)))
+                          products))))
+
+(defn reduce-molecule-once [molecule evolvables inv-txs]
+  (let [final-atoms (final-atoms evolvables (keys inv-txs))
+        remove-mols (mols-to-remove (keys inv-txs) final-atoms)]
+    (let [result (reduce (fn [acc k] (str/replace acc k (first (get inv-txs k))))
+                         molecule
+                         remove-mols)]
+      result)))
+
+(count (get real-input :molecule))
+
+(let [molecule (get real-input :molecule)
+      evolvables (keys (get real-input :transforms))
+      inv-txs (get real-input :inv-trans)
+      ]
+  (loop [molecule molecule
+         evolvables evolvables
+         inv-txs inv-txs
+         i 0]
+    (let [final-atoms (final-atoms evolvables (keys inv-txs))
+          remove-mols (mols-to-remove (keys inv-txs) final-atoms)]
+;;      (println "final-atoms" final-atoms)
+      (println "remove-mols" remove-mols)
+      (println "final-atoms" final-atoms)
+;;      (println inv-txs)
+      (if (< i 3)
+        (recur
+         (reduce-molecule-once molecule evolvables inv-txs)
+         evolvables
+         (apply dissoc inv-txs remove-mols)
+         (inc i))
+        (list (count molecule) molecule)
+        )
+)))
+
 
 ;; (reduce-molecule (get real-input :molecule) (get real-input :inv-trans) 500)
 ;; => ("Molecule reduced in " 62 "steps" "CRnSiRnFYCaRnFArArFArAl")
 ;; Repeatedly replacing the longest string with its precursor doesn't get all the way to the beginning.
 
-
-
-
+;; final-atoms is empty, I think because I need to remove the forward mappings that lead
+;; to the products I removed as keys from the inverse mapping map.
