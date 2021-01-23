@@ -133,6 +133,13 @@
 ;; I'm trying it backward again.
 
 
+(defn ->atoms [molecule]
+  (let [atom-pattern #"([A-Z][a-z]|[A-Z])"]
+    (map second (re-seq atom-pattern molecule))))
+
+(defn includes-atom? [molecule atoms]
+  (some (set atoms) (->atoms molecule)))
+
 (defn reduce-molecule [molecule txs inv-txs limit]
   (let [atom-pattern #"([A-Z][a-z]|[A-Z])"
         final-atoms (set/difference
@@ -154,19 +161,12 @@
                    (str/replace mol first-match (first (get inv-txs first-match)))))
           )))))
 
-(defn ->atoms [molecule]
-  (let [atom-pattern #"([A-Z][a-z]|[A-Z])"]
-    (map second (re-seq atom-pattern molecule))))
-
-(defn final-atoms [mappable-atoms molecules]
-(println "final-atoms" mappable-atoms molecules)
+(defn final-atoms [evolvables products]
+(prn "final-atoms" (set evolvables) (set (flatten (map ->atoms products))))
   (let [atom-pattern #"([A-Z][a-z]|[A-Z])"]
     (set/difference
-     (set (flatten (map ->atoms molecules)))
-     (set mappable-atoms))))
-
-(defn includes-atom? [molecule atoms]
-  (some (set atoms) (->atoms molecule)))
+     (set (flatten (map ->atoms products)))
+     (set evolvables))))
 
 (defn mols-to-remove [products final-atoms]
 ;;(println "mols-to-remove" products final-atoms)
@@ -174,40 +174,58 @@
                           (fn [m] (not (includes-atom? m final-atoms)))
                           products))))
 
-(defn reduce-molecule-once [molecule evolvables inv-txs]
-  (let [final-atoms (final-atoms evolvables (keys inv-txs))
-        remove-mols (mols-to-remove (keys inv-txs) final-atoms)]
+(defn reduce-molecule-once [molecule final-atoms inv-txs]
+  (let [remove-mols (mols-to-remove (keys inv-txs) final-atoms)]
     (let [result (reduce (fn [acc k] (str/replace acc k (first (get inv-txs k))))
                          molecule
                          remove-mols)]
       result)))
 
-(count (get real-input :molecule))
+
+(defn remove-produced [txs final-atoms]
+  (reduce-kv
+   (fn [acc k v]
+     (let [filtered (filter #(not (includes-atom? % final-atoms)) v)]
+       (if (empty? filtered)
+         (dissoc acc k)
+         (assoc acc k filtered))))
+   {}
+   txs))
+
+(let [txs (get real-input :transforms)
+      final-atoms #{"Y" "C" "Rn" "Ar"}]
+  (remove-produced txs final-atoms)
+  )
+;; (count (get real-input :molecule))
 
 (let [molecule (get real-input :molecule)
       evolvables (keys (get real-input :transforms))
+      txs (get real-input :transforms)
       inv-txs (get real-input :inv-trans)
       ]
   (loop [molecule molecule
-         evolvables evolvables
+         txs txs
          inv-txs inv-txs
          i 0]
-    (let [final-atoms (final-atoms evolvables (keys inv-txs))
+    (let [evolvables (keys txs)
+          final-atoms (final-atoms evolvables (keys inv-txs))
           remove-mols (mols-to-remove (keys inv-txs) final-atoms)]
-;;      (println "final-atoms" final-atoms)
-      (println "remove-mols" remove-mols)
+      (println "molecule" molecule)
+      (println "txs" txs)
+;;      (println "evolvables" evolvables)
       (println "final-atoms" final-atoms)
+      (println "remove-mols" remove-mols)
 ;;      (println inv-txs)
+      (println)
       (if (< i 3)
         (recur
-         (reduce-molecule-once molecule evolvables inv-txs)
-         evolvables
+         (reduce-molecule-once molecule final-atoms inv-txs)
+         (remove-produced txs final-atoms)
          (apply dissoc inv-txs remove-mols)
          (inc i))
         (list (count molecule) molecule)
         )
-)))
-
+      )))
 
 ;; (reduce-molecule (get real-input :molecule) (get real-input :inv-trans) 500)
 ;; => ("Molecule reduced in " 62 "steps" "CRnSiRnFYCaRnFArArFArAl")
@@ -215,3 +233,69 @@
 
 ;; final-atoms is empty, I think because I need to remove the forward mappings that lead
 ;; to the products I removed as keys from the inverse mapping map.
+
+
+;; I gave up and looked on the web. Apparently I need to do this in the forward direction, with
+;; a guided algorithm, basically A*. I'll see if I can do it myself.
+(defn score [s goal]
+  (- (count goal) (count s)))
+
+(let [input test-input
+      txs (get test-input :transforms)
+      start "e"
+      goal "HOHOHO"
+      init-fringe (get txs start)]
+  (loop [fringe init-fringe
+         i 0]
+    (cond (> i 20) fringe
+          (some #{goal} fringe) (list :done i goal fringe)
+          :else (let [fringe (remove (fn [s] (>= (count s) (count goal))) fringe)
+                      scored (map (fn [m] (list m (score m goal))) fringe)
+                      best (first (first (second (first (sort (group-by second scored))))))
+                      evolved-best (evolve txs best)]
+                  ;; (println "fringe" fringe)
+                  ;; (println "best" best)
+                  (recur (concat (remove
+                                  (fn [s] (or (= s best) (>= (count s) (count goal))))
+                                  fringe)
+                                 evolved-best)
+                         (inc i))
+                  ))
+    ))
+
+
+
+;; Reading further I find that I missed the structure of the produced molecules. They contain
+;; pairs of Rn/Ar atoms, with the stuff between those divided by Y atoms.
+
+(defn desymbolize [coll]
+  (if (not (seq? coll))
+    (name coll)
+    (map desymbolize coll)))
+
+(defn reduceize-molecule-once [molecule inv-txs]
+  (reduce (fn [acc k] (str/replace acc k (first (get inv-txs k))))
+          molecule
+          (keys inv-txs)))
+
+(defn reduceize [inv-txs coll]
+  (if (not (seq? coll))
+    (reduceize-molecule-once coll inv-txs)
+    (map (partial reduceize inv-txs) coll)))
+
+
+(let [inv-txs (get real-input :inv-trans)
+      parsed-input
+      (desymbolize (read-string (str/join (list "("
+                                                (str/replace
+                                                 (str/replace
+                                                  (str/replace
+                                                   (get real-input :molecule)
+                                                   "Rn" "(")
+                                                  "Ar" ")")
+                                                 "Y" " ")
+                                                ")"))))]
+  (let [reduceized (reduceize inv-txs parsed-input)]
+    (list reduceized (reduceize inv-txs reduceized))
+)
+  )
