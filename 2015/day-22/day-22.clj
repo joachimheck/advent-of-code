@@ -10,7 +10,8 @@
 ;; At each turn, branch into the five (or fewer) possible paths
 ;; by adding them to the end of a queue.
 (def initial-game-state {:hp 50 :mana 500 :armor 0 :boss-hp 55 :boss-damage 8
-                         :shield-timer 0 :poison-timer 0 :recharge-timer 0})
+                         :shield-timer 0 :poison-timer 0 :recharge-timer 0
+                         :mana-expended 0})
 
 (defn shield-active? [state]
 
@@ -79,39 +80,49 @@
       (for [opt options]
         (-> state
             ((:cast-fn opt))
-            (update :mana #(- % (:cost opt))))))))
+            (update :mana #(- % (:cost opt)))
+            (update :mana-expended #(+ % (:cost opt))))))))
 
 (defn process-turn [state]
   (-> state
-      process-effects
-      player-turn
-      (->>
-       (map process-effects)
-       (map boss-turn)
-       (map (fn [state]
-              (cond (<= (:boss-hp state) 0) (assoc state :winner :player)
-                    (<= (:hp state) 0) (assoc state :winner :boss)
-                    :else state))))))
+      ;; Hard mode
+      (update :hp dec)
+      ((fn [state]
+         (if (<= (:hp state) 0)
+           (list (assoc state :winner :boss))
+           (-> state
+            process-effects
+            player-turn
+            (->>
+             (map process-effects)
+             (map boss-turn)
+             (map (fn [state]
+                    (cond (<= (:boss-hp state) 0) (assoc state :winner :player)
+                          (<= (:hp state) 0) (assoc state :winner :boss)
+                          :else state))))))))))
 
 
-(defn play-game [start-state turns]
-  (loop [game-states (list start-state)
-         i 1]
-    (println i (count game-states) "game-states"
-             ;; game-states
+(defn play-game [start-state]
+  (loop [game-states (list start-state)]
+    (println (count game-states) "game-states"
              "finished" (count (filter :winner game-states))
              "unfinished" (count (remove :winner game-states)))
     (let [finished (filter :winner game-states)
-          unfinished (remove :winner game-states)]
-      (if (or (>= i turns)
-              ;; (not (empty? finished))
-              ) (list :done (count (filter #(= (:winner %) :player) finished)))
-          ;;(concat '() (mapcat process-turn unfinished))
-          (if (not (empty? unfinished))
-            ;;(concat finished (mapcat process-turn unfinished))
-            (recur (concat finished (mapcat process-turn unfinished)) (inc i))
-            (list :done finished)
-            )
-          ))))
+          unfinished (remove :winner game-states)
+          won-by-player (filter #(= (:winner %) :player) finished)]
+      (if (not (empty? won-by-player))
+        (list :done (sort #(- (:mana-expended %1) (:mana-expended %2)) won-by-player))
+        (if (not (empty? unfinished))
+          (recur (concat finished (mapcat process-turn unfinished)))
+          (list :done finished))))))
 
-(time (play-game initial-game-state 13))
+
+;; (time (apply min (map :mana-expended (second (play-game initial-game-state)))))
+;; ;; => 953
+;; "Elapsed time: 809.0714 msecs"
+
+
+;; Part 2
+;; Hard mode - lose 1 hp each player turn, before effects.
+;; (time (apply min (map :mana-expended (second (play-game initial-game-state)))))
+;; => 1289
