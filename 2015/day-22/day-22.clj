@@ -63,7 +63,8 @@
        (remove (fn [spell] ((:is-active? spell) game-state)))))
 
 (defn process-effects [state]
-  (reduce (fn [state spell] ((:effect-fn spell) state))
+  (reduce (fn [acc spell]
+            ((:effect-fn spell) acc))
           state
           spells))
 
@@ -74,7 +75,7 @@
 (defn player-turn [state]
   (let [options (spell-options state)]
     (if (empty? options)
-      (assoc state :winner :boss)
+      (list (assoc state :winner :boss))
       (for [opt options]
         (-> state
             ((:cast-fn opt))
@@ -93,20 +94,24 @@
                     :else state))))))
 
 
-(loop [game-states (list initial-game-state)
-       i 0]
-  (println i (count game-states) "game-states"
-           (take 2 game-states)
-           "finished" (count (filter :winner game-states))
-           "unfinished" (count (remove :winner game-states)))
-  (let [finished (filter :winner game-states)
-        unfinished (remove :winner game-states)]
-    (if (or (> i 10) (not (empty? finished))) :done
-        ;;(concat '() (mapcat process-turn unfinished))
-        (if (not (empty? unfinished))
-          ;;(concat finished (mapcat process-turn unfinished))
-          (recur (concat finished (mapcat process-turn unfinished)) (inc i))
-          game-states
-          )
-        ))
-  )
+(defn play-game [start-state turns]
+  (loop [game-states (list start-state)
+         i 1]
+    (println i (count game-states) "game-states"
+             ;; game-states
+             "finished" (count (filter :winner game-states))
+             "unfinished" (count (remove :winner game-states)))
+    (let [finished (filter :winner game-states)
+          unfinished (remove :winner game-states)]
+      (if (or (>= i turns)
+              ;; (not (empty? finished))
+              ) (list :done (count (filter #(= (:winner %) :player) finished)))
+          ;;(concat '() (mapcat process-turn unfinished))
+          (if (not (empty? unfinished))
+            ;;(concat finished (mapcat process-turn unfinished))
+            (recur (concat finished (mapcat process-turn unfinished)) (inc i))
+            (list :done finished)
+            )
+          ))))
+
+(time (play-game initial-game-state 13))
