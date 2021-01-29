@@ -237,37 +237,47 @@
 
 ;; I gave up and looked on the web. Apparently I need to do this in the forward direction, with
 ;; a guided algorithm, basically A*. I'll see if I can do it myself.
-(defn score [s goal]
-  (- (count goal) (count s)))
+;; (defn score [s goal]
+;;   (- (count goal) (count s)))
 
-(let [input test-input
-      txs (get test-input :transforms)
-      start "e"
-      goal "HOHOHO"
-      init-fringe (get txs start)]
-  (loop [fringe init-fringe
-         i 0]
-    (cond (> i 20) fringe
-          (some #{goal} fringe) (list :done i goal fringe)
-          :else (let [fringe (remove (fn [s] (>= (count s) (count goal))) fringe)
-                      scored (map (fn [m] (list m (score m goal))) fringe)
-                      best (first (first (second (first (sort (group-by second scored))))))
-                      evolved-best (evolve txs best)]
-                  ;; (println "fringe" fringe)
-                  ;; (println "best" best)
-                  (recur (concat (remove
-                                  (fn [s] (or (= s best) (>= (count s) (count goal))))
-                                  fringe)
-                                 evolved-best)
-                         (inc i))
-                  ))
-    ))
+;; (let [input test-input
+;;       txs (get test-input :transforms)
+;;       start "e"
+;;       goal "HOHOHO"
+;;       init-fringe (get txs start)]
+;;   (loop [fringe init-fringe
+;;          i 0]
+;;     (cond (> i 20) fringe
+;;           (some #{goal} fringe) (list :done i goal fringe)
+;;           :else (let [fringe (remove (fn [s] (>= (count s) (count goal))) fringe)
+;;                       scored (map (fn [m] (list m (score m goal))) fringe)
+;;                       best (first (first (second (first (sort (group-by second scored))))))
+;;                       evolved-best (evolve txs best)]
+;;                   ;; (println "fringe" fringe)
+;;                   ;; (println "best" best)
+;;                   (recur (concat (remove
+;;                                   (fn [s] (or (= s best) (>= (count s) (count goal))))
+;;                                   fringe)
+;;                                  evolved-best)
+;;                          (inc i))
+;;                   ))
+;;     ))
 
 
 
 ;; Reading further I find that I missed the structure of the produced molecules. They contain
 ;; pairs of Rn/Ar atoms, with the stuff between those divided by Y atoms.
 
+(defn parenthesize [molecule]
+  (read-string (str/join (list "("
+                               (str/replace
+                                (str/replace
+                                 (str/replace
+                                  molecule
+                                  "Rn" "(\"Rn\"")
+                                 "Ar" "\"Ar\")")
+                                "Y" " \"Y\" ")
+                               ")"))))
 (defn desymbolize [coll]
   (if (not (seq? coll))
     (name coll)
@@ -278,24 +288,130 @@
           molecule
           (keys inv-txs)))
 
-(defn reduceize [inv-txs coll]
-  (if (not (seq? coll))
-    (reduceize-molecule-once coll inv-txs)
-    (map (partial reduceize inv-txs) coll)))
+(defn reduceize [molecule]
+  (let [inv-txs (get real-input :inv-trans)
+        result (reduceize-molecule-once molecule inv-txs)]
+    (if (= result molecule)
+      molecule
+      (reduceize result))))
 
+(defn all-atoms? [coll]
+  (reduce #(and %1 (string? %2)) coll))
+
+(defn reduce-new [coll]
+(println coll)
+  (let [inv-txs (get real-input :inv-trans)]
+    (if (string? coll)
+      (reduceize coll)
+      (if (all-atoms? coll)
+        (reduceize (str/join coll))
+        (reduce-new (str/join (map reduce-new coll)))))))
+
+(reduce-new '("Rn" "BSi" ("Rn" "F" "Ar") "TiBPTiTiBF" "Ar"))
+(reduce-new '("Rn" "P" "B" "P" "Mg" "Ar"))
+(reduce-new (desymbolize (parenthesize (get real-input :molecule))))
+
+;; Trace reduceize!
+;; At some point we process CRnSiRnFYCaRnFArArFArThSiRnMgArSiRnMgArPRnFArSiRnFYFArCaRnFAr
+;; But that should still be broken up into Rn/Ar subsections.
+
+
+(reduceize-molecule-once
+ (reduceize-molecule-once
+  (reduce-new (desymbolize (parenthesize (get real-input :molecule))))
+  (get real-input :inv-trans))
+ (get real-input :inv-trans))
 
 (let [inv-txs (get real-input :inv-trans)
-      parsed-input
-      (desymbolize (read-string (str/join (list "("
-                                                (str/replace
-                                                 (str/replace
-                                                  (str/replace
-                                                   (get real-input :molecule)
-                                                   "Rn" "(")
-                                                  "Ar" ")")
-                                                 "Y" " ")
-                                                ")"))))]
-  (let [reduceized (reduceize inv-txs parsed-input)]
-    (list reduceized (reduceize inv-txs reduceized))
+      start (reduce-new (desymbolize (parenthesize (get real-input :molecule))))]
+  (take 6 (iterate (fn [input] (reduceize-molecule-once input inv-txs)) start)))
+
+
+;; "CRnNthArRnHCaRnOBArAr"
+;; "C (RnNthAr) (RnHCa (RnOBAr) Ar)"
+
+;; Look at each atom
+;; If it is Rn, start parsing with the rest of the string
+;; If it is Y, recurse with the
+
+;; "CCaYMgAlYSiTh" => (("C" "Ca") ("Y") ("Mg" "Al") ("Y") ("Si" "Th"))
+;; "CCaRnMgAlArSiTh" => (("C" "Ca") (("Rn") ("Mg "Al") ("Ar")) ("Si" "Th"))
+
+
+
+(defn fx [pre-atoms post-atoms]
+  (if (empty? post-atoms)
+    pre-atoms
+    (let [atom (first post-atoms)
+          more (rest post-atoms)]
+      (case atom
+        "Y" (fx (concat pre-atoms '(("Y")) '(())) more)
+        "Rn" 
+
+        (concat pre-atoms (fx '("Rn") more) )
+(fx  (list "Rn" (fx)) )
+
+
+        (fx (concat (butlast pre-atoms) (list (concat (last pre-atoms) (list atom))))
+            more)
+        ))))
+
+(fx '("") (->atoms "CCaYMgAlYSiTh"))
+
+(concat '("abc" "def") '(()))
+
+(defn break-up [atoms]
+  (if (some #{"Rn"} atoms)
+    (let [beginning (take-while #(not= "Rn" %) atoms)
+          end (drop (count beginning) atoms)]
+      (list beginning end))
+    'blah
+    ))
+
+(break-up (->atoms "CRnNthArRnHCaRnOBArAr"))
+
+(let [molecule "CRnNthArRnHCaRnOBArAr"
+      atoms (->atoms molecule)]
+  (if (= (first atoms) "Rn")
+    
+
+    )
 )
-  )
+
+(def test-input-3
+  (parse-input
+   '("e => HF"
+     "H => CRnFYFYFAr"
+     "F => SiAl")
+   "CRnFYSiAlYFAr"))
+
+(defn multi-reduceize
+  ([input]
+   (let [inv-txs (get input :inv-trans)
+         molecule (get input :molecule)]
+     (flatten (list molecule (multi-reduceize molecule inv-txs)))))
+  ([molecule inv-txs]
+   (let [result (reduceize-molecule-once molecule inv-txs)]
+     (if (= result molecule)
+       '()
+       (list result (multi-reduceize result inv-txs))))))
+
+(multi-reduceize real-input)
+
+ "CRn SiRnFYCaRnFArArCaFArThRnF Ar"
+"CRnSiRnFY CaRnFAr ArFArAl"
+
+
+(let [input test-input-3
+      inv-txs (get input :inv-trans)
+      molecule (get input :molecule)
+      parsed-input (desymbolize (parenthesize molecule))]
+  (loop [input parsed-input n 2]
+    (if (= n 0)
+      input
+      (recur (reduceize inv-txs input) (dec n)))))
+
+  ;; (list parsed-input (reduceize inv-txs parsed-input))
+;;   (let [reduceized (reduceize inv-txs parsed-input)]
+;;     (list reduceized (reduceize inv-txs reduceized))
+;; )
