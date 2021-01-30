@@ -192,40 +192,40 @@
    {}
    txs))
 
-(let [txs (get real-input :transforms)
-      final-atoms #{"Y" "C" "Rn" "Ar"}]
-  (remove-produced txs final-atoms)
-  )
+;; (let [txs (get real-input :transforms)
+;;       final-atoms #{"Y" "C" "Rn" "Ar"}]
+;;   (remove-produced txs final-atoms)
+;;   )
 ;; (count (get real-input :molecule))
 
-(let [molecule (get real-input :molecule)
-      evolvables (keys (get real-input :transforms))
-      txs (get real-input :transforms)
-      inv-txs (get real-input :inv-trans)
-      ]
-  (loop [molecule molecule
-         txs txs
-         inv-txs inv-txs
-         i 0]
-    (let [evolvables (keys txs)
-          final-atoms (final-atoms evolvables (keys inv-txs))
-          remove-mols (mols-to-remove (keys inv-txs) final-atoms)]
-      (println "molecule" molecule)
-      (println "txs" txs)
-;;      (println "evolvables" evolvables)
-      (println "final-atoms" final-atoms)
-      (println "remove-mols" remove-mols)
-;;      (println inv-txs)
-      (println)
-      (if (< i 3)
-        (recur
-         (reduce-molecule-once molecule final-atoms inv-txs)
-         (remove-produced txs final-atoms)
-         (apply dissoc inv-txs remove-mols)
-         (inc i))
-        (list (count molecule) molecule)
-        )
-      )))
+;; (let [molecule (get real-input :molecule)
+;;       evolvables (keys (get real-input :transforms))
+;;       txs (get real-input :transforms)
+;;       inv-txs (get real-input :inv-trans)
+;;       ]
+;;   (loop [molecule molecule
+;;          txs txs
+;;          inv-txs inv-txs
+;;          i 0]
+;;     (let [evolvables (keys txs)
+;;           final-atoms (final-atoms evolvables (keys inv-txs))
+;;           remove-mols (mols-to-remove (keys inv-txs) final-atoms)]
+;;       (println "molecule" molecule)
+;;       (println "txs" txs)
+;; ;;      (println "evolvables" evolvables)
+;;       (println "final-atoms" final-atoms)
+;;       (println "remove-mols" remove-mols)
+;; ;;      (println inv-txs)
+;;       (println)
+;;       (if (< i 3)
+;;         (recur
+;;          (reduce-molecule-once molecule final-atoms inv-txs)
+;;          (remove-produced txs final-atoms)
+;;          (apply dissoc inv-txs remove-mols)
+;;          (inc i))
+;;         (list (count molecule) molecule)
+;;         )
+;;       )))
 
 ;; (reduce-molecule (get real-input :molecule) (get real-input :inv-trans) 500)
 ;; => ("Molecule reduced in " 62 "steps" "CRnSiRnFYCaRnFArArFArAl")
@@ -269,51 +269,137 @@
 ;; pairs of Rn/Ar atoms, with the stuff between those divided by Y atoms.
 
 (defn parenthesize [molecule]
-  (read-string (str/join (list "("
-                               (str/replace
-                                (str/replace
-                                 (str/replace
-                                  molecule
-                                  "Rn" "(\"Rn\"")
-                                 "Ar" "\"Ar\")")
-                                "Y" " \"Y\" ")
-                               ")"))))
+  (if (not (and (str/includes? molecule "Rn") (str/includes? molecule "Ar")))
+    molecule
+    (read-string
+     (str/join
+      (list "("
+            (-> molecule
+                (str/replace "Rn" "(Rn")
+                (str/replace "Ar" "Ar)")
+                (str/replace "Y" " Y "))
+            ")")))))
+;; #"([A-Z][a-z]?)(Rn)" (fn [[_ g1 g2]] (str/join (list "(" g1 g2)))
+
 (defn desymbolize [coll]
   (if (not (seq? coll))
     (name coll)
     (map desymbolize coll)))
 
 (defn reduceize-molecule-once [molecule inv-txs]
-  (reduce (fn [acc k] (str/replace acc k (first (get inv-txs k))))
+  (reduce (fn [acc k]
+;;            (when (str/includes? acc k) (println "Replacing" k "with" (first (get inv-txs k))))
+            (str/replace acc k (first (get inv-txs k))))
           molecule
-          (keys inv-txs)))
+          (reverse (sort-by count (keys inv-txs)))))
+
+(def atom-pattern #"([A-Z][a-z]|[A-Z])")
+
+(defn atom? [x] (and (string? x) (re-matches atom-pattern x)))
 
 (defn reduceize [molecule]
-  (let [inv-txs (get real-input :inv-trans)
-        result (reduceize-molecule-once molecule inv-txs)]
-    (if (= result molecule)
+  (if (seq? molecule)
+    (reduceize (str/join molecule))
+    (if (atom? molecule)
       molecule
-      (reduceize result))))
+      (let [inv-txs (get real-input :inv-trans)
+            result (reduceize-molecule-once molecule inv-txs)]
+        (if (= result molecule)
+          (->atoms molecule)
+          (reduceize result))))))
 
-(defn all-atoms? [coll]
-  (reduce #(and %1 (string? %2)) coll))
+(defn all-atoms? [coll] (every? #(not (seq? %)) coll))
 
-(defn reduce-new [coll]
-(println coll)
-  (let [inv-txs (get real-input :inv-trans)]
-    (if (string? coll)
-      (reduceize coll)
-      (if (all-atoms? coll)
-        (reduceize (str/join coll))
-        (reduce-new (str/join (map reduce-new coll)))))))
+(defn any-atoms? [coll] (some #(not (seq? %)) coll))
 
-(reduce-new '("Rn" "BSi" ("Rn" "F" "Ar") "TiBPTiTiBF" "Ar"))
-(reduce-new '("Rn" "P" "B" "P" "Mg" "Ar"))
-(reduce-new (desymbolize (parenthesize (get real-input :molecule))))
+(defn atomize-all [input]
+  (letfn [(atomize-inner [input]
+            (if (seq? input)
+              (list (mapcat atomize-inner input))
+              (->atoms input)))]
+    (first (atomize-inner input))))
+
+;; (defn reduce-all [coll]
+;; (println "reduce-all top" coll)
+;;   (if (atom? coll)
+;;     coll
+;;     (if (all-atoms? coll)
+;;       (let [in (str/join coll)
+;;             out (reduceize coll)]
+;;         (println "reduce-all" in "=>" (str/join out))
+;;         out)
+;;       (if (any-atoms? coll)
+;;         (map reduce-all (partition-by seq? coll))
+;;         (map reduce-all coll)))))
+(defn reduce-bottom [coll]
+  (if (atom? coll)
+    coll
+    (if (all-atoms? coll)
+      (let [in (str/join coll)
+            out (reduceize coll)]
+        (println "reduce-bottom" in "=>" (str/join out))
+        out)
+      (map reduce-bottom coll))))
+
+(defn combinize [input]
+  (get
+   (let [partitioned (partition 2 1 (concat input '(())))]
+     (reduce
+      (fn [acc [a b]]
+        (if (get acc :skip)
+          (assoc acc :skip false)
+          (if (seq? b)
+            (let [combinized-b (combinize b)]
+              (if (and (atom? a) (= "Rn" (first combinized-b)))
+                (-> acc
+                    (assoc :skip true)
+                    (update :output #(conj % (concat (list a) combinized-b))))
+                (-> acc
+                    (assoc :skip false)
+                    (update :output #(conj % a)))))
+            (-> acc
+                (assoc :skip false)
+                (update :output #(conj % a)))
+            )))
+      {:output [] :skip false}
+      partitioned))
+   :output))
+
+(combinize '("C" ("Rn" "Mg" ("Rn" "Si"))))
+(reduce-all (combinize '("C" "Ca" "Si")))
+(reduce-all '("C" "Ca" "Si"))
+(reduce-bottom '("Rn" "B" "Si" ("Rn" "F" "Ar") "Ti" "B" "P" "Ti" "Ti" "B" "F" "Ar"))
+(reduce-bottom (combinize '("Rn" "B" "Si" ("Rn" "F" "Ar") "Ti" "B" "P" "Ti" "Ti" "B" "F" "Ar")))
+
+(reduce-all '("Rn" "F" "Ar"))
+(reduce-all (reduce-all (combinize '("Rn" "B" "Ca" "Si" ("Rn" "F" "Ar") "Ti" "B" "P" "Ti" "Ti" "B" "F" "Ar"))))
+
+(reduce-all (reduce-all (combinize (reduce-all (atomize-all (desymbolize (parenthesize "CRnFYSiAlYFArSiRnFYFAr")))))))
+
+(let [input (atomize-all (desymbolize (parenthesize (get real-input :molecule))))]
+  (->> input
+       combinize
+       reduce-bottom
+       reduce-bottom
+       ))
+
+
+;; CRnSiRnFYFArFYSiThRnFArYPMgAr = CRn((SiRnFYFAr)F)Y(Si(ThRnFAr))Y(PMg)Ar
+;; CRnCaFYSiAlYPMgAr = CRn(CaF)Y(SiAl)Y(PMg)Ar
+;; CRnFYFYFAr = CRnFYFYFAr
+;; H
 
 ;; Trace reduceize!
 ;; At some point we process CRnSiRnFYCaRnFArArFArThSiRnMgArSiRnMgArPRnFArSiRnFYFArCaRnFAr
 ;; But that should still be broken up into Rn/Ar subsections.
+
+(def test-input-3
+  (parse-input
+   '("e => HF"
+     "H => CRnFYFYFAr"
+     "F => SiAl")
+   "CRnFYSiAlYFAr"))
+
 
 
 (reduceize-molecule-once
@@ -356,7 +442,7 @@
             more)
         ))))
 
-(fx '("") (->atoms "CCaYMgAlYSiTh"))
+;; (fx '("") (->atoms "CCaYMgAlYSiTh"))
 
 (concat '("abc" "def") '(()))
 
@@ -370,20 +456,13 @@
 
 (break-up (->atoms "CRnNthArRnHCaRnOBArAr"))
 
-(let [molecule "CRnNthArRnHCaRnOBArAr"
-      atoms (->atoms molecule)]
-  (if (= (first atoms) "Rn")
+;; (let [molecule "CRnNthArRnHCaRnOBArAr"
+;;       atoms (->atoms molecule)]
+;;   (if (= (first atoms) "Rn")
     
 
-    )
-)
-
-(def test-input-3
-  (parse-input
-   '("e => HF"
-     "H => CRnFYFYFAr"
-     "F => SiAl")
-   "CRnFYSiAlYFAr"))
+;;     )
+;; )
 
 (defn multi-reduceize
   ([input]
@@ -402,16 +481,48 @@
 "CRnSiRnFY CaRnFAr ArFArAl"
 
 
-(let [input test-input-3
-      inv-txs (get input :inv-trans)
-      molecule (get input :molecule)
-      parsed-input (desymbolize (parenthesize molecule))]
-  (loop [input parsed-input n 2]
-    (if (= n 0)
-      input
-      (recur (reduceize inv-txs input) (dec n)))))
+;; (let [input test-input-3
+;;       inv-txs (get input :inv-trans)
+;;       molecule (get input :molecule)
+;;       parsed-input (desymbolize (parenthesize molecule))]
+;;   (loop [input parsed-input n 2]
+;;     (if (= n 0)
+;;       input
+;;       (recur (reduceize inv-txs input) (dec n)))))
 
   ;; (list parsed-input (reduceize inv-txs parsed-input))
 ;;   (let [reduceized (reduceize inv-txs parsed-input)]
 ;;     (list reduceized (reduceize inv-txs reduceized))
 ;; )
+
+;; (defn reduce-new [coll]
+;; (println coll)
+;;   (let [inv-txs (get real-input :inv-trans)]
+;;     (if (string? coll)
+;;       (reduceize coll)
+;;       (if (all-atoms? coll)
+;;         (reduceize (str/join coll))
+;;         (reduce-new (str/join (map reduce-new coll)))))))
+
+;; (defn reduce-new [molecule]
+;;   (println "molecule" molecule)
+;;   (let [coll (if (string? molecule)
+;;                (desymbolize (parenthesize molecule))
+;;                molecule)
+;;         inv-txs (get real-input :inv-trans)]
+;;     (println "coll" coll)
+;;     (if (string? coll)
+;;       (reduceize coll)
+;;       (if (all-atoms? coll)
+;;         (reduceize (str/join coll))
+;;         (reduce-new (str/join (map reduce-new coll)))))))
+
+
+;; I gave up. Even having read through other people's solutions
+;; I was unable to make this work. The top solution in the solutions
+;; megathread gave a mathematical formula; I'll use that.
+(let [atoms (->atoms (get real-input :molecule))
+      elements (count atoms)
+      rn-or-ar (count (filter #{"Rn" "Ar"} atoms))
+      y (count (filter #{"Y"} atoms))]
+  (- elements rn-or-ar (* 2 y) 1))
