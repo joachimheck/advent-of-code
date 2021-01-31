@@ -1,4 +1,4 @@
-(ns day-19.core
+(ns day-01.core
   (:require [clojure.pprint :as pp]
             [clojure.repl :refer :all]
             [clojure.string :as str]
