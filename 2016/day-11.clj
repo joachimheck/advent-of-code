@@ -148,38 +148,73 @@
         ({} {}))
        second))
 
+(defn ->node [state parent]
+  (assoc {} :state state :parent (:state parent) :dist (inc (:dist parent)) :key (state-key state)))
+
 (defn search-with-a* [start-state]
+  (loop [unvisited (list {:state start-state :parent nil :dist 0}) visited '()]
+    (if (empty? unvisited)
+      (list :gave-up (count visited))
+      (let [node (min-scoring-node unvisited)
+            state (:state node)
+            unvisited-next-states (remove (set (map :state unvisited))
+                                          (remove (set (map :state visited)) (next-states state)))
+            next-nodes (map #(assoc {} :state % :parent state :dist (inc (:dist node))) unvisited-next-states)
+            new-visited (concat visited (list node))
+            new-unvisited (concat (remove #{node} unvisited) next-nodes)]
+        (if (finished? state)
+          (list node visited)
+          (recur new-unvisited new-visited))))))
+
+(defn next-nodes [node known-nodes]
+  (let [state (:state node)
+        state-key (state-key state)
+        raw-nexts (map #(->node % node) (next-states state))
+        known-keys (set (map :key known-nodes))
+        unvisited-next-nodes (remove (fn [node] (known-keys (:key node))) raw-nexts)]
+    unvisited-next-nodes))
+
+(defn search-with-a*-2 [start-state]
   (loop [unvisited (list {:state start-state :parent nil :dist 0 :key (state-key start-state)}) visited '()]
     (if (empty? unvisited)
       (list :gave-up (count visited))
       (let [node (min-scoring-node unvisited)
             state (:state node)
-            state-key (state-key state)
-            next-nodes (map #(assoc {} :state % :parent state :dist (inc (:dist node)) :key (state-key %))
-                            (next-states state))
-            unvisited-keys (set (map :key unvisited))
-            unvisited-next-nodes (remove #(some unvisited-keys %) next-nodes)
+            unvisited-next-nodes (next-nodes node (concat visited unvisited))
+            ;; state-key (state-key state)
+            ;; next-nodes (map #(->node % node) (next-states state))
+            ;; known-keys (set (map :key (concat visited unvisited)))
+            ;; unvisited-next-nodes (remove #(some known-keys %) next-nodes)
             new-visited (concat visited (list node))
             new-unvisited (concat (remove #{node} unvisited) unvisited-next-nodes)]
+;(println "next-nodes" next-nodes)
         (if (finished? state)
           (list node visited)
           (recur new-unvisited new-visited))))))
 
-(defn shortest-path-length [input]
-  (dec (count (find-path (search-with-a* input)))))
+(defn shortest-path-length [fn input]
+  (dec (count (find-path (fn input)))))
 
-;; (time (shortest-path-length test-input))
+;; (time (shortest-path-length search-with-a* test-input))
 ;;  => 11
 ;; "Elapsed time: 16.1503 msecs"
 
-;; (time (shortest-path-length real-input))
+;; (time (shortest-path-length search-with-a* real-input))
 ;; "Elapsed time: 5338147.5629 msecs"
 ;; => 88.96912 minutes
 ;; 34 lines = 33 steps.
 
-(time (shortest-path-length real-input))
+;; I reworked my A* algorithm to skip similar cases, following the hint in
+;; https://www.reddit.com/r/adventofcode/comments/5hoia9/2016_day_11_solutions/db1v1ws/
+;; This massively reduced the time, from 90 minutes to 1.
 
+;; (time (shortest-path-length search-with-a*-2 test-input))
+;; => 11
+;; "Elapsed time: 28.9973 msecs"
 
+;; (time (shortest-path-length search-with-a*-2 real-input))
+;; => 33
+;; "Elapsed time: 54808.1543 msecs"
 
 
 ;; Part 2
@@ -189,3 +224,11 @@
    3 '("CoM" "CmM" "RuM" "PuM")
    2 '("CoG" "CmG" "RuG" "PuG")
    1 '("E" "PmG" "PmM" "EG" "EM" "DG" "DM")})
+
+(def test-input-2
+  {4 '()
+   3 '("LG")
+   2 '("HG")
+   1 '("E" "HM" "LM" "XM" "XG")})
+
+(time (shortest-path-length search-with-a*-2 real-input-2))
