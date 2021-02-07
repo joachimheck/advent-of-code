@@ -107,3 +107,24 @@
 ;; (solution-length (solve (build-maze 1364 32 40) [1 1] [31 39]))
 ;; => 86
 
+
+
+
+;; Part 2
+;; How many locations can be reached in 50 steps?
+(defn flood [maze start max-steps]
+  (loop [visited #{start}
+         spaces (list start)
+         steps max-steps]
+    (let [new-spaces (remove visited (distinct (mapcat (partial neighboring-spaces maze) spaces)))    
+          new-visited (apply conj visited new-spaces)]
+      (if (= 0 steps)
+        visited
+        (recur new-visited new-spaces (dec steps))))))
+
+;; (let [maze (build-maze 1364 32 40)]
+;;   (print-maze maze (flood maze [1 1] 50)))
+
+;; (let [maze (build-maze 1364 32 40)]
+;;   (count (flood maze [1 1] 50)))
+;; => 127

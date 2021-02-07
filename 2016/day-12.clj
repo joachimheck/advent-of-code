@@ -51,7 +51,11 @@
 ;; => (:done {"ip" 23, "a" 318007, "b" 196418, "c" 0, "d" 0})
 ;; "Elapsed time: 8267.1249 msecs"
 
+
+
+;; Part 2
+;; Start with a different input.
+
 ;; (time (run-program (read-input (str/split-lines (slurp "input-12.txt"))) {"ip" 0 "a" 0 "b" 0 "c" 1 "d" 0}))
 ;; => (:done { "ip" 23, "a" 9227661, "b" 5702887, "c" 0, "d" 0 })
 ;; "Elapsed time: 147296.4974 msecs"
-
