@@ -41,7 +41,9 @@
           (if (empty? new-paths) :no-path
               (recur (first new-path) (second new-path) more-paths))))))
 
-;; (find-path "vwbaicqe")
+(def real-input "vwbaicqe")
+
+;; (find-path real-input)
 ;; => "DRDRULRDRD"
 
 
@@ -49,14 +51,18 @@
 ;; Part 2
 ;; Find the longest path
 (defn find-longest-path [passcode]
-  (loop [path "" pos [0 0] paths '() successes]
+  (loop [path "" pos [0 0] paths '() longest 0]
     (if (= pos [3 3])
       (let [[new-path & more-paths] paths]
-        (recur (first new-path) (second new-path) more-paths (concat successes path)))
+        (recur (first new-path) (second new-path) more-paths (max longest (count path))))
       (let [hash (subs (md5 (str/join (list passcode path))) 0 4)
               new-paths (concat paths (map (fn [[dir pos]]
                                              (list (str/join (list path dir)) pos))
                                            (dirs pos hash)))
               [new-path & more-paths] new-paths]
-          (if (empty? new-paths) :no-path
-              (recur (first new-path) (second new-path) more-paths))))))
+          (if (empty? new-paths)
+            longest
+            (recur (first new-path) (second new-path) more-paths longest))))))
+
+;;(find-longest-path real-input)
+;; => 384
