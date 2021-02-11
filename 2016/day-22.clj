@@ -50,6 +50,7 @@
   (second (last (sort-by second (keys nodes)))))
 
 (defn move-data [nodes from to]
+(println from to)
   (let [maxx (max-node-x nodes)
         maxy (max-node-y nodes)
         from-node (get nodes from)
@@ -74,29 +75,35 @@
 
 ;; (reduce
 ;;  (fn [nodes [p1 p2]]
-;;    (list p1 p2)
-;; ;   (move-data nodes p1 p2)
-;; )
+;;    ;; (concat nodes p1 p2)
+;;    (let [result (move-data nodes p1 p2)]
+;;      (if (= (first result) :error-too-small)
+;;        (reduced (print-grid (second result)))
+;;        result)))
 ;;  nodes
 ;;  (for [j (reverse (range 0 20))]
 ;;    (list [28 j] [28 (inc j)])))
 
-;; (move-data nodes [28 19] [28 20])
 
-;; (print-grid (move-data test-nodes [1 0] [1 1]))
+;; Determined the solution by printing the map and counting:
 
 ;; x28-y20 is empty to start
 ;; goal node is x31-y0, 64T
 ;; destination is 0 0
+;; moving the space left to x=25 takes 3 steps
 ;; moving the space up to y=0 takes 20 steps
-;; moving to x30 takes 2 steps
+;; moving to x30 takes 5 steps
 ;; it takes 5 steps to move the goal data one to the left
 ;; moving it to x=1 takes 5 * 30 = 150 steps
 ;; it takes one step to move it to x=0
-;; (+ 20 2 150 1)
-;; => 173 Wrong! too low.
+;; (+ 3 20 5 150 1)
+;; => 173 Wrong! too low. we need to avoid a line of large nodes.
+;; => 179
 
-;; Moving to the left:
+
+
+;; Moving to the left takes 1 step, plus 4 steps
+;; of recovery to the initial configuration:
 ;; . _ G .
 ;; . . . .
 ;; . G _ .
@@ -109,70 +116,3 @@
 ;; _ . . .
 ;; _ G . .
 ;; . . . .
-
-
-;; /dev/grid/node-x0-y0     92T   68T    24T   73%
-;; /dev/grid/node-x1-y0     85T   66T    19T   77%
-;; /dev/grid/node-x2-y0     94T   73T    21T   77%
-;; /dev/grid/node-x3-y0     92T   65T    27T   70%
-;; /dev/grid/node-x4-y0     86T   73T    13T   84%
-;; /dev/grid/node-x5-y0     88T   69T    19T   78%
-;; /dev/grid/node-x6-y0     90T   64T    26T   71%
-;; /dev/grid/node-x7-y0     93T   70T    23T   75%
-;; /dev/grid/node-x8-y0     90T   67T    23T   74%
-;; /dev/grid/node-x9-y0     88T   72T    16T   81%
-;; /dev/grid/node-x10-y0    94T   72T    22T   76%
-;; /dev/grid/node-x11-y0    87T   67T    20T   77%
-;; /dev/grid/node-x12-y0    90T   72T    18T   80%
-;; /dev/grid/node-x13-y0    90T   65T    25T   72%
-;; /dev/grid/node-x14-y0    89T   71T    18T   79%
-;; /dev/grid/node-x15-y0    85T   71T    14T   83%
-;; /dev/grid/node-x16-y0    86T   73T    13T   84%
-;; /dev/grid/node-x17-y0    94T   72T    22T   76%
-;; /dev/grid/node-x18-y0    89T   71T    18T   79%
-;; /dev/grid/node-x19-y0    93T   72T    21T   77%
-;; /dev/grid/node-x20-y0    86T   64T    22T   74%
-;; /dev/grid/node-x21-y0    93T   66T    27T   70%
-;; /dev/grid/node-x22-y0    94T   65T    29T   69%
-;; /dev/grid/node-x23-y0    90T   68T    22T   75%
-;; /dev/grid/node-x24-y0    85T   70T    15T   82%
-;; /dev/grid/node-x25-y0    90T   65T    25T   72%
-;; /dev/grid/node-x26-y0    85T   73T    12T   85%
-;; /dev/grid/node-x27-y0    86T   67T    19T   77%
-;; /dev/grid/node-x28-y0    92T   67T    25T   72%
-;; /dev/grid/node-x29-y0    85T   67T    18T   78%
-;; /dev/grid/node-x30-y0    92T   64T    28T   69%
-;; /dev/grid/node-x31-y0    87T   64T    23T   73%
-
-;; /dev/grid/node-x0-y1     90T   68T    22T   75%
-;; /dev/grid/node-x1-y1     88T   72T    16T   81%
-;; /dev/grid/node-x2-y1     85T   64T    21T   75%
-;; /dev/grid/node-x3-y1     93T   66T    27T   70%
-;; /dev/grid/node-x4-y1     94T   69T    25T   73%
-;; /dev/grid/node-x5-y1     89T   68T    21T   76%
-;; /dev/grid/node-x6-y1     89T   67T    22T   75%
-;; /dev/grid/node-x7-y1     94T   65T    29T   69%
-;; /dev/grid/node-x8-y1     94T   67T    27T   71%
-;; /dev/grid/node-x9-y1     89T   65T    24T   73%
-;; /dev/grid/node-x10-y1    87T   65T    22T   74%
-;; /dev/grid/node-x11-y1    90T   70T    20T   77%
-;; /dev/grid/node-x12-y1    91T   68T    23T   74%
-;; /dev/grid/node-x13-y1    86T   72T    14T   83%
-;; /dev/grid/node-x14-y1    92T   70T    22T   76%
-;; /dev/grid/node-x15-y1    85T   67T    18T   78%
-;; /dev/grid/node-x16-y1    92T   72T    20T   78%
-;; /dev/grid/node-x17-y1    86T   68T    18T   79%
-;; /dev/grid/node-x18-y1    87T   67T    20T   77%
-;; /dev/grid/node-x19-y1    87T   70T    17T   80%
-;; /dev/grid/node-x20-y1    90T   64T    26T   71%
-;; /dev/grid/node-x21-y1    91T   69T    22T   75%
-;; /dev/grid/node-x22-y1    91T   65T    26T   71%
-;; /dev/grid/node-x23-y1    88T   65T    23T   73%
-;; /dev/grid/node-x24-y1    88T   65T    23T   73%
-;; /dev/grid/node-x25-y1    94T   64T    30T   68%
-;; /dev/grid/node-x26-y1    92T   73T    19T   79%
-;; /dev/grid/node-x27-y1    92T   73T    19T   79%
-;; /dev/grid/node-x28-y1    87T   66T    21T   75%
-;; /dev/grid/node-x29-y1    86T   65T    21T   75%
-;; /dev/grid/node-x30-y1    88T   70T    18T   79%
-;; /dev/grid/node-x31-y1    91T   72T    19T   79%
