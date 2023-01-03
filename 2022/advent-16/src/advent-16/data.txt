@@ -1,0 +1,54 @@
+You move to valve DD.
+You open valve DD.
+You move to valve CC.
+You move to valve BB.
+You open valve BB.
+You move to valve AA.
+You move to valve II.
+You move to valve JJ.
+You open valve JJ.
+You move to valve II.
+You move to valve AA.
+You move to valve DD.
+You move to valve EE.
+You move to valve FF.
+You move to valve GG.
+You move to valve HH.
+You open valve HH.
+You move to valve GG.
+You move to valve FF.
+You move to valve EE.
+You open valve EE.
+You move to valve DD.
+You move to valve CC.
+You open valve CC.
+
+Best order: DD BB JJ HH EE CC
+Including moves: AA DD CC BB AA II JJ II AA DD EE FF GG HH GG FF EE DD CC
+
+For http://csacademy.com/app/graph_editor
+"AA"
+"BB 13"
+"CC 2"
+"DD 20"
+"EE 3"
+"FF"
+"GG"
+"HH 22"
+"II"
+"JJ 21"
+AA "DD 20"
+AA II
+AA "BB 13"
+"BB 13" "CC 2"
+"BB 13" AA
+"CC 2" "DD 20"
+"CC 2" "BB 13"
+"DD 20" "CC 2"
+"DD 20" AA
+"DD 20" "EE 3"
+"EE 3" FF
+"EE 3" "DD 20"
+FF GG
+GG "HH 22"
+II "JJ 21"

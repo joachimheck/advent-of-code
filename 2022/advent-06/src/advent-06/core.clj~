@@ -1,0 +1,21 @@
+(ns advent-06.core)
+
+(require '[clojure.pprint :as pp])
+(require '[clojure.repl :refer :all])
+(require '[clojure.string :as str])
+
+(def small-input "resources/small-input.txt")
+(def large-input "resources/large-input.txt")
+
+(defn read-lines [f]
+  (with-open [rdr (clojure.java.io/reader f)]
+    (doall(line-seq rdr))))
+
+;; Part 1
+;; How many characters need to be processed before the first start-of-packet marker is detected?
+(defn four-unique? [s n]
+  (= 4 (count (distinct (subs s n (+ n 4))))))
+
+(defn chars-until-start-of-packet [s]
+  (for [i (range 0 (- (count s) 4))]
+    (if (four-unique? s i) (+ i 4) nil)))

@@ -1,0 +1,275 @@
+Valve AA has flow rate=0; tunnels lead to valves OX, KF, GL, MJ, EE
+Valve AS has flow rate=16; tunnels lead to valves RR, RH, HG, IR
+Valve AU has flow rate=0; tunnels lead to valves DW, LF
+Valve AW has flow rate=0; tunnels lead to valves HR, DW
+Valve BD has flow rate=0; tunnels lead to valves WT, TV
+Valve BL has flow rate=0; tunnels lead to valves RU, IR
+Valve BN has flow rate=0; tunnels lead to valves BT, KQ
+Valve BP has flow rate=0; tunnels lead to valves LF, MJ
+Valve BT has flow rate=0; tunnels lead to valves BN, RU
+Valve CB has flow rate=0; tunnels lead to valves MW, DW
+Valve CD has flow rate=0; tunnels lead to valves EE, MW
+Valve CY has flow rate=0; tunnels lead to valves MT, II
+Valve DW has flow rate=4; tunnels lead to valves AU, CB, HY, GL, AW
+Valve ED has flow rate=9; tunnels lead to valves HG, FF
+Valve EE has flow rate=0; tunnels lead to valves AA, CD
+Valve FF has flow rate=0; tunnels lead to valves QS, ED
+Valve FL has flow rate=0; tunnels lead to valves HR, PQ
+Valve FN has flow rate=0; tunnels lead to valves TV, GA
+Valve FQ has flow rate=12; tunnels lead to valves QN, WT, UG, RQ, QM
+Valve FR has flow rate=0; tunnels lead to valves KQ, PM
+Valve GA has flow rate=0; tunnels lead to valves FN, MA
+Valve GL has flow rate=0; tunnels lead to valves AA, DW
+Valve HG has flow rate=0; tunnels lead to valves AS, ED
+Valve HR has flow rate=14; tunnels lead to valves KF, YB, QD, AW, FL
+Valve HY has flow rate=0; tunnels lead to valves DW, IU
+Valve II has flow rate=20; tunnels lead to valves YC, CY, QP, RH
+Valve IR has flow rate=0; tunnels lead to valves AS, BL
+Valve IU has flow rate=0; tunnels lead to valves XO, HY
+Valve KF has flow rate=0; tunnels lead to valves AA, HR
+Valve KP has flow rate=0; tunnels lead to valves QM, MA
+Valve KQ has flow rate=18; tunnels lead to valves FR, BN
+Valve LF has flow rate=5; tunnels lead to valves LS, QN, AU, BP, ZY
+Valve LS has flow rate=0; tunnels lead to valves LF, SA
+Valve MA has flow rate=10; tunnels lead to valves RR, YC, GA, OX, KP
+Valve MJ has flow rate=0; tunnels lead to valves BP, AA
+Valve MO has flow rate=0; tunnels lead to valves XO, VI
+Valve MT has flow rate=0; tunnels lead to valves CY, TV
+Valve MW has flow rate=7; tunnels lead to valves PQ, SA, CB, CD, RQ
+Valve OX has flow rate=0; tunnels lead to valves MA, AA
+Valve PM has flow rate=25; tunnels lead to valves YZ, FR
+Valve PQ has flow rate=0; tunnels lead to valves FL, MW
+Valve QD has flow rate=0; tunnels lead to valves HR, ZY
+Valve QM has flow rate=0; tunnels lead to valves KP, FQ
+Valve QN has flow rate=0; tunnels lead to valves LF, FQ
+Valve QP has flow rate=0; tunnels lead to valves II, WJ
+Valve QS has flow rate=0; tunnels lead to valves FF, RU
+Valve RH has flow rate=0; tunnels lead to valves AS, II
+Valve RQ has flow rate=0; tunnels lead to valves FQ, MW
+Valve RR has flow rate=0; tunnels lead to valves AS, MA
+Valve RU has flow rate=11; tunnels lead to valves YZ, QS, BL, BT, WJ
+Valve SA has flow rate=0; tunnels lead to valves MW, LS
+Valve TV has flow rate=17; tunnels lead to valves BD, MT, FN
+Valve UG has flow rate=0; tunnels lead to valves FQ, YB
+Valve VI has flow rate=22; tunnel leads to valve MO
+Valve WJ has flow rate=0; tunnels lead to valves RU, QP
+Valve WT has flow rate=0; tunnels lead to valves BD, FQ
+Valve XO has flow rate=23; tunnels lead to valves IU, MO
+Valve YB has flow rate=0; tunnels lead to valves UG, HR
+Valve YC has flow rate=0; tunnels lead to valves II, MA
+Valve YZ has flow rate=0; tunnels lead to valves RU, PM
+Valve ZY has flow rate=0; tunnels lead to valves QD, LF
+
+
+For http://csacademy.com/app/graph_editor
+WT
+WT BD
+WT FQ
+UG
+UG FQ
+UG YB
+FN
+FN TV
+FN GA
+RU
+RU YZ
+RU QS
+RU BL
+RU BT
+RU WJ
+RH
+RH AS
+RH II
+FL
+FL HR
+FL PQ
+KQ
+KQ FR
+KQ BN
+PM
+PM YZ
+PM FR
+RQ
+RQ FQ
+RQ MW
+BL
+BL RU
+BL IR
+FF
+FF QS
+FF ED
+KP
+KP QM
+KP MA
+YB
+YB UG
+YB HR
+TV
+TV BD
+TV MT
+TV FN
+HY
+HY DW
+HY IU
+KF
+KF AA
+KF HR
+YC
+YC II
+YC MA
+EE
+EE AA
+EE CD
+ED
+ED HG
+ED FF
+SA
+SA MW
+SA LS
+II
+II YC
+II CY
+II QP
+II RH
+BN
+BN BT
+BN KQ
+MO
+MO XO
+MO VI
+YZ
+YZ RU
+YZ PM
+WJ
+WJ RU
+WJ QP
+AW
+AW HR
+AW DW
+MJ
+MJ BP
+MJ AA
+DW
+DW AU
+DW CB
+DW HY
+DW GL
+DW AW
+QM
+QM KP
+QM FQ
+LF
+LF LS
+LF QN
+LF AU
+LF BP
+LF ZY
+QS
+QS FF
+QS RU
+BT
+BT BN
+BT RU
+VI
+VI MO
+LS
+LS LF
+LS SA
+QD
+QD HR
+QD ZY
+HG
+HG AS
+HG ED
+BD
+BD WT
+BD TV
+CD
+CD EE
+CD MW
+QP
+QP II
+QP WJ
+MW
+MW PQ
+MW SA
+MW CB
+MW CD
+MW RQ
+AU
+AU DW
+AU LF
+RR
+RR AS
+RR MA
+GA
+GA FN
+GA MA
+MT
+MT CY
+MT TV
+HR
+HR KF
+HR YB
+HR QD
+HR AW
+HR FL
+AS
+AS RR
+AS RH
+AS HG
+AS IR
+CY
+CY MT
+CY II
+AA
+AA OX
+AA KF
+AA GL
+AA MJ
+AA EE
+IU
+IU XO
+IU HY
+XO
+XO IU
+XO MO
+FR
+FR KQ
+FR PM
+CB
+CB MW
+CB DW
+ZY
+ZY QD
+ZY LF
+BP
+BP LF
+BP MJ
+QN
+QN LF
+QN FQ
+IR
+IR AS
+IR BL
+PQ
+PQ FL
+PQ MW
+GL
+GL AA
+GL DW
+OX
+OX MA
+OX AA
+MA
+MA RR
+MA YC
+MA GA
+MA OX
+MA KP
+FQ
+FQ QN
+FQ WT
+FQ UG
+FQ RQ
+FQ QM
