@@ -1,3 +1,5 @@
-# Ignore Lein compilation data
+# Lein compilation data
 target
 
+# NREPL junk
+.nrepl-port
