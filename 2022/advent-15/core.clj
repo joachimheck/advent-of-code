@@ -5,8 +5,8 @@
 (require '[clojure.string :as str])
 (require '[clojure.set :as set])
 
-(def small-input "resources/small-input.txt")
-(def large-input "resources/large-input.txt")
+(def small-input "small-input.txt")
+(def large-input "large-input.txt")
 
 (defn read-lines [f]
   (with-open [rdr (clojure.java.io/reader f)]

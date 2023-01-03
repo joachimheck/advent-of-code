@@ -4,8 +4,8 @@
 (require '[clojure.repl :refer :all])
 (require '[clojure.string :as str])
 
-(def small-input "resources/small-input.txt")
-(def large-input "resources/large-input.txt")
+(def small-input "small-input.txt")
+(def large-input "large-input.txt")
 (def shape-scores {"X" 1 "Y" 2 "Z" 3})
 
 (defn- read-lines [f]
