@@ -1,5 +1,4 @@
-# Lein compilation data
+# Lein and NREPLstuff
 target
-
-# NREPL junk
+lein.bat
 .nrepl-port
