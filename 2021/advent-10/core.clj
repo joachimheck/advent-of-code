@@ -12,7 +12,7 @@
   (with-open [rdr (clojure.java.io/reader f)]
     (doall(line-seq rdr))))
 
-;; Day 9: Syntax Scoring
+;; Day 10: Syntax Scoring
 
 ;; Part 1
 ;; Find the total syntax error score for the corrupted lines in the input: those with improper closing delimiters.
