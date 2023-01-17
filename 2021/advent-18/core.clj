@@ -5,6 +5,7 @@
 (require '[clojure.string :as str])
 (require '[clojure.set :as set])
 (require '[clojure.test :refer :all])
+(require '[clojure.walk :as walk])
 
 (def small-input "small-input.txt")
 (def large-input "large-input.txt")
@@ -44,6 +45,36 @@
   (is (= (explode (parse-snailfish-number "[[3,[2,[1,[7,3]]]],[6,[5,[4,[3,2]]]]]"))
          (parse-snailfish-number "[[3,[2,[8,0]]],[9,[5,[4,[3,2]]]]]"))))
 
+(defn label-nodes [tree]
+  (let [node-count (atom 0)]
+    (walk/postwalk (fn [node]
+                     (let [node-name (str/join (list "n" (swap! node-count inc)))]
+                       (if (seq? node)
+                         (apply conj node (list node-name))
+                         (apply conj (list node) (list node-name)))))
+                   tree)))
+
+(defn print-graphviz [number]
+  (println
+   (str/join
+    "\n"
+    (map (fn [node]
+           (if (> (count node) 2)
+             (let [[node-name child1 child2] node]
+               (format "%s -> %s, %s" node-name (first child1) (first child2)))
+             (format "%s [label=\"%s\"]" (first node) (second node))))
+         (tree-seq #(> (count %) 2) rest (label-nodes number))))))
+
+(defn dfs
+  ([tree] (dfs [tree 0]))
+  ([node node-count]
+   
+   (if (seq? node)
+     (let [children (list (first node) (second node))]
+       
+       (loop [nodes children node-count 0]
+         )))))
+
 (defn depth
   ([x] (depth x 0))
   ([x d]
@@ -51,5 +82,5 @@
      (apply max (map #(depth % (inc d)) x))
      d)))
 
-;; TODO: write a function to turn a number into graphviz
 ;; TODO: figure out what the left and right numbers are for an exploding pair.
+;; AKA: enumerate the leaf nodes from left to right.
