@@ -49,9 +49,9 @@
   (let [node-count (atom 0)]
     (walk/postwalk (fn [node]
                      (let [node-name (str/join (list "n" (swap! node-count inc)))]
-                       (if (seq? node)
-                         (apply conj node (list node-name))
-                         (apply conj (list node) (list node-name)))))
+                       (if (number? node)
+                         (apply conj [node-name] (list node))
+                         (apply conj [node-name] node))))
                    tree)))
 
 (defn print-graphviz [number]
@@ -65,22 +65,42 @@
              (format "%s [label=\"%s\"]" (first node) (second node))))
          (tree-seq #(> (count %) 2) rest (label-nodes number))))))
 
-(defn dfs
-  ([tree] (dfs [tree 0]))
-  ([node node-count]
-   
-   (if (seq? node)
-     (let [children (list (first node) (second node))]
-       
-       (loop [nodes children node-count 0]
-         )))))
+(defn leaf? [x]
+  (= 2 (count x)))
 
-(defn depth
-  ([x] (depth x 0))
-  ([x d]
-   (if (seq? x)
-     (apply max (map #(depth % (inc d)) x))
-     d)))
+(defn dfs [node fn path]
+  (let [[name child1 child2] node]
+    (remove nil?
+            (list (if (not (leaf? child1)) (dfs child1 fn (conj path 0)))
+                  (fn node path)
+                  (if (not (leaf? child2)) (dfs child2 fn (conj path 1)))))))
+
+(defn process-number [number-string]
+  (let [number (label-nodes (load-string number-string))
+        prev-number (atom nil)
+        deep-pair (atom nil)
+        next-number (atom nil)
+        process-node (fn [[name child1 child2 :as node] path]
+                       (if (and (nil? @deep-pair)
+                                (leaf? child1)
+                                (leaf? child2)
+                                (>= (count path) 4))
+                         (reset! deep-pair (list node path)))
+                       (if (and (nil? @deep-pair)
+                                (or (leaf? child1) (leaf? child2)))
+                         (reset! prev-number (if (leaf? child2) (list child2 (conj path 1)) (list child1 (conj path 0)))))
+                       (if (and (not (nil? @deep-pair))
+                                (not= (first @deep-pair) node)
+                                (nil? @next-number)
+                                (or (leaf? child1)
+                                    (leaf? child2)))
+                         (reset! next-number (if (leaf? child1) (list child1 (conj path 0)) (list child2 (conj path 1)))))
+                       (println (list (list (if (leaf? child1) (second child1) (first child1))
+                                            (if (leaf? child2) (second child2) (first child2)))
+                                      path))
+                       )]
+    (dfs number process-node [])
+    (list @prev-number @deep-pair @next-number)))
 
 ;; TODO: figure out what the left and right numbers are for an exploding pair.
 ;; AKA: enumerate the leaf nodes from left to right.
