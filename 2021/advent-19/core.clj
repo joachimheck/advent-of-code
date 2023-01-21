@@ -35,51 +35,8 @@
 (defn vec- [v1 v2]
   (mapv (fn [a b] (- a b)) v1 v2))
 
-(defn total-diff [coll1 coll2]
-  (apply +
-         (apply concat
-                (map (fn [v] (map abs v))
-                     (map vec- coll1 coll2)))))
-
-(def deltas-by-axis {:x '([0 0 0] [1 0 0] [-1 0 0])
-                     :y '([0 0 0] [0 1 0] [0 -1 0])
-                     :z '([0 0 0] [0 0 1] [0 0 -1])})
-
 (defn shift-beacons [beacons shift]
   (into #{} (map #(vec+ % shift) beacons)))
-
-(defn find-best-delta [beacons1 beacons2 deltas]
-  (let [deltatest (reduce (fn [acc delta] (assoc acc (total-diff beacons1 (shift-beacons beacons2 delta)) delta))
-                          {}
-                          deltas)
-        min-diff (apply min (keys deltatest))
-        delta (get deltatest min-diff)]
-    (loop [loop-delta delta diff min-diff]
-      (let [new-delta (vec+ loop-delta delta)
-            new-diff (total-diff beacons1 (shift-beacons beacons2 new-delta))]
-        (if (>= new-diff diff)
-          (vec- loop-delta delta)
-          (recur new-delta new-diff))))))
-
-(defn find-best-match [beacons1 beacons2]
-  (let [best-delta (reduce (fn [acc axis]
-                             (let [deltas (get deltas-by-axis axis)
-                                   best-delta (find-best-delta beacons1 (shift-beacons beacons2 acc) deltas)]
-                               (vec+ acc best-delta)))
-                           [0 0 0]
-                           [:x :y :z])]
-    {:delta best-delta
-     :common-beacons (count (set/intersection beacons1 (into #{} (shift-beacons beacons2 best-delta))))}))
-
-(defn find-best-match-multi [beacons1 multi-beacons2]
-  (reduce (fn [acc beacons2]
-            (conj acc (find-best-match beacons1 beacons2)))
-          []
-          multi-beacons2))
-
-
-
-
 
 (defn find-matching-shift [beacons-1 beacons-2 match-count]
   (first
