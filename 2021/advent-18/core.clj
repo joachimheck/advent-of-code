@@ -14,7 +14,7 @@
   (with-open [rdr (clojure.java.io/reader f)]
     (doall(line-seq rdr))))
 
-;; Day 15: Snailfish
+;; Day 18: Snailfish
 
 ;; Part 1
 ;; What is the magnitude of the sum of the given snailfish numbers?

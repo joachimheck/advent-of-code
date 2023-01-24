@@ -14,7 +14,7 @@
   (with-open [rdr (clojure.java.io/reader f)]
     (doall(line-seq rdr))))
 
-;; Day 15: Beacon Scanner
+;; Day 19: Beacon Scanner
 
 ;; Part 1
 ;; Find beacons detected by multiple scanners to assemble a full map of beacons. How many beacons are there?

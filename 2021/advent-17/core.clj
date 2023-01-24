@@ -12,7 +12,7 @@
   (with-open [rdr (clojure.java.io/reader f)]
     (doall(line-seq rdr))))
 
-;; Day 15: Trick Shot
+;; Day 17: Trick Shot
 
 ;; Part 1
 ;; What's the maximum y position reachable by a probe that enters the target area?

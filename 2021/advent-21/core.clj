@@ -14,7 +14,7 @@
   (with-open [rdr (clojure.java.io/reader f)]
     (doall(line-seq rdr))))
 
-;; Day 15: Dirac Dice
+;; Day 21: Dirac Dice
 
 ;; Part 1
 ;; Play a game of Dirac Dice and multiply the losing score by the number of die rolls.

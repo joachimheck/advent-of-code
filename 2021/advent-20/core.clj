@@ -14,7 +14,7 @@
   (with-open [rdr (clojure.java.io/reader f)]
     (doall(line-seq rdr))))
 
-;; Day 15: Trench Map
+;; Day 20: Trench Map
 
 ;; Part 1
 ;; How many pixels are lit in the doubly-enhanced image.

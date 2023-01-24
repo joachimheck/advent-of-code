@@ -12,7 +12,7 @@
   (with-open [rdr (clojure.java.io/reader f)]
     (doall(line-seq rdr))))
 
-;; Day 15: Packet Decoder
+;; Day 16: Packet Decoder
 
 ;; Part 1
 ;; Interpret the structure of a Buoyancy Interchange Transmission System packet.
