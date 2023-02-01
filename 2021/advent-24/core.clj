@@ -265,27 +265,31 @@
     "add z y"))
 
 
-;; I guess I can work backwards from the least significant digit and figure out what digits will give
-;; me a right answer at each step. Break the program down into 14 sub-programs.
-;; (let [program (parse-lines test-input-end)]
-;;                   (filter (fn [[z d]] (let [result (execute program (list d) {"w" 0 "x" 0 "y" 0 "z" z})]
-;;                                         (= 0 (get result "z"))))
-;;                        (for [z (range 26)
-;;                              d (range 1 10)]
-;;                          (list z d))))
-;; ((12 1) (13 2) (14 3) (15 4) (16 5) (17 6) (18 7) (19 8) (20 9))
-;; advent-24.core> (let [program (parse-lines test-input-end2)]
-;;                   (filter (fn [[z d]] (let [result (execute program (list d) {"w" 0 "x" 0 "y" 0 "z" z})]
-;;                                         (= 20 (get result "z"))))
-;;                        (for [z (range 26)
-;;                              d (range 1 10)]
-;;                          (list z d))))
-;; ()
-;; advent-24.core> (let [program (parse-lines test-input-end2)]
-;;                   (filter (fn [[z d]] (let [result (execute program (list d) {"w" 0 "x" 0 "y" 0 "z" z})]
-;;                                         (= 19 (get result "z"))))
-;;                        (for [z (range 26)
-;;                              d (range 1 10)]
-;;                          (list z d))))
-;; ((0 9))
-;; advent-24.core> 
+(defn compare-path-targets [{path1 :path} {path2 :path}]
+  (- (compare path1 path2)))
+
+(defn reverse-monad [full-program digits]
+  (let [sub-programs (reverse (partition 18 full-program))
+        initial-state {"w" 0 "x" 0 "y" 0 "z" 0}]
+    (loop [paths (sorted-set-by compare-path-targets {:target 0 :path []}) iterations 0]
+      (let [{target-num :target path :path :as path-target} (first paths)
+            path-length (count path)]
+        ;; (println "path-target" path-target)
+        (cond
+          (empty? paths) (format "no paths after %d iterations." iterations)
+          (= digits path-length) path
+          :else
+          (let [program (nth sub-programs path-length)
+                new-digits (filter (fn [[z d]] (let [result (execute program (list d) (assoc initial-state "z" z))]
+                                                 (= target-num (mod (get result "z") 26))))
+                                   (for [z (range 26)
+                                         d (range 1 10)]
+                                     (list z d)))]
+            (recur (reduce (fn [acc [z d]] (conj acc {:target z :path (conj path d)}))
+                           (disj paths path-target)
+                           new-digits)
+                   (inc iterations))))))))
+
+
+;; (time (reverse-monad (parse-input large-input) 8))
+;; Gets stuck after 6 digits.
