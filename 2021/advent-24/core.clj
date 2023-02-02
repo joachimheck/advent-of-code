@@ -56,15 +56,25 @@
    (loop [program program inputs inputs variables (into (sorted-map) init-values)]
      (if (empty? program)
        variables
-       (let [{op :op arg1 :arg1 arg2 :arg2} (first program)]
-         ;; (if (= op "inp") (println "executing z =" (get variables "z") "w =" (first inputs)))
+       (let [{op :op arg1 :arg1 arg2 :arg2} (first program)
+             a (value variables arg1)
+             b (value variables arg2)]
          (case op
            "inp" (recur (rest program) (rest inputs) (assoc variables arg1 (first inputs)))
-           "add" (recur (rest program) inputs (assoc variables arg1 (+ (value variables arg1) (value variables arg2))))
-           "mul" (recur (rest program) inputs (assoc variables arg1 (* (value variables arg1) (value variables arg2))))
-           "div" (recur (rest program) inputs (assoc variables arg1 (long (/ (value variables arg1) (value variables arg2)))))
-           "mod" (recur (rest program) inputs (assoc variables arg1 (mod (value variables arg1) (value variables arg2))))
-           "eql" (recur (rest program) inputs (assoc variables arg1 (if (= (value variables arg1) (value variables arg2)) 1 0)))))))))
+           "add" (recur (rest program) inputs (assoc variables arg1 (+ a b)))
+           "mul" (recur (rest program) inputs (assoc variables arg1 (* a b)))
+           "div" (if (= b 0)
+                   :divide-by-zero
+                   (recur (rest program) inputs (assoc variables arg1 (long (/ a b)))))
+           "mod" (cond (< a 0) :mod-negative
+                       (< b 0) :mod-by-negative
+                       (= b 0) :mod-by-zero
+                       :else (recur (rest program) inputs (assoc variables arg1 (mod a b))))
+           "eql" (recur (rest program) inputs (assoc variables arg1 (if (= a b) 1 0)))))))))
+
+(defn execute-z
+  ([program inputs] (get (execute program inputs) "z"))
+  ([program inputs init-values] (get (execute program inputs init-values) "z")))
 
 (defn digits [num]
   (->> num
@@ -95,38 +105,60 @@
 
 (defn exhaustive-monad [f iterations]
   (let [program (parse-input f)]
-    (loop [i 99999999999999 max-valid 0]
+    (loop [i 99999999999999]
       (if (<= i (- 99999999999999 iterations))
-        {:max-valid max-valid}
+        {:invalid-down-to i}
         (let [digits (digits i)]
           (if (some #{0} digits)
-            (recur (dec i) max-valid)
+            (recur (dec i))
             (let [result (execute program digits)
                   valid (= 0 (get result "z"))]
               (if valid
-                (recur (dec i) i)
-                (recur (dec i) max-valid)))))))))
+                {:valid i}
+                (recur (dec i))))))))))
 
-(def v1s '(1 1 1 26 1 26 1 26 26 26 26 1 1 26))
-(def v2s '(14 11 14 -11 12 -1 10 -3 -4 -13 -8 13 11 -11))
-(def v3s '(12 8 4 4 1 10 8 12 10 15 4 10 7 9))
+(def v1s '( 1  1  1  1  26  1 26  1 26 26  26 26  1  26))
+(def v2s '(14 11 11 14 -11 12 -1 10 -3 -4 -13 -8 13 -11))
+(def v3s '(12  8  7  4   4  1 10  8 12 10  15  4 10   9))
 
-(defn do-math [w z v1 v2 v3]
-  (println "do-math" w z)
-  (let [x (mod z 26)
-        z (long (/ z v1))
-        x (if (not= w (+ x v2)) 1 0)
-        y (+ 1 (* 25 x))
-        z (* z y)
-        y (* (+ w v3) x)
-        z (+ z y)]
-    z))
+(defn do-math [w z idx]
+  (let [z-div (long (/ z (nth v1s idx)))
+        x (+ (mod z 26) (nth v2s idx))
+        result (if (= x w) z-div (+ (* z-div 26) w (nth v3s idx)))]
+    result))
+;; x 0
+;; x (+ x z)
+;; x (mod x 26)
+;; z (long (/ z v1))
+;; x (+ x v2)
+;; x (if (= x w) 1 0)
+;; x (if (= x 0) 1 0)
+;; y 0
+;; y (+ y 25)
+;; y (* y x)
+;; y (+ y 1)
+;; z (* z y)
+;; y (* y 0)
+;; y (+ y w)
+;; y (+ y v3)
+;; y (* y x)
+;; result (+ z y)
+
+;; For the last digit, digit 13, we're looking for a result of 0, which requires z-div=0:
+;; z-div is zero when z<v1, non-zero otherwise, so we only need to consider prev-z<26.
+;; 1<=w<=9, so the minimum x such that x=w is 12 (12-11=1)
+;; Therefore we only need to consider prev-z>=12
+;; We only need to consider 12 <= prev-z <= 25.
+
+;; For digit 12, we want 12 <= result <= 20.
+;; Either z in [12*26, 13*26, ..., 20*26]
+;; Or 10 + digit + 26*z = result, which only works if z=0 (for digit=2)
 
 (defn do-multi [ws]
-  (loop [ws ws v1s v1s v2s v2s v3s v3s z 0]
+  (loop [ws ws i 0 z 0]
     (if (empty? ws)
       z
-      (recur (rest ws) (rest v1s) (rest v2s) (rest v3s) (do-math (first ws) z (first v1s) (first v2s) (first v3s))))))
+      (recur (rest ws) (inc i) (do-math (first ws) z i)))))
 
 (defn generate-numbers []
   (for [d14 (range 9 0 -1)
@@ -293,3 +325,20 @@
 
 ;; (time (reverse-monad (parse-input large-input) 8))
 ;; Gets stuck after 6 digits.
+
+(defn compute-ranges [f max-digits]
+  (let [program (parse-input f)
+        sub-programs (partition 18 program)
+        initial-state {"w" 0 "x" 0 "y" 0 "z" 0}]
+    (loop [i 0 zs '(0) ranges []]
+      (if (= i max-digits)
+        ranges
+        (let [new-zs (for [z zs
+                           d (range 1 10)]
+                       ;; (get (execute (nth sub-programs i) (list d) (assoc initial-state "z" z)) "z")
+                       (do-math d z i)
+                       )]
+          (recur (inc i) new-zs (conj ranges
+                                      (list (apply min new-zs) (apply max new-zs) (count new-zs)
+                                            ;; (apply < new-zs) (some #{0} new-zs)
+                                            ))))))))
