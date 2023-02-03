@@ -54,7 +54,7 @@
   ([program inputs] (execute program inputs {"w" 0 "x" 0 "y" 0 "z" 0}))
   ([program inputs init-values]
    (loop [program program inputs inputs variables (into (sorted-map) init-values)]
-     (if (empty? program)
+     (if (or (empty? program) (empty? inputs))
        variables
        (let [{op :op arg1 :arg1 arg2 :arg2} (first program)
              a (value variables arg1)
@@ -117,15 +117,6 @@
                 {:valid i}
                 (recur (dec i))))))))))
 
-(def v1s '( 1  1  1  1  26  1 26  1 26 26  26 26  1  26))
-(def v2s '(14 11 11 14 -11 12 -1 10 -3 -4 -13 -8 13 -11))
-(def v3s '(12  8  7  4   4  1 10  8 12 10  15  4 10   9))
-
-(defn do-math [w z idx]
-  (let [z-div (long (/ z (nth v1s idx)))
-        x (+ (mod z 26) (nth v2s idx))
-        result (if (= x w) z-div (+ (* z-div 26) w (nth v3s idx)))]
-    result))
 ;; x 0
 ;; x (+ x z)
 ;; x (mod x 26)
@@ -143,6 +134,38 @@
 ;; y (+ y v3)
 ;; y (* y x)
 ;; result (+ z y)
+
+(def v1s '( 1  1  1  1  26  1 26  1 26 26  26 26  1  26))
+(def v2s '(14 11 11 14 -11 12 -1 10 -3 -4 -13 -8 13 -11))
+(def v3s '(12  8  7  4   4  1 10  8 12 10  15  4 10   9))
+
+(defn do-math [w z idx]
+  (let [z-div (long (/ z (nth v1s idx)))
+        x (+ (mod z 26) (nth v2s idx))
+        result (if (= x w) z-div (+ (* z-div 26) w (nth v3s idx)))]
+    result))
+
+;; result = (+ (* (long (/ z (nth v1s idx))) 26) w (nth v3s idx))
+;; (- result w (nth v3s idx)) = (* (long (/ z (nth v1s idx))) 26)
+;; (/ (- result w (nth v3s idx)) 26) = (/ z (nth v1s idx))
+;; (* (nth v1s idx) (/ (- result w (nth v3s idx)) 26)) = z
+;; x = w
+;; (+ (mod z 26) v2) = w
+;; (mod z 26) = (- w v2)
+(defn valid-prev-z? [x]
+  (and
+   (>= x 0)
+   (integer? x)))
+
+(defn determine-prev-zs [result idx]
+  (let [v1 (nth v1s idx)
+        v2 (nth v2s idx)
+        v3 (nth v3s idx)]
+    (filter #(valid-prev-z? (first %))
+            (concat (for [digit (range 1 10)]
+              (list (* v1 (/ (- result digit v3) 26)) digit))
+            (for [digit (range 1 10)]
+              (list (- digit v2) digit))))))
 
 ;; For the last digit, digit 13, we're looking for a result of 0, which requires z-div=0:
 ;; z-div is zero when z<v1, non-zero otherwise, so we only need to consider prev-z<26.
@@ -300,28 +323,35 @@
 (defn compare-path-targets [{path1 :path} {path2 :path}]
   (- (compare path1 path2)))
 
-(defn reverse-monad [full-program digits]
+(defn generate-paths-with-execute [full-program path-target]
   (let [sub-programs (reverse (partition 18 full-program))
-        initial-state {"w" 0 "x" 0 "y" 0 "z" 0}]
-    (loop [paths (sorted-set-by compare-path-targets {:target 0 :path []}) iterations 0]
-      (let [{target-num :target path :path :as path-target} (first paths)
-            path-length (count path)]
-        ;; (println "path-target" path-target)
-        (cond
-          (empty? paths) (format "no paths after %d iterations." iterations)
-          (= digits path-length) path
-          :else
-          (let [program (nth sub-programs path-length)
-                new-digits (filter (fn [[z d]] (let [result (execute program (list d) (assoc initial-state "z" z))]
-                                                 (= target-num (mod (get result "z") 26))))
-                                   (for [z (range 26)
-                                         d (range 1 10)]
-                                     (list z d)))]
-            (recur (reduce (fn [acc [z d]] (conj acc {:target z :path (conj path d)}))
-                           (disj paths path-target)
-                           new-digits)
-                   (inc iterations))))))))
+        initial-state {"w" 0 "x" 0 "y" 0 "z" 0}
+        {target-num :target path :path :as path-target} path-target
+        path-length (count path)
+        program (nth sub-programs path-length)
+        new-digits (filter (fn [[z d]] (let [result (execute program (list d) (assoc initial-state "z" z))]
+                                         (= target-num (mod (get result "z") 26))))
+                           (for [z (range 26)
+                                 d (range 1 10)]
+                             (list z d)))]
+    (map (fn [[z d]] {:target z :path (conj path d)}) new-digits)))
 
+(defn generate-paths-with-math [full-program path-target]
+  (let [{target-num :target path :path :as path-target} path-target
+        path-length (count path)]
+    (map (fn [[z d]] {:target z :path (conj path d)}) (determine-prev-zs target-num (- 13 path-length)))))
+
+(defn reverse-monad [full-program digits digit-generator-fn]
+  (loop [paths (sorted-set-by compare-path-targets {:target 0 :path []}) iterations 0]
+    (let [{target-num :target path :path :as path-target} (first paths)
+          path-length (count path)]
+      ;; (println "path-target" path-target)
+      (cond
+        (empty? paths) (format "no paths after %d iterations." iterations)
+        (= digits path-length) path
+        :else
+        (recur (apply conj (disj paths path-target) (digit-generator-fn full-program path-target))
+               (inc iterations))))))
 
 ;; (time (reverse-monad (parse-input large-input) 8))
 ;; Gets stuck after 6 digits.
