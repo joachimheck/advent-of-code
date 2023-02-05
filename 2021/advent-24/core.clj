@@ -14,7 +14,7 @@
   (with-open [rdr (clojure.java.io/reader f)]
     (doall(line-seq rdr))))
 
-;; Day 23: Arithmetic Logic Unit
+;; Day 24: MONAD
 
 ;; Part 1
 ;; Find the largest number accepted by the MONAD validation program.
