@@ -66,3 +66,63 @@
 ;; (time (find-eventual-slowest (parse-input large-input)))
 ;; "Elapsed time: 18.4305 msecs"
 ;; 308
+
+
+
+;; Part 2
+;; How many particles will never collide?
+
+;; at t=0, p=4 v=0 a=-2
+;; at t=1, p=2 v=-2 a=-2
+;; at t=2, p=-2 v=-4 a=-2
+;; at t=3, p=-8 v=-6 a=-2
+
+(defn particle-at-time [particle t]
+  {:ax (:ax particle)
+   :ay (:ay particle)
+   :az (:az particle)
+   :vx (+ (:vx particle) (* t (:ax particle)))
+   :vy (+ (:vy particle) (* t (:ay particle)))
+   :vz (+ (:vz particle) (* t (:az particle)))
+   :px (+ (:px particle) (+ (* t (:vx particle)) (* (:ax particle) (apply + (range (inc t))))))
+   :py (+ (:py particle) (+ (* t (:vy particle)) (* (:ay particle) (apply + (range (inc t))))))
+   :pz (+ (:pz particle) (+ (* t (:vz particle)) (* (:az particle) (apply + (range (inc t))))))})
+
+(defn format-particle [p]
+  (format "p=<%d,%d,%d> v=<%d,%d,%d> a=<%d,%d,%d>"
+          (:px p) (:py p) (:pz p)
+          (:vx p) (:vy p) (:vz p)
+          (:ax p) (:ay p) (:az p)))
+
+(defn a-matches-v? [p]
+  (and
+   (or (= 0 (:ax p)) (= (neg? (:ax p)) (neg? (:vx p))))
+   (or (= 0 (:ay p)) (= (neg? (:ay p)) (neg? (:vy p))))
+   (or (= 0 (:az p)) (= (neg? (:az p)) (neg? (:vz p))))))
+
+(defn with-same-position [particles]
+  (let [grouped (vals (group-by (fn [i] (let [p (get particles i)]
+                                          [(:px p) (:py p) (:pz p)]))
+                                (keys particles)))]
+    (set (apply concat (filter #(> (count %) 1) grouped)))))
+
+(defn resolve-collisions [particles max-t]
+  (loop [particles particles t 0]
+    (let [at-time (apply merge (map (fn [[i p]] {i (particle-at-time p t)}) particles))
+          same-position (with-same-position at-time)]
+      (if (>= t max-t)
+        (count at-time)
+        (recur (apply dissoc particles same-position) (inc t))))))
+
+(def small-input-2 "small-input-2.txt")
+
+;; I was going to write some code to figure out whether the particles would collide in the future,
+;; but I guess I got the right answer just by trying a fixed max-t, so... ¯\_(ツ)_/¯
+
+;; (time (resolve-collisions (parse-input small-input-2) 500))
+;; "Elapsed time: 23.6245 msecs"
+;; 1
+
+;; (time (resolve-collisions (parse-input large-input) 500))
+;; "Elapsed time: 9908.0758 msecs"
+;; 504
