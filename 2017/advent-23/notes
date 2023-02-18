@@ -1,0 +1,272 @@
+b = 106500
+c = 123500
+
+do {
+  f = 1
+  
+  ;; if (is-prime?(b)) {
+  ;;   f = 0
+  ;; }
+  for (d=2; d<b; d++) {
+    for (e=2; e<b; e++) {
+      if (d * e == b) {
+        f = 0
+      }
+    }
+  }
+  
+  if (f == 0) {
+    h = h + 1
+  }
+
+  if (b == c) {
+    exit
+  }
+
+  b = b + 17
+} while (true)
+
+
+
+
+;; Do-while loops compressed into for loops.
+b = 106500
+c = 123500
+
+do {
+  f = 1
+  
+  for (d=2; d<b; d++) {
+    for (e=2; e<b; e++) {
+      if (d * e == b) {
+        f = 0
+      }
+    }
+  }
+  
+  if (f == 0) {
+    h = h + 1
+  }
+
+  if (b == c) {
+    exit
+  }
+
+  b = b + 17
+} while (true)
+
+
+
+;; Replaced extra variables with expressions.
+b = 106500
+c = 123500
+
+do {
+  f = 1
+  d = 2
+  
+  do {
+    e = 2
+    
+    do {
+      if ((d * e) == b) {
+        f = 0
+      }
+      e = e + 1
+    } while (e != b)
+    
+    d = d + 1
+  } while (d != b)
+  
+  
+  if (f == 0) {
+    h = h + 1
+  }
+
+  if (b == c) {
+    exit
+  }
+
+  b = b + 17
+} while (true)
+
+
+
+
+;; Replaced jumps with loops.
+b = 106500
+c = 123500
+
+do {
+  f = 1
+  d = 2
+  
+  do {
+    e = 2
+    
+    do {
+      g = d
+      g = g * e
+      g = g - b
+      if (g == 0) {
+        f = 0
+      }
+      e = e + 1
+      g = e
+      g = g - b
+    } while (g != 0)
+    
+    d = d + 1
+    g = d
+    g = g - b
+  } while (g != 0)
+  
+  
+  if (f == 0) {
+    h = h + 1
+  }
+  g = b
+  g = g - c
+  if (g == 0) {
+    exit
+  }
+  b = b + 17
+} while (true)
+
+
+
+;; converted to c-like, initialization optimized, jumps to ifs.
+b = 106500
+c = 123500
+
+:8
+f = 1
+d = 2
+:10
+e = 2
+:11
+g = d
+g = g * e
+g = g - b
+if (g == 0) {
+  f = 0
+}
+e = e + 1
+g = e
+g = g - b
+if (g != 0) {
+  jmp :11
+}
+d = d + 1
+g = d
+g = g - b
+if (g != 0) {
+  jmp :10
+}
+if (f == 0) {
+  h = h + 1
+}
+g = b
+g = g - c
+if (g == 0) {
+  exit
+}
+b = b + 17
+jmp :8
+
+
+
+8 set f 1
+9 set d 2
+10 set e 2
+11 set g d
+12 mul g e
+13 sub g b
+14 jnz g :16
+15 set f 0
+16 sub e -1
+17 set g e
+18 sub g b
+19 jnz g :11
+20 sub d -1
+21 set g d
+22 sub g b
+23 jnz g :10
+24 jnz f 2
+25 sub h -1
+26 set g b
+27 sub g c
+28 jnz g :30
+29 jnz 1 :32
+30 sub b -17
+31 jnz 1 :8
+
+
+
+0 set b 65
+1 set c b
+2 jnz a :4
+3 jnz 1 :8
+4 mul b 100
+5 sub b -100000
+6 set c b
+7 sub c -17000
+8 set f 1
+9 set d 2
+10 set e 2
+11 set g d
+12 mul g e
+13 sub g b
+14 jnz g :16
+15 set f 0
+16 sub e -1
+17 set g e
+18 sub g b
+19 jnz g :11
+20 sub d -1
+21 set g d
+22 sub g b
+23 jnz g :10
+24 jnz f 2
+25 sub h -1
+26 set g b
+27 sub g c
+28 jnz g :30
+29 jnz 1 :32
+30 sub b -17
+31 jnz 1 :8
+
+
+;; Original code, numbered
+0 set b 65
+1 set c b
+2 jnz a 2
+3 jnz 1 5
+4 mul b 100
+5 sub b -100000
+6 set c b
+7 sub c -17000
+8 set f 1
+9 set d 2
+10 set e 2
+11 set g d
+12 mul g e
+13 sub g b
+14 jnz g 2
+15 set f 0
+16 sub e -1
+17 set g e
+18 sub g b
+19 jnz g -8
+20 sub d -1
+21 set g d
+22 sub g b
+23 jnz g -13
+24 jnz f 2
+25 sub h -1
+26 set g b
+27 sub g c
+28 jnz g 2
+29 jnz 1 3
+30 sub b -17
+31 jnz 1 -23

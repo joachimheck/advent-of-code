@@ -112,3 +112,29 @@
 
 ;; ---> answer <---
 ;; 1000
+;; 84 is incorrect.
+
+(defn prime? [x]
+  (if (and (even? x) (> x 2))
+    false
+    (let [sqrt (int (inc (Math/sqrt x)))
+          factors (for [i (range 2 (inc sqrt))
+                        j (range 2 (int (inc (/ x i))))
+                        :when (= x (* i j))]
+                    [i j])]
+      (empty? factors))))
+
+(defn count-primes [start end step]
+  (loop [x start
+         prime-count 0
+         non-prime-count 0]
+    (if (> x end)
+      {:prime prime-count :non-prime non-prime-count}
+      (recur (+ x step)
+             (if (prime? x) (inc prime-count) prime-count)
+             (if (prime? x) non-prime-count (inc non-prime-count))))))
+
+;; The program is counting non-primes between two numbers.
+;; (time (count-primes 106500 123500 17))
+;; "Elapsed time: 36972.4098 msecs"
+;; {:prime 84, :non-prime 917}
