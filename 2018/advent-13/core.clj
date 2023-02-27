@@ -90,10 +90,122 @@
                                   acc))
                               mapped
                               mapped)
-        paths (find-paths without-carts)]
+        ;; paths (find-paths without-carts)
+        ]
     {:points without-carts
-     :paths paths
+     ;; :paths paths
      :carts (map (fn [[p c]] [p c :left]) carts)}))
 
 ;; TODO: remember to turn the carts at each intersection.
-(defn move-carts [])
+(def cart-symbols [\^ \> \v \<])
+
+(def turn-directions [:left :straight :right])
+
+(defn turn [map-symbol cart-symbol direction]
+  (case map-symbol
+    \| cart-symbol
+    \- cart-symbol
+    \/ (case cart-symbol
+         \^ \>
+         \> \^
+         \v \<
+         \< \v)
+    \\ (case cart-symbol
+         \^ \<
+         \> \v
+         \v \>
+         \< \^)
+    \+ (let [diff (case direction
+                    :left -1
+                    :straight 0
+                    :right 1)]
+         (get cart-symbols (mod (+ (.indexOf cart-symbols cart-symbol) diff) (count cart-symbols))))))
+
+(defn move-cart-once [[[x y] c t :as cart] points]
+  (let [new-position (case c
+                       \> [(inc x) y]
+                       \< [(dec x) y]
+                       \v [x (inc y)]
+                       \^ [x (dec y)])
+        map-symbol (get points new-position)
+        new-symbol (turn map-symbol c t)
+        new-next-turn (if (= \+ map-symbol) (get turn-directions (mod (inc (.indexOf turn-directions t)) (count turn-directions))) t)]
+    (list new-position new-symbol new-next-turn)))
+
+(defn order-carts [carts]
+  (let [maxx (apply max (map (fn [[[x _] _ _]] x) carts))]
+    ;;(sort-by (fn [[[x y] _ _]] (+ x (* (inc maxx) y))) carts)
+    (sort-by (fn [[[x y] _ _]] [y x]) carts)
+    ))
+
+(defn move-carts-until-crash [initial-state]
+  (let [points (:points initial-state)]
+    (loop [carts (:carts initial-state)]
+      (let [positions (map (fn [[[x y] _ _]] [x y]) carts)
+            collisions (map first (filter (fn [[p c]] (> c 1)) (frequencies positions)))]
+        (if (> (count collisions) 0)
+          collisions
+          (recur (map #(move-cart-once % points) (order-carts carts))))))))
+
+;; (time (move-carts-until-crash (parse-input small-input)))
+;; "Elapsed time: 2.9719 msecs"
+;; ([7 3])
+
+;; (time (move-carts-until-crash (parse-input large-input)))
+;; "Elapsed time: 1739.3558 msecs"
+;; ([53 133])
+
+
+
+;; Part 2
+;; Remove crashing carts.
+(def small-input-2 "small-input-2.txt")
+
+(defn remove-carts-at [carts positions]
+  (remove (fn [[p c t]] (some #{p} positions)) carts))
+
+(defn move-carts-once-removing-crashed [initial-carts points]
+  (loop [i 0 carts initial-carts]
+    (let [carts (vec carts)
+          cart (get carts i)]
+      ;; (println "loop cart" i "=" cart "carts" carts)
+      (if (= i (count initial-carts))
+        (remove nil? carts)
+        (if (nil? cart)
+          (recur (inc i) carts)
+          (let [moved (move-cart-once cart points)
+                with-one-moved (assoc carts i moved)
+                new-pos (first moved)
+                carts-with-new-pos (filter (fn [[p _ _]] (= p new-pos)) with-one-moved)]
+            ;; (println "number of carts with position" new-pos (count carts-with-new-pos))
+            (recur (inc i) (if (= (count carts-with-new-pos) 1)
+                             with-one-moved
+                             (do (map (fn [[p _ _ :as cart]] (if (not= p new-pos) cart)) with-one-moved))))))))))
+
+(defn move-carts-removing-crashed [initial-state]
+  (let [points (:points initial-state)]
+    (loop [carts (:carts initial-state)]
+      ;; (println "carts" (order-carts carts))
+      (let [moved-carts (move-carts-once-removing-crashed (order-carts carts) points)]
+        (if (= 1 (count moved-carts))
+          (first moved-carts)
+          (recur moved-carts))))))
+
+;; incorrect (([110 21] \< :left)) "110,21"
+;; incorrect "109,21"
+
+(def large-input-2 "large-input-2.txt")
+;; part 1: 83,49
+;; part 2: 73,36
+
+
+;; A reddit commenter clued me into the idea that the crashing carts need to be removed
+;; just as they crash, not after all the carts have moved once, as I was originally doing.
+
+;; (time (move-carts-removing-crashed (parse-input small-input-2)))
+;; "Elapsed time: 0.933 msecs"
+;; ([6 4] \^ :left)
+
+;; (time (move-carts-removing-crashed (parse-input large-input)))
+;; "Elapsed time: 1872.758 msecs"
+;; ([111 68] \v :straight)
