@@ -1,0 +1,275 @@
+for loops
+#ip 5
+
+jmp A
+
+r1=10550400
+r2=10551452
+r0 = 0
+
+do {
+
+  for (r4 = 1; r0 == 0; r4++) {
+    for (r3 = 1; r3 < r2; r3++) {
+      if (r2 == r3 * r4) {
+        r0 = r4;
+      }
+    }
+
+    if (r4 > r2) {
+     exit;
+    }
+
+    r1 = r1 * 22 + 194
+    r2 = r2 * 418 + 836 + r1
+  }
+
+  
+  r1 = 10550400
+  r2 = r2 + r1
+  r0 = 0
+} while (true)
+
+
+
+loops
+#ip 5
+
+jmp A
+
+r1=10550400
+r2=10551452
+r0 = 0
+
+do {
+  do {
+    r3 = 1
+    r4 = 1
+    
+    do {
+      if (r2 == r3 * r4) {
+       r0 = r4
+      }
+      
+      r3 = r3 + 1
+    } while (r3 < r2)
+    
+    r4 = r4 + 1
+    
+    if (r4 > r2) {
+     exit ;; ? seems wrong.
+    }
+    
+    r1 = r1 * 22 + 194
+    r2 = r2 * 418 + 836 + r1
+  } while (r0 == 0)
+  
+  r1 = 10550400
+  r2 = r2 + r1
+  r0 = 0
+} while (true)
+
+
+
+no original code
+#ip 5
+jmp A
+
+C:
+r4=1 r3=1
+
+B:
+r1=(r2 == (r4 * r3))
+
+if (r2 == r3*r4) {
+ r0=r4
+}
+
+r3=r3+1
+r1=(1 > r2)
+
+if (r2 >= 1) {
+ jmp B
+}
+
+r4=r4+1
+r1=(r4 > r2)
+
+if (r4 <= r2) {
+ exit
+}
+
+A:
+r2=(r2 + 2) * 418
+r1=((r1+8) * 22) + 18 ; r5=ip=22
+r2=r2+r1
+
+if (r0 = 0) {
+ jmp C
+}
+
+r1=10550400
+r2 = r2 + r1
+r0 = 0
+
+jmp C
+
+
+
+loops 1
+#ip 5
+ 0 addi 5 16 5 ; jmp +16
+
+ 1 seti 1   4
+ 2 seti 1   3
+ 3 mulr 4 3 1
+ 4 eqrr 1 2 1
+
+r4=1 r3=1 r1=(r2 == 1)
+
+ 5 addr 1 5 5 ; jmp +r1
+
+if (r2 != 1) {
+ 6 addi 5 1 5 ; jmp +1
+}
+
+ 7 addr 4 0 0
+ 8 addi 3 1 3
+ 9 gtrr 3 2 1
+
+r0=r4 r3=1 r1=(1 > r2)
+
+10 addr 5 1 5 ; jmp +r1
+
+if (r2 <= 1) {
+ 11 seti 2   5 ; jmp 2
+}
+
+12 addi 4 1 4
+
+r4=r4+1
+
+13 gtrr 4 2 1 (if (r4>r2) r1=1 r1=0)
+14 addr 1 5 5 ; jmp +r1
+
+if (r4 <= r2) {
+ 15 seti 1   5 ; jmp +1
+}
+
+16 mulr 5 5 5 ; jmp ip*ip = jmp 256 = exit
+
+17 addi 2 2 2
+18 mulr 2 2 2
+19 mulr 5 2 2
+20 muli 2 11 2
+21 addi 1 8 1
+22 mulr 1 5 1
+23 addi 1 18 1
+24 addr 2 1 2
+
+r2=(((r2 + 2) * 2) * 19) * 11 ; r5=ip=19
+r1=((r1+8) * 22) + 18 ; r5=ip=22
+r2=r2+r1
+
+25 addr 5 0 5 ; jmp +r0
+
+if (r0 = 0) {
+ 26 seti 0   5 ; jmp 0
+}
+
+27 setr 5   1
+28 mulr 1 5 1
+29 addr 5 1 1
+30 mulr 5 1 1
+31 muli 1 14 1
+32 mulr 1 5 1
+33 addr 2 1 2
+34 seti 0   0
+
+r1=((((27*28) + 29) * 30) * 14) * 32 ; r5=ip=27/28/29/30/32
+r2 = r2 + r1
+r0 = 0
+
+35 seti 0   5 ; jmp 0
+
+
+
+numbered; jumps
+#ip 5
+ 0 addi 5 16 5 ; jmp +16
+ 1 seti 1   4
+ 2 seti 1   3
+ 3 mulr 4 3 1
+ 4 eqrr 1 2 1
+ 5 addr 1 5 5 ; jmp ip+r1
+ 6 addi 5 1 5 ; jmp +1
+ 7 addr 4 0 0
+ 8 addi 3 1 3
+ 9 gtrr 3 2 1
+10 addr 5 1 5 ; jmp ip+r1
+11 seti 2   5 ; jmp 2
+12 addi 4 1 4
+13 gtrr 4 2 1
+14 addr 1 5 5 ; jmp ip+r1
+15 seti 1   5 ; jmp 1
+16 mulr 5 5 5 ; jmp ip*ip = jmp 256 = exit
+17 addi 2 2 2
+18 mulr 2 2 2
+19 mulr 5 2 2
+20 muli 2 11 2
+21 addi 1 8 1
+22 mulr 1 5 1
+23 addi 1 18 1
+24 addr 2 1 2
+25 addr 5 0 5 ; jmp ip+r0
+26 seti 0   5 ; jmp 0
+27 setr 5   1
+28 mulr 1 5 1
+29 addr 5 1 1
+30 mulr 5 1 1
+31 muli 1 14 1
+32 mulr 1 5 1
+33 addr 2 1 2
+34 seti 0   0
+35 seti 0   5 ; jmp 0
+
+
+
+original:
+#ip 5
+addi 5 16 5
+seti 1 8 4
+seti 1 5 3
+mulr 4 3 1
+eqrr 1 2 1
+addr 1 5 5
+addi 5 1 5
+addr 4 0 0
+addi 3 1 3
+gtrr 3 2 1
+addr 5 1 5
+seti 2 5 5
+addi 4 1 4
+gtrr 4 2 1
+addr 1 5 5
+seti 1 2 5
+mulr 5 5 5
+addi 2 2 2
+mulr 2 2 2
+mulr 5 2 2
+muli 2 11 2
+addi 1 8 1
+mulr 1 5 1
+addi 1 18 1
+addr 2 1 2
+addr 5 0 5
+seti 0 7 5
+setr 5 0 1
+mulr 1 5 1
+addr 5 1 1
+mulr 5 1 1
+muli 1 14 1
+mulr 1 5 1
+addr 2 1 2
+seti 0 0 0
+seti 0 9 5
