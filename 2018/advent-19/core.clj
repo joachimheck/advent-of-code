@@ -120,7 +120,7 @@
             ip-updated (assoc registers ip-register ip)
             new-registers (op a b c ip-updated)
             new-ip (get new-registers ip-register)]
-        ;; (printf "ip=%d %s %s %d %d %d %s\n" ip ip-updated (get-fn-name op) a b c new-registers)
+        (printf "ip=%d %s %s %d %d %d %s\n" ip ip-updated (get-fn-name op) a b c new-registers)
         (recur (inc new-ip) new-registers instructions (inc i)))
       registers)))
 
@@ -136,3 +136,39 @@
 
 ;; Part 2
 ;; What about if register 0 starts with the value 1?
+(defn profile-program [{:keys [ip-register instructions] :as input} initial-registers max-iterations]
+  (loop [ip 0
+         registers initial-registers
+         instructions instructions
+         i 0
+         ip-record []]
+    (if (and (< -1 ip (count instructions)) (< i max-iterations))
+      (let [[op a b c :as instruction] (nth instructions ip)
+            ip-updated (assoc registers ip-register ip)
+            new-registers (op a b c ip-updated)
+            new-ip (get new-registers ip-register)]
+        ;; (printf "ip=%d %s %s %d %d %d %s\n" ip ip-updated (get-fn-name op) a b c new-registers)
+        (recur (inc new-ip) new-registers instructions (inc i) (conj ip-record ip)))
+      {:registers registers
+       :ip-record ip-record})))
+
+
+;; 10551452
+;; ---> answer <---
+;; 19105632 ; sum of factors
+
+(def test-input "test-input.txt")
+
+;; idea 1: this is computing a number in r2 and outputing that number.
+;; idea 2: output the sum of the factors of r2 (10551452)
+(defn find-factors [n]
+  (loop [i 1 factors []]
+    (if (> i n)
+      factors
+      (recur (inc i) (if (= 0 (rem n i)) (conj factors i) factors)))))
+
+;; The idea was right but I had incorrectly simplified the math. With the right number in r2, this works!
+
+;; (time (apply + (find-factors 10551430)))
+;; "Elapsed time: 377.3747 msecs"
+;; 18992592
