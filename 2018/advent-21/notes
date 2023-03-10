@@ -1,0 +1,171 @@
+i  0 (r2 = 65546 r3 = 1505483 r4 = 0) (r2 = 2 r3 = 6146009)
+i  1 (r2 = 6146009 r3 = 1505483 r4 = 217) (201 r3 = 
+
+:: 
+do {
+  r2 = r3 | 65536
+  r3 = 1505483
+
+  while (r2 >= 256) {
+    r4 = r2 & 255 ; r4 has lowest 8 bits of r2
+    r3 = r3 + r4
+    r3 = r3 & 16777215 ; lowest 24 bits of r3
+    r3 = r3 * 65899
+    r3 = r3 & 16777215 ; lowest 24 bits of r3
+    
+    for (r4 = 0; r5 <= r2; r4++) {
+      r5 = r4 + 1
+      r5 = r5 * 256
+    }
+  
+    r2 = r4 + 1
+  }
+  
+  E:
+} while (r3 != r0)
+
+
+
+
+:: loops
+do {
+  r2 = r3 | 65536
+  r3 = 1505483
+
+  do {
+    r4 = r2 & 255
+    r3 = r3 + r4
+    r3 = r3 & 16777215
+    r3 = r3 * 65899
+    r3 = r3 & 16777215
+    
+    if (r2 < 256) {
+      jmp E
+    }
+    
+    for (r4 = 0; r5 <= r2; r4++) {
+      r5 = (r4 + 1) * 256
+    }
+  
+    r2 = r4 + 1 ; (inc (quot r2 256))
+  } while (true)
+  
+  E:
+} while (r3 != r0)
+
+
+
+
+:: Initial section separated; Labels
+#ip 1
+ 0 seti 123 3
+ 1 bani 3 456 3 ; 123 & 456 == 72
+ 2 eqri 3 72 3
+ 3 addr 3 1 1 ; jmp +r3: if (r3 == 72) jmp 5
+ 4 seti 0 1 ; jmp 0: if (r3 != 72) jmp 0: infinite loop
+ 5 seti 0 3
+
+A:
+ 6 bori 3 65536 2
+ 7 seti 1505483 3
+B:
+ 8 bani 2 255 4
+ 9 addr 3 4 3
+10 bani 3 16777215 3
+11 muli 3 65899 3
+12 bani 3 16777215 3
+13 gtir 256 2 4
+14 addr 4 1 1 ; jmp +r4
+15 addi 1 1 1 ; jmp +1
+16 seti 27 1 ; jmp E
+17 seti 0 4
+C:
+18 addi 4 1 5
+19 muli 5 256 5
+20 gtrr 5 2 5
+21 addr 5 1 1 ; jmp +r5
+22 addi 1 1 1 ; jmp +1
+23 seti 25 1 ; jmp D
+24 addi 4 1 4
+25 seti 17 1 ; jmp C
+D:
+26 setr 4 1 2
+27 seti 7 1 ; jmp B
+E:
+28 eqrr 3 0 4
+29 addr 4 1 1 ; jmp +r4
+30 seti 5 1 ; jmp A
+
+
+
+
+:: Line numbers; seti cleanup; basic jumps
+#ip 1
+ 0 seti 123 3
+ 1 bani 3 456 3
+ 2 eqri 3 72 3
+ 3 addr 3 1 1 ; jmp +r3
+ 4 seti 0 1 ; jmp 0
+ 5 seti 0 3
+ 6 bori 3 65536 2
+ 7 seti 1505483 3
+ 8 bani 2 255 4
+ 9 addr 3 4 3
+10 bani 3 16777215 3
+11 muli 3 65899 3
+12 bani 3 16777215 3
+13 gtir 256 2 4
+14 addr 4 1 1 ; jmp +r4
+15 addi 1 1 1 ; jmp +1
+16 seti 27 1 ; jmp 27
+17 seti 0 4
+18 addi 4 1 5
+19 muli 5 256 5
+20 gtrr 5 2 5
+21 addr 5 1 1 ; jmp +r5
+22 addi 1 1 1 ; jmp +1
+23 seti 25 1 ; jmp 25
+24 addi 4 1 4
+25 seti 17 1 ; jmp 17
+26 setr 4 1 2
+27 seti 7 1 ; jmp 7
+28 eqrr 3 0 4
+29 addr 4 1 1 ; jmp +r4
+30 seti 5 1 ; jmp 5
+
+
+
+
+:: Original
+#ip 1
+seti 123 0 3
+bani 3 456 3
+eqri 3 72 3
+addr 3 1 1
+seti 0 0 1
+seti 0 1 3
+bori 3 65536 2
+seti 1505483 6 3
+bani 2 255 4
+addr 3 4 3
+bani 3 16777215 3
+muli 3 65899 3
+bani 3 16777215 3
+gtir 256 2 4
+addr 4 1 1
+addi 1 1 1
+seti 27 6 1
+seti 0 3 4
+addi 4 1 5
+muli 5 256 5
+gtrr 5 2 5
+addr 5 1 1
+addi 1 1 1
+seti 25 4 1
+addi 4 1 4
+seti 17 3 1
+setr 4 1 2
+seti 7 4 1
+eqrr 3 0 4
+addr 4 1 1
+seti 5 9 1
