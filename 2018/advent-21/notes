@@ -63,6 +63,7 @@ do {
  2 eqri 3 72 3
  3 addr 3 1 1 ; jmp +r3: if (r3 == 72) jmp 5
  4 seti 0 1 ; jmp 0: if (r3 != 72) jmp 0: infinite loop
+
  5 seti 0 3
 
 A:
