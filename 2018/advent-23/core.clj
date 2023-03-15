@@ -55,8 +55,45 @@
           [[Integer/MAX_VALUE Integer/MAX_VALUE Integer/MAX_VALUE] [Integer/MIN_VALUE Integer/MIN_VALUE Integer/MIN_VALUE]]
           bots))
 
-(defn volume-in-range [[x y z] r]
-  r = 0 : 1
-  r = 1 : 7 (6 + 1)
-  r = 2 : 19 (12 + 7)
-)
+;; (defn volume-in-range [[x y z] r]
+;;   r = 0 : 1
+;;   r = 1 : 7 (6 + 1)
+;;   r = 2 : 19 (12 + 7)
+;; )
+
+(defn pairs [coll]
+  (cond (< (count coll) 2) nil
+        (= (count coll) 2) (list (into #{} coll))
+        :else (concat (map (fn [x] #{(first coll) x}) (rest coll))
+                      (pairs (rest coll)))))
+
+(defn overlap? [[pos-a r-a] [pos-b r-b]]
+  (<= (distance pos-a pos-b) (+ r-a r-b)))
+
+;; (defn overlap-counts [bots]
+;;   (let [bot-pairs (pairs bots)
+;;         overlaps (apply merge (map (fn [pair] {pair (apply overlap? pair)}) bot-pairs))]
+;;     (apply merge
+;;            (for [bot bots]
+;;              {bot
+;;               (count
+;;                (for [member-pair (filter #(some #{bot} %) bot-pairs)
+;;                      :when (get overlaps member-pair)]
+;;                  member-pair))}))))
+
+(defn overlap-counts [bots]
+  (let [bot-pairs (pairs bots)
+        overlaps (apply merge (map (fn [pair] {pair (apply overlap? pair)}) bot-pairs))]
+    (reduce (fn [acc [pair overlap]]
+              (if overlap
+                (let [[a b] (seq pair)]
+                  (-> acc
+                      (update a (fnil inc 0))
+                      (update b (fnil inc 0))))
+                acc))
+            {}
+            overlaps)))
+
+;; (time (apply max-key second (overlap-counts (parse-input small-input))))
+;; "Elapsed time: 1.9619 msecs"
+;; [[[0 0 0] 4] 8]
