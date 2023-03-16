@@ -83,17 +83,75 @@
 
 (defn overlap-counts [bots]
   (let [bot-pairs (pairs bots)
-        overlaps (apply merge (map (fn [pair] {pair (apply overlap? pair)}) bot-pairs))]
-    (reduce (fn [acc [pair overlap]]
-              (if overlap
-                (let [[a b] (seq pair)]
+        overlaps (filter #(apply overlap? %) bot-pairs)]
+    (reduce (fn [acc pair]
+              (let [[a b] (seq pair)]
                   (-> acc
                       (update a (fnil inc 0))
-                      (update b (fnil inc 0))))
-                acc))
+                      (update b (fnil inc 0)))))
             {}
             overlaps)))
 
 ;; (time (apply max-key second (overlap-counts (parse-input small-input))))
 ;; "Elapsed time: 1.9619 msecs"
 ;; [[[0 0 0] 4] 8]
+
+(defn overlap-sets [bots]
+  (let [bot-pairs (pairs bots)
+        self-pairs (map (fn [b] (list b b)) bots)
+        overlaps (concat self-pairs
+                         (apply concat (map (fn [x] (list x (reverse x))) (map seq (filter #(apply overlap? %) bot-pairs)))))]
+    ;; overlaps
+    (apply merge-with
+           #(apply conj %1 %2)
+           (map (fn [[a b]] {a #{b}}) overlaps))
+    ))
+
+(def test-input {[0 0 0] 2 [1 0 0] 1 [2 0 0] 2 [5 0 0] 2})
+
+(defn largest-multi-overlap [bots]
+  (let [overlap-sets (overlap-sets bots)]
+    (first
+     (apply max-key #(count (second %))
+            (apply merge-with concat
+                   (apply concat
+                          (for [bot bots
+                                :let [overlaps (get overlap-sets bot)]]
+                            (map (fn [overlap] {overlap (list bot)})
+                                 (distinct (for [o overlaps
+                                                 :when (not= o bot)]
+                                             (set/intersection overlaps (get overlap-sets o))))))))))))
+
+(def small-input-2 "small-input-2.txt")
+
+;; (largest-multi-overlap (parse-input small-input-2))
+;; #{[[16 12 12] 4] [[10 12 12] 2] [[10 10 10] 5] [[50 50 50] 200] [[14 14 14] 6] [[12 14 12] 2]}
+;; Seems to be wrong - [10 10 10] shouldn't be in an overlap with everything else.
+
+(defn points-in-range [[[x y z] r]]
+  (for [i (range (- x r) (+ x r 1))
+        j (range (- y r) (+ y r 1))
+        k (range (- z r) (+ z r 1))
+        :when (<= (distance [x y z] [i j k]) r)]
+    [i j k]))
+
+;; This function is very slow when handling large ranges.
+(defn find-best-coordinate [bots]
+  (let [overlap (sort-by second (largest-multi-overlap bots))]
+    (println "all overlaps" overlap)
+    (loop [bots (rest overlap)
+           points (set (points-in-range (first overlap)))
+           i 0]
+      (println "#points" (count points) "bot" (first bots))
+      (if (or (= i 10) (empty? bots) (<= (count points) 1))
+        points
+        (recur (rest bots) (set/intersection points (set (points-in-range (first bots)))) (inc i))))))
+
+;; It works ok when it quickly narrows down the range and each volume is small.
+;; (time (find-best-coordinate (parse-input small-input-2)))
+;; all overlaps ([[10 12 12] 2] [[12 14 12] 2] [[16 12 12] 4] [[14 14 14] 6] [[50 50 50] 200])
+;; #points 25 bot [[12 14 12] 2]
+;; #points 3 bot [[16 12 12] 4]
+;; #points 1 bot [[14 14 14] 6]
+;; "Elapsed time: 1.9154 msecs"
+;; #{[12 12 12]}
