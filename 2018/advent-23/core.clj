@@ -155,3 +155,123 @@
 ;; #points 1 bot [[14 14 14] 6]
 ;; "Elapsed time: 1.9154 msecs"
 ;; #{[12 12 12]}
+
+;; Gotta do it geometrically, I guess.
+;; Looks like the equation of a 45 degree plane is z = +/-x +/-y + C, where C is a sum of the
+;; X/Y positions of the bot and its range.
+
+(defn get-bot-bounds [[[x y z] r]]
+  [[(- x r) (- y r) (- z r)] [(+ x r) (+ y r) (+ z r)]])
+
+(defn bounds-overlap [[[minx1 miny1 minz1] [maxx1 maxy1 maxz1]] [[minx2 miny2 minz2] [maxx2 maxy2 maxz2]]]
+  [[(max minx1 minx2) (max miny1 miny2) (max minz1 minz2)] [(min maxx1 maxx2) (min maxy1 maxy2) (min maxz1 maxz2)]])
+
+(defn cube-size [[[minx1 miny1 minz1] [maxx1 maxy1 maxz1]]]
+  [(- maxx1 minx1) (- maxy1 miny1) (- maxz1 minz1)])
+
+(defn reduce-cubes [bots]
+  (let [bot-bounds (map get-bot-bounds bots)]
+    (reduce (fn [acc bounds] (bounds-overlap acc bounds)) (first bot-bounds) (rest bot-bounds))))
+
+(defn center [[[ax ay az] [bx by bz]]]
+  [(- bx ax) (- by ay) (- bz az)])
+
+;; I think I will have to find a way to represent irregular octohedra, or whatever shape I get
+;; from the intersection of two octohedra, in order to solve this. The cubic intersections don't
+;; get very small.
+
+;; advent-23.core> (time (reduce-cubes (parse-input large-input)))
+;; "Elapsed time: 587263.2027 msecs"
+;; [[23599608 38673221 15966726] [29463190 52155743 26664909]]
+;; advent-23.core> (cube-size [[23599608 38673221 15966726] [29463190 52155743 26664909]])
+;; [5863582 13482522 10698183]
+;; advent-23.core> (apply * [5863582 13482522 10698183])
+;; Execution error (ArithmeticException) at java.lang.Math/multiplyExact (REPL:-1).
+;; long overflow
+
+(defn vertices [[[x y z] r :as bot]]
+  (list
+   [(+ x r) y z]
+   [x (+ y r) z]
+   [(- x r) y z]
+   [x (- y r) z]
+   [x y (+ z r)]
+   [x y (- z r)]))
+
+(defn in-range? [pos [b-pos b-r :as bot]]
+  (<= (distance pos b-pos) b-r))
+
+(defn in-range-of-all? [pos bots]
+  (every? #(in-range? pos %) bots))
+
+(defn find-minimum-vertices [bots]
+  (let [overlapping (largest-multi-overlap bots)
+        _ (println "Found" (count overlapping) "overlapping bots.")
+        o-vertices (apply concat (map vertices overlapping))]
+    (sort (distinct (filter #(in-range-of-all? % overlapping) o-vertices)))))
+
+
+;; (time (find-minimum-vertices (parse-input large-input)))
+;; Found 977 overlapping bots.
+;; "Elapsed time: 537500.8867 msecs"
+;; ()
+
+
+;; Planes
+;; For [[0 0 0] 2]
+;; For ([2 0 0] [0 2 0] [0 0 2]): 4x + 4y + 4z + -8 = 0
+;; For ([-2 0 0] [0 2 0] [0 0 2]): 4x + -4y + -4z + 8 = 0
+;; For ([-2 0 0] [0 -2 0] [0 0 2]): -4x + -4y + 4z + -8 = 0
+;; For ([2 0 0] [0 -2 0] [0 0 2]): -4x + 4y + -4z + 8 = 0
+(defn plane-equation [[alpha-x alpha-y alpha-z] [beta-x beta-y beta-z] [gamma-x gamma-y gamma-z]]
+  (let [a (- (* (- beta-y alpha-y) (- gamma-z alpha-z)) (* (- gamma-y alpha-y) (- beta-z alpha-z)))
+        b (- (* (- beta-z alpha-z) (- gamma-x alpha-x)) (* (- gamma-z alpha-z) (- beta-x alpha-x)))
+        c (- (* (- beta-x alpha-x) (- gamma-y alpha-y)) (* (- gamma-x alpha-x) (- beta-y alpha-y)))
+        d (- (+ (* a alpha-x) (* b alpha-y) (* c alpha-z)))]
+    (list a b c d)))
+
+
+;; Need to compute the vertices of the overlapping shape.
+(defn overlapping-vertices [[[ax ay az] ar :as a] [[bx by bz] br :as b]]
+  (let [a-vertices (vertices a)
+        b-vertices (vertices b)
+        a-in-range (filter #(<= (distance % [bx by bz]) br) a-vertices)
+        b-in-range (filter #(<= (distance % [ax ay az]) ar) b-vertices)]
+    (list a-in-range b-in-range)))
+
+(defn adjacent-vertices [[[x y z] r :as bot] [vx vy vz :as vertex]]
+  (let [[diff-x diff-y diff-z] [(- vx x) (- vy y) (- vz z)]
+        opposite [(- x diff-x) (- y diff-y) (- z diff-z)]]
+    (remove #{vertex opposite} (vertices bot))))
+
+(defn line-segments-from-vertices [vs]
+  (let [max-x (apply max-key #(nth % 0) vs)
+        min-x (apply min-key #(nth % 0) vs)
+        max-y (apply max-key #(nth % 1) vs)
+        min-y (apply min-key #(nth % 1) vs)
+        max-z (apply max-key #(nth % 2) vs)
+        min-z (apply min-key #(nth % 2) vs)]
+    (list #{max-x max-y} #{max-x min-y} #{max-x max-z} #{max-x min-z}
+          #{max-y max-z} #{max-z min-y} #{min-y min-z} #{min-z max-y}
+          #{min-x max-y} #{min-x min-y} #{min-x max-z} #{min-x min-z})))
+
+(defn planes-from-vertices [vs]
+  (let [max-x (apply max-key #(nth % 0) vs)
+        min-x (apply min-key #(nth % 0) vs)
+        max-y (apply max-key #(nth % 1) vs)
+        min-y (apply min-key #(nth % 1) vs)
+        max-z (apply max-key #(nth % 2) vs)
+        min-z (apply min-key #(nth % 2) vs)]
+    (list (plane-equation max-x max-y max-z)
+          (plane-equation max-x max-z min-y)
+          (plane-equation max-x min-y min-z)
+          (plane-equation max-x min-z max-y)
+          (plane-equation min-x max-y max-z)
+          (plane-equation min-x max-z min-y)
+          (plane-equation min-x min-y min-z)
+          (plane-equation min-x min-z max-y))))
+
+;; Hm, this depends on plane-equation, which doesn't work for the big numbers we have in the input.
+;; Furthermore, I guess the intersection of two octrahedra is not an octahedron after all.
+;; Maybe I need to make a list of convex volumes?
+;; I saved a diagram of intersecting pyramids in geogebra.org - it's a roof-like shape.
