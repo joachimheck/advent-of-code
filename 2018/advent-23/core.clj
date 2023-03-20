@@ -167,7 +167,7 @@
   [[(max minx1 minx2) (max miny1 miny2) (max minz1 minz2)] [(min maxx1 maxx2) (min maxy1 maxy2) (min maxz1 maxz2)]])
 
 (defn cube-size [[[minx1 miny1 minz1] [maxx1 maxy1 maxz1]]]
-  [(- maxx1 minx1) (- maxy1 miny1) (- maxz1 minz1)])
+  (apply max [(- maxx1 minx1) (- maxy1 miny1) (- maxz1 minz1)]))
 
 (defn reduce-cubes [bots]
   (let [bot-bounds (map get-bot-bounds bots)]
@@ -275,3 +275,94 @@
 ;; Furthermore, I guess the intersection of two octrahedra is not an octahedron after all.
 ;; Maybe I need to make a list of convex volumes?
 ;; I saved a diagram of intersecting pyramids in geogebra.org - it's a roof-like shape.
+
+
+
+;; Ok, so reddit says the trick is to repeatedly divide the total space into cubes, and for each
+;; cube, count how many bots could have a space in that cube in range. That gives an upper bound
+;; to the number of overlaps inside that cube, meaning you can ignore that whole cube if you've
+;; already found a _point_ with a better overlap number.
+(defn divide-cube [[[minx miny minz] [maxx maxy maxz] :as cube]]
+  (let [xhalf-1 (+ minx (quot (- maxx minx) 2))
+        xhalf-2 (inc xhalf-1)
+        yhalf-1 (+ miny (quot (- maxy miny) 2))
+        yhalf-2 (inc yhalf-1)
+        zhalf-1 (+ minz (quot (- maxz minz) 2))
+        zhalf-2 (inc zhalf-1)]
+    (list [[minx miny minz] [xhalf-1 yhalf-1 zhalf-1]]
+          [[xhalf-1 miny minz] [maxx yhalf-1 zhalf-1]]
+          [[minx yhalf-1 minz] [xhalf-1 maxy zhalf-1]]
+          [[xhalf-1 yhalf-1 minz] [maxx maxy zhalf-1]]
+          [[minx miny zhalf-2] [xhalf-2 yhalf-2 maxz]]
+          [[xhalf-2 miny zhalf-2] [maxx yhalf-2 maxz]]
+          [[minx yhalf-2 zhalf-2] [xhalf-2 maxy maxz]]
+          [[xhalf-2 yhalf-2 zhalf-2] [maxx maxy maxz]])))
+
+(defn get-bounding-cube [bots]
+  (let [[[minx miny minz] _ :as bounds] (get-bounds bots)
+        bounds-size (cube-size bounds)
+        cube-size (loop [p 0]
+                    (if (> (Math/pow 2 p) bounds-size)
+                      (Math/pow 2 p)
+                      (recur (inc p))))]
+    [[minx miny minz] [(+ minx cube-size) (+ miny cube-size) (+ minz cube-size)]]))
+
+(defn cubes-overlap? [[[minx1 miny1 minz1] [maxx1 maxy1 maxz1]] [[minx2 miny2 minz2] [maxx2 maxy2 maxz2]]]
+  (or (and (<= minx1 minx2 maxx1) (<= miny1 miny2 maxy1) (<= minz1 minz2 maxz1))
+      (and (<= minx1 maxx2 maxx1) (<= miny1 maxy2 maxy1) (<= minz1 maxz2 maxz1))))
+
+
+(defn assign-bots-to-sub-cubes [bots bounding-cube]
+  (let [sub-cubes (divide-cube bounding-cube)]
+    (apply merge-with conj
+           (for [bot bots
+                 [min-pos _ :as cube] sub-cubes
+                 :let [bot-cube (get-bot-bounds bot)]
+                 :when (if (= (cube-size cube) 1)
+                         (in-range? min-pos bot)
+                         (cubes-overlap? cube bot-cube))]
+             {cube (list bot)}))))
+
+(defn cube-vertices [[[minx miny minz] [maxx maxy maxz]]]
+  (list [minx miny minz]
+        [maxx miny minz]
+        [minx maxy minz]
+        [maxx maxy minz]
+        [minx miny maxz]
+        [maxx miny maxz]
+        [minx maxy maxz]
+        [maxx maxy maxz]))
+
+(defn cube-distance-to-origin [cube]
+  (apply min (map (fn [v] (distance v [0 0 0])) (cube-vertices cube))))
+
+(defn find-result-subdivision [bots max-i]
+  (loop [open-set {(get-bounding-cube bots) bots}
+         best [[Long/MAX_VALUE Long/MAX_VALUE Long/MAX_VALUE] 0]
+         i 0]
+    (if (= i max-i)
+      ;;(map (fn [[k v]] (list k (count v) (cube-distance-to-origin k))) open-set)
+      {:best best
+       :max-bots (apply max (map (fn [[k v]] (count v)) open-set))
+       :smallest-cube (apply min (map (fn [[k v]] (cube-size k)) open-set))}
+      ;; TODO: sub-sort by distance from cube to origin.
+      (let [cube (first (apply max-key #(count (second %)) open-set))
+            bots-by-cube (assign-bots-to-sub-cubes bots cube)
+            subcube-size (cube-size (first (first bots-by-cube)))
+            new-open-set (dissoc open-set cube)
+            new-open-set (if (> subcube-size 1)
+                           (merge new-open-set bots-by-cube)
+                           new-open-set)
+            new-best (if (= subcube-size 1)
+                       (last (sort-by second (conj (map (fn [[[min max] v]] [min (count v)]) bots-by-cube) best)))
+                       best)]
+        (recur new-open-set
+               new-best
+               (inc i))))))
+
+;; Looks like the cube subdivision method has an off-by-one error.
+
+;; (find-result-subdivision (parse-input large-input) 3)
+;; {:best [[9223372036854775807 9223372036854775807 9223372036854775807] 0], :max-bots 516, :smallest-cube 6.7108863E7}
+;; advent-23.core> (Math/pow 2 26)
+;; 6.7108864E7
