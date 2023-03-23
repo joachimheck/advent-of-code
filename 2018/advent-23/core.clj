@@ -166,8 +166,11 @@
 (defn bounds-overlap [[[minx1 miny1 minz1] [maxx1 maxy1 maxz1]] [[minx2 miny2 minz2] [maxx2 maxy2 maxz2]]]
   [[(max minx1 minx2) (max miny1 miny2) (max minz1 minz2)] [(min maxx1 maxx2) (min maxy1 maxy2) (min maxz1 maxz2)]])
 
-(defn cube-size [[[minx1 miny1 minz1] [maxx1 maxy1 maxz1]]]
-  (apply max [(- maxx1 minx1) (- maxy1 miny1) (- maxz1 minz1)]))
+(defn cube-sizes [[[minx1 miny1 minz1] [maxx1 maxy1 maxz1]]]
+  [(- (inc maxx1) minx1) (- (inc maxy1) miny1) (- (inc maxz1) minz1)])
+
+(defn cube-size [[[minx1 miny1 minz1] [maxx1 maxy1 maxz1] :as cube]]
+  (long (apply max (cube-sizes cube))))
 
 (defn reduce-cubes [bots]
   (let [bot-bounds (map get-bot-bounds bots)]
@@ -289,39 +292,70 @@
         yhalf-2 (inc yhalf-1)
         zhalf-1 (+ minz (quot (- maxz minz) 2))
         zhalf-2 (inc zhalf-1)]
-    (list [[minx miny minz] [xhalf-1 yhalf-1 zhalf-1]]
-          [[xhalf-1 miny minz] [maxx yhalf-1 zhalf-1]]
-          [[minx yhalf-1 minz] [xhalf-1 maxy zhalf-1]]
-          [[xhalf-1 yhalf-1 minz] [maxx maxy zhalf-1]]
-          [[minx miny zhalf-2] [xhalf-2 yhalf-2 maxz]]
-          [[xhalf-2 miny zhalf-2] [maxx yhalf-2 maxz]]
-          [[minx yhalf-2 zhalf-2] [xhalf-2 maxy maxz]]
-          [[xhalf-2 yhalf-2 zhalf-2] [maxx maxy maxz]])))
+    (list [[(long minx) (long miny) (long minz)] [(long xhalf-1) (long yhalf-1) (long zhalf-1)]]
+          [[(long xhalf-2) (long miny) (long minz)] [(long maxx) (long yhalf-1) (long zhalf-1)]]
+          [[(long minx) (long yhalf-2) (long minz)] [(long xhalf-1) (long maxy) (long zhalf-1)]]
+          [[(long xhalf-2) (long yhalf-2) (long minz)] [(long maxx) (long maxy) (long zhalf-1)]]
+          [[(long minx) (long miny) (long zhalf-2)] [(long xhalf-1) (long yhalf-1) (long maxz)]]
+          [[(long xhalf-2) (long miny) (long zhalf-2)] [(long maxx) (long yhalf-1) (long maxz)]]
+          [[(long minx) (long yhalf-2) (long zhalf-2)] [(long xhalf-1) (long maxy) (long maxz)]]
+          [[(long xhalf-2) (long yhalf-2) (long zhalf-2)] [(long maxx) (long maxy) (long maxz)]])))
 
 (defn get-bounding-cube [bots]
   (let [[[minx miny minz] _ :as bounds] (get-bounds bots)
         bounds-size (cube-size bounds)
-        cube-size (loop [p 0]
-                    (if (> (Math/pow 2 p) bounds-size)
-                      (Math/pow 2 p)
-                      (recur (inc p))))]
+        cube-size (dec (loop [p 0]
+                         (if (> (Math/pow 2 p) bounds-size)
+                           (Math/pow 2 p)
+                           (recur (inc p)))))]
     [[minx miny minz] [(+ minx cube-size) (+ miny cube-size) (+ minz cube-size)]]))
 
-(defn cubes-overlap? [[[minx1 miny1 minz1] [maxx1 maxy1 maxz1]] [[minx2 miny2 minz2] [maxx2 maxy2 maxz2]]]
+(defn cubes-overlap? [[[minx1 miny1 minz1] [maxx1 maxy1 maxz1] :as cube1] [[minx2 miny2 minz2] [maxx2 maxy2 maxz2] :as cube2]]
+  ;; (println "cubes-overlap" cube1 cube2 (or (and (<= minx1 minx2 maxx1) (<= miny1 miny2 maxy1) (<= minz1 minz2 maxz1))
+  ;;                                          (and (<= minx1 maxx2 maxx1) (<= miny1 maxy2 maxy1) (<= minz1 maxz2 maxz1))))
   (or (and (<= minx1 minx2 maxx1) (<= miny1 miny2 maxy1) (<= minz1 minz2 maxz1))
-      (and (<= minx1 maxx2 maxx1) (<= miny1 maxy2 maxy1) (<= minz1 maxz2 maxz1))))
+      (and (<= minx1 maxx2 maxx1) (<= miny1 maxy2 maxy1) (<= minz1 maxz2 maxz1))
+      (and (<= minx2 minx1 maxx2) (<= miny2 miny1 maxy2) (<= minz2 minz1 maxz2))
+      (and (<= minx2 maxx1 maxx2) (<= miny2 maxy1 maxy2) (<= minz2 maxz1 maxz2))))
 
+(defn cube-vertices [[[minx miny minz] [maxx maxy maxz] :as cube]]
+  (list [minx miny minz]
+        [maxx miny minz]
+        [minx maxy minz]
+        [maxx maxy minz]
+        [minx miny maxz]
+        [maxx miny maxz]
+        [minx maxy maxz]
+        [maxx maxy maxz]))
+
+(defn closest-vertex [[x y z :as pos] [[minx miny minz] [maxx maxy maxz] :as cube]]
+  (first (sort-by #(distance pos %) (cube-vertices cube))))
+
+(defn in-range-of-cube? [[[bx by bz :as bot-pos] br :as bot] [[minx miny minz] [maxx maxy maxz] :as cube]]
+  (let [[x-radius y-radius z-radius] [(/ (- (inc maxx) minx) 2) (/ (- (inc maxy) miny) 2) (/ (- (inc maxz) minz) 2)]
+        [cx cy cz :as center] [(+ minx x-radius) (+ miny y-radius) (+ minz z-radius)]
+        distance-to-cube (cond (and (<= minx bx maxx) (<= miny by maxy) (<= minz bz maxz))
+                               0
+                               (and (<= miny by maxy) (<= minz bz maxz))
+                               (- (abs (- bx cx)) x-radius)
+                               (and (<= minx bx maxx) (<= minz bz maxz))
+                               (- (abs (- by cy)) y-radius)
+                               (and (<= minx bx maxx) (<= miny by maxy))
+                               (- (abs (- bz cz)) z-radius)
+                               :else
+                               (distance bot-pos (closest-vertex bot-pos cube)))]
+    (<= distance-to-cube br)))
 
 (defn assign-bots-to-sub-cubes [bots bounding-cube]
   (let [sub-cubes (divide-cube bounding-cube)]
-    (apply merge-with conj
-           (for [bot bots
-                 [min-pos _ :as cube] sub-cubes
-                 :let [bot-cube (get-bot-bounds bot)]
-                 :when (if (= (cube-size cube) 1)
-                         (in-range? min-pos bot)
-                         (cubes-overlap? cube bot-cube))]
-             {cube (list bot)}))))
+    (seq
+     (apply merge-with concat
+            (for [bot bots
+                  [min-pos _ :as cube] sub-cubes
+                  :when (if (= (cube-size cube) 1)
+                          (in-range? min-pos bot)
+                          (in-range-of-cube? bot cube))]
+              {cube (list bot)})))))
 
 (defn cube-vertices [[[minx miny minz] [maxx maxy maxz]]]
   (list [minx miny minz]
@@ -336,29 +370,49 @@
 (defn cube-distance-to-origin [cube]
   (apply min (map (fn [v] (distance v [0 0 0])) (cube-vertices cube))))
 
+(defn compare-cubes-with-bots [[c1 b1] [c2 b2]]
+  (if (= (count b1) (count b2))
+    (- (cube-distance-to-origin c1) (cube-distance-to-origin c2))
+    (- (count b2) (count b1))))
+
 (defn find-result-subdivision [bots max-i]
-  (loop [open-set {(get-bounding-cube bots) bots}
-         best [[Long/MAX_VALUE Long/MAX_VALUE Long/MAX_VALUE] 0]
+  (loop [open-set (sorted-set-by compare-cubes-with-bots [(get-bounding-cube bots) (seq bots)])
+         best [[[Integer/MIN_VALUE Integer/MIN_VALUE Integer/MIN_VALUE] [Integer/MAX_VALUE Integer/MAX_VALUE Integer/MAX_VALUE]] '()]
          i 0]
-    (if (= i max-i)
-      ;;(map (fn [[k v]] (list k (count v) (cube-distance-to-origin k))) open-set)
-      {:best best
-       :max-bots (apply max (map (fn [[k v]] (count v)) open-set))
-       :smallest-cube (apply min (map (fn [[k v]] (cube-size k)) open-set))}
-      ;; TODO: sub-sort by distance from cube to origin.
-      (let [cube (first (apply max-key #(count (second %)) open-set))
-            bots-by-cube (assign-bots-to-sub-cubes bots cube)
-            subcube-size (cube-size (first (first bots-by-cube)))
-            new-open-set (dissoc open-set cube)
-            new-open-set (if (> subcube-size 1)
-                           (merge new-open-set bots-by-cube)
-                           new-open-set)
-            new-best (if (= subcube-size 1)
-                       (last (sort-by second (conj (map (fn [[[min max] v]] [min (count v)]) bots-by-cube) best)))
-                       best)]
-        (recur new-open-set
-               new-best
-               (inc i))))))
+    ;; (println "loop open-set" open-set)
+    (let [open-set (into (sorted-set-by compare-cubes-with-bots) (remove (fn [[c b]] (< (count b) 2)) open-set))]
+      (if (or (empty? open-set) (and (= 1 (count open-set)) (> 0 i)) (= i max-i))
+        ;;(map (fn [[k v]] (list k (count v) (cube-distance-to-origin k))) open-set)
+        (let [[best-cube best-bots] best]
+         {:best-cube best-cube
+          :best-distance (cube-distance-to-origin best-cube)
+          :best-visible-bots (count best-bots)
+          :max-bots (if (empty? open-set) nil (apply max (map (fn [[c b]] (count b)) open-set)))
+          :cubes (count open-set)
+          :smallest-cube (if (empty? open-set) nil (apply min (map (fn [[c b]] (cube-size c)) open-set)))
+          :iterations i})
+        ;; TODO: sub-sort by distance from cube to origin.
+        (let [max-bots (apply max (map (fn [[k v]] (count v)) open-set))
+              [cube cube-bots] (first open-set)
+              _ (if (= 0 (mod i 1))
+                  (println "Iteration" i "max-bots" (if (empty? open-set) nil (apply max (map (fn [[c b]] (count b)) open-set)))
+                           "smallest-cube" (if (empty? open-set) nil (apply min (map (fn [[c b]] (cube-size c)) open-set)))
+                           "current cube size" [(cube-size cube) (count cube-bots)]
+                           "bots in best" (count (second best))))
+              ;; _ (if (= (cube-size cube) 1) (println "cube size 1"))
+              bots-by-cube (assign-bots-to-sub-cubes bots cube)
+              _ (if (empty? bots-by-cube) (println "empty bots-by-cube cube " cube "had" (count cube-bots) "bots"))
+              subcube-size (cube-size (first (first bots-by-cube)))
+              new-open-set (disj open-set [cube cube-bots])
+              new-open-set (if (> subcube-size 1)
+                             (into new-open-set bots-by-cube)
+                             new-open-set)
+              new-best (if (and (= subcube-size 1) (not (empty? bots-by-cube)))
+                         (first (sort-by identity compare-cubes-with-bots (conj bots-by-cube best)))
+                         best)]
+          (recur new-open-set
+                 new-best
+                 (inc i)))))))
 
 ;; Looks like the cube subdivision method has an off-by-one error.
 
@@ -366,3 +420,8 @@
 ;; {:best [[9223372036854775807 9223372036854775807 9223372036854775807] 0], :max-bots 516, :smallest-cube 6.7108863E7}
 ;; advent-23.core> (Math/pow 2 26)
 ;; 6.7108864E7
+
+
+;; ---> answer <---
+;; 120911897 ; after 50 iterations
+
