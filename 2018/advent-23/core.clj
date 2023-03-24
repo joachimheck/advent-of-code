@@ -380,36 +380,39 @@
          best [[[Integer/MIN_VALUE Integer/MIN_VALUE Integer/MIN_VALUE] [Integer/MAX_VALUE Integer/MAX_VALUE Integer/MAX_VALUE]] '()]
          i 0]
     ;; (println "loop open-set" open-set)
-    (let [open-set (into (sorted-set-by compare-cubes-with-bots) (remove (fn [[c b]] (< (count b) 2)) open-set))]
+    (let [[best-cube best-bots] best
+          best-count (count best-bots)]
       (if (or (empty? open-set) (and (= 1 (count open-set)) (> 0 i)) (= i max-i))
         ;;(map (fn [[k v]] (list k (count v) (cube-distance-to-origin k))) open-set)
-        (let [[best-cube best-bots] best]
-         {:best-cube best-cube
-          :best-distance (cube-distance-to-origin best-cube)
-          :best-visible-bots (count best-bots)
-          :max-bots (if (empty? open-set) nil (apply max (map (fn [[c b]] (count b)) open-set)))
-          :cubes (count open-set)
-          :smallest-cube (if (empty? open-set) nil (apply min (map (fn [[c b]] (cube-size c)) open-set)))
-          :iterations i})
+        {:best-cube best-cube
+         :best-distance (cube-distance-to-origin best-cube)
+         :best-visible-bots (count best-bots)
+         :max-bots (if (empty? open-set) nil (apply max (map (fn [[c b]] (count b)) open-set)))
+         :cubes (count open-set)
+         :smallest-cube (if (empty? open-set) nil (apply min (map (fn [[c b]] (cube-size c)) open-set)))
+         :iterations i}
         ;; TODO: sub-sort by distance from cube to origin.
         (let [max-bots (apply max (map (fn [[k v]] (count v)) open-set))
-              [cube cube-bots] (first open-set)
-              _ (if (= 0 (mod i 1))
-                  (println "Iteration" i "max-bots" (if (empty? open-set) nil (apply max (map (fn [[c b]] (count b)) open-set)))
-                           "smallest-cube" (if (empty? open-set) nil (apply min (map (fn [[c b]] (cube-size c)) open-set)))
-                           "current cube size" [(cube-size cube) (count cube-bots)]
-                           "bots in best" (count (second best))))
+              [cube cube-bots :as current] (first open-set)
+              cube-sizes (map (fn [[c b]] (cube-size c)) open-set)
+              _ (if (= 0 (mod i 10))
+                  (println "Iteration" i
+                           "cube count" (count open-set)
+                           "max-bots" (if (empty? open-set) nil (apply max (map (fn [[c b]] (count b)) open-set)))
+                           "current cube size/bots" [(cube-size cube) (count cube-bots)]
+                           "\ncube sizes" [(if (empty? open-set) nil (apply min cube-sizes))
+                                         (if (empty? open-set) nil (apply max cube-sizes))
+                                         (sort-by second (frequencies cube-sizes))]
+                           "\nbest" {:best best-cube :best-size (cube-size best-cube) :bots (count best-bots) :distance (distance (first best-cube) [0 0 0])}))
               ;; _ (if (= (cube-size cube) 1) (println "cube size 1"))
               bots-by-cube (assign-bots-to-sub-cubes bots cube)
-              _ (if (empty? bots-by-cube) (println "empty bots-by-cube cube " cube "had" (count cube-bots) "bots"))
+              ;; _ (if (empty? bots-by-cube) (println "empty bots-by-cube cube " cube "had" (count cube-bots) "bots"))
               subcube-size (cube-size (first (first bots-by-cube)))
-              new-open-set (disj open-set [cube cube-bots])
-              new-open-set (if (> subcube-size 1)
-                             (into new-open-set bots-by-cube)
-                             new-open-set)
-              new-best (if (and (= subcube-size 1) (not (empty? bots-by-cube)))
-                         (first (sort-by identity compare-cubes-with-bots (conj bots-by-cube best)))
-                         best)]
+              new-open-set (into (disj (conj open-set best) current) bots-by-cube)
+              [new-best-cube new-best-bots :as new-best] (first (sort-by identity compare-cubes-with-bots new-open-set))
+              new-best-count (count new-best-bots)
+              new-open-set (into (sorted-set-by compare-cubes-with-bots)
+                                 (remove (fn [[c b]] (and (> best-count 0) (or (= 1 (cube-size c)) (> (count b) best-count)))) new-open-set))]
           (recur new-open-set
                  new-best
                  (inc i)))))))
@@ -422,6 +425,8 @@
 ;; 6.7108864E7
 
 
+;; 86532477
+;; 86803689
 ;; ---> answer <---
 ;; 120911897 ; after 50 iterations
 
