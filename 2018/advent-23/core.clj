@@ -331,31 +331,30 @@
 (defn closest-vertex [[x y z :as pos] [[minx miny minz] [maxx maxy maxz] :as cube]]
   (first (sort-by #(distance pos %) (cube-vertices cube))))
 
-(defn in-range-of-cube? [[[bx by bz :as bot-pos] br :as bot] [[minx miny minz] [maxx maxy maxz] :as cube]]
-  (let [[x-radius y-radius z-radius] [(/ (- (inc maxx) minx) 2) (/ (- (inc maxy) miny) 2) (/ (- (inc maxz) minz) 2)]
-        [cx cy cz :as center] [(+ minx x-radius) (+ miny y-radius) (+ minz z-radius)]
-        distance-to-cube (cond (and (<= minx bx maxx) (<= miny by maxy) (<= minz bz maxz))
-                               0
-                               (and (<= miny by maxy) (<= minz bz maxz))
-                               (- (abs (- bx cx)) x-radius)
-                               (and (<= minx bx maxx) (<= minz bz maxz))
-                               (- (abs (- by cy)) y-radius)
-                               (and (<= minx bx maxx) (<= miny by maxy))
-                               (- (abs (- bz cz)) z-radius)
-                               :else
-                               (distance bot-pos (closest-vertex bot-pos cube)))]
-    (<= distance-to-cube br)))
+(defn in-range-of-cube? [[[bx by bz :as bot-pos] br :as bot] [[minx miny minz :as min-pos] [maxx maxy maxz] :as cube]]
+  (if (= 1 (cube-size cube))
+    (in-range? min-pos bot)
+    (let [[x-radius y-radius z-radius] [(/ (- (inc maxx) minx) 2) (/ (- (inc maxy) miny) 2) (/ (- (inc maxz) minz) 2)]
+          [cx cy cz :as center] [(+ minx x-radius) (+ miny y-radius) (+ minz z-radius)]
+          distance-to-cube (cond (and (<= minx bx maxx) (<= miny by maxy) (<= minz bz maxz))
+                                 0
+                                 (and (<= miny by maxy) (<= minz bz maxz))
+                                 (- (abs (- bx cx)) x-radius)
+                                 (and (<= minx bx maxx) (<= minz bz maxz))
+                                 (- (abs (- by cy)) y-radius)
+                                 (and (<= minx bx maxx) (<= miny by maxy))
+                                 (- (abs (- bz cz)) z-radius)
+                                 :else
+                                 (distance bot-pos (closest-vertex bot-pos cube)))]
+      (<= distance-to-cube br))))
 
 (defn assign-bots-to-sub-cubes [bots bounding-cube]
   (let [sub-cubes (divide-cube bounding-cube)]
-    (seq
-     (apply merge-with concat
-            (for [bot bots
-                  [min-pos _ :as cube] sub-cubes
-                  :when (if (= (cube-size cube) 1)
-                          (in-range? min-pos bot)
-                          (in-range-of-cube? bot cube))]
-              {cube (list bot)})))))
+    (for [[min-pos _ :as sub-cube] sub-cubes]
+      (let [bots-in-range (for [bot bots
+                                :when (in-range-of-cube? bot sub-cube)]
+                            bot)]
+        [sub-cube bots-in-range (count bots-in-range)]))))
 
 (defn cube-vertices [[[minx miny minz] [maxx maxy maxz]]]
   (list [minx miny minz]
@@ -370,52 +369,56 @@
 (defn cube-distance-to-origin [cube]
   (apply min (map (fn [v] (distance v [0 0 0])) (cube-vertices cube))))
 
-(defn compare-cubes-with-bots [[c1 b1] [c2 b2]]
-  (if (= (count b1) (count b2))
+(defn compare-cubes-with-bots [[c1 b1 n1] [c2 b2 n2]]
+  (if (= n1 n2)
     (- (cube-distance-to-origin c1) (cube-distance-to-origin c2))
-    (- (count b2) (count b1))))
+    (- n2 n1)))
+
+(defn output-map [open-set [best-cube best-bots best-count] i]
+  {:best-cube best-cube
+     :best-distance (cube-distance-to-origin best-cube)
+     :best-visible-bots best-count
+     :max-bots (if (empty? open-set) nil (apply max (map (fn [[c b n]] n) open-set)))
+     :cubes (count open-set)
+     :smallest-cube (if (empty? open-set) nil (apply min (map (fn [[c b n]] (cube-size c)) open-set)))
+     :iterations i})
 
 (defn find-result-subdivision [bots max-i]
-  (loop [open-set (sorted-set-by compare-cubes-with-bots [(get-bounding-cube bots) (seq bots)])
-         best [[[Integer/MIN_VALUE Integer/MIN_VALUE Integer/MIN_VALUE] [Integer/MAX_VALUE Integer/MAX_VALUE Integer/MAX_VALUE]] '()]
+  (loop [open-set (sorted-set-by compare-cubes-with-bots [(get-bounding-cube bots) (seq bots) 1])
+         best (first open-set)
          i 0]
     ;; (println "loop open-set" open-set)
-    (let [[best-cube best-bots] best
-          best-count (count best-bots)]
-      (if (or (empty? open-set) (and (= 1 (count open-set)) (> 0 i)) (= i max-i))
-        ;;(map (fn [[k v]] (list k (count v) (cube-distance-to-origin k))) open-set)
-        {:best-cube best-cube
-         :best-distance (cube-distance-to-origin best-cube)
-         :best-visible-bots (count best-bots)
-         :max-bots (if (empty? open-set) nil (apply max (map (fn [[c b]] (count b)) open-set)))
-         :cubes (count open-set)
-         :smallest-cube (if (empty? open-set) nil (apply min (map (fn [[c b]] (cube-size c)) open-set)))
-         :iterations i}
-        ;; TODO: sub-sort by distance from cube to origin.
-        (let [max-bots (apply max (map (fn [[k v]] (count v)) open-set))
-              [cube cube-bots :as current] (first open-set)
-              cube-sizes (map (fn [[c b]] (cube-size c)) open-set)
-              _ (if (= 0 (mod i 10))
-                  (println "Iteration" i
-                           "cube count" (count open-set)
-                           "max-bots" (if (empty? open-set) nil (apply max (map (fn [[c b]] (count b)) open-set)))
-                           "current cube size/bots" [(cube-size cube) (count cube-bots)]
-                           "\ncube sizes" [(if (empty? open-set) nil (apply min cube-sizes))
-                                         (if (empty? open-set) nil (apply max cube-sizes))
-                                         (sort-by second (frequencies cube-sizes))]
-                           "\nbest" {:best best-cube :best-size (cube-size best-cube) :bots (count best-bots) :distance (distance (first best-cube) [0 0 0])}))
-              ;; _ (if (= (cube-size cube) 1) (println "cube size 1"))
-              bots-by-cube (assign-bots-to-sub-cubes bots cube)
-              ;; _ (if (empty? bots-by-cube) (println "empty bots-by-cube cube " cube "had" (count cube-bots) "bots"))
-              subcube-size (cube-size (first (first bots-by-cube)))
-              new-open-set (into (disj (conj open-set best) current) bots-by-cube)
-              [new-best-cube new-best-bots :as new-best] (first (sort-by identity compare-cubes-with-bots new-open-set))
-              new-best-count (count new-best-bots)
-              new-open-set (into (sorted-set-by compare-cubes-with-bots)
-                                 (remove (fn [[c b]] (and (> best-count 0) (or (= 1 (cube-size c)) (> (count b) best-count)))) new-open-set))]
-          (recur new-open-set
-                 new-best
-                 (inc i)))))))
+    (if (or (empty? open-set) (and (= 1 (count open-set)) (> 0 i)) (= i max-i))
+      (output-map open-set best i)
+      (let [[cube cube-bots cube-count :as current] (first open-set)
+            [best-cube best-bots best-count] best
+            ;; best-count best-count
+            ;; max-bots (apply max (map (fn [[k v]] (count v)) open-set))
+            ;; cube-sizes (map (fn [[c b]] (cube-size c)) open-set)
+            _ (if (= 0 (mod i 20))
+                (println "Iteration" i
+                         "cube count" (count open-set)
+                         "max-bots" (if (empty? open-set) nil (apply max (map (fn [[c b n]] n) open-set)))
+                         "current cube size/bots" [(cube-size cube) cube-count]
+                         ;; "\ncube sizes" [(if (empty? open-set) nil (apply min cube-sizes))
+                         ;;               (if (empty? open-set) nil (apply max cube-sizes))
+                         ;;               (sort-by second (frequencies cube-sizes))]
+                         "\nbest" {:best best-cube :best-size (cube-size best-cube) :bots best-count :distance (distance (first best-cube) [0 0 0])}))
+            bots-by-cube (assign-bots-to-sub-cubes bots cube)
+            ;; subcube-size (cube-size (first (first bots-by-cube)))
+            new-open-set (into (disj (conj open-set best) current) bots-by-cube)
+            [new-best-cube new-best-bots new-best-count :as new-best] (first (sort-by identity compare-cubes-with-bots new-open-set))
+            new-best-size (cube-size new-best-cube)
+            ;; _ (println "Pre-removal new-open-set" (map (fn [[c b]] (list c (count b))) new-open-set))
+            new-open-set (into (sorted-set-by compare-cubes-with-bots)
+                               (remove (fn [[c b n]]
+                                         (or (= 1 (cube-size c))
+                                             (empty? b)
+                                             (and (= 1 new-best-size) (< n new-best-count))))
+                                       new-open-set))
+            ;; _ (println "Post-removal new-open-set" (map (fn [[c b]] (list c (count b))) new-open-set))
+            ]
+        (recur new-open-set new-best (inc i))))))
 
 ;; Looks like the cube subdivision method has an off-by-one error.
 
@@ -430,3 +433,6 @@
 ;; ---> answer <---
 ;; 120911897 ; after 50 iterations
 
+;; Other incorrect answers:
+;; 94481124
+;; 94481126
