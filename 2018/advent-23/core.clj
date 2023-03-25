@@ -371,54 +371,43 @@
 
 (defn compare-cubes-with-bots [[c1 b1 n1] [c2 b2 n2]]
   (if (= n1 n2)
-    (- (cube-distance-to-origin c1) (cube-distance-to-origin c2))
+    (let [c1-size (cube-size c1)
+          c2-size (cube-size c2)]
+      (if (= c1-size c2-size)
+        (- (cube-distance-to-origin c1) (cube-distance-to-origin c2))
+        (- c2-size c1-size)))
     (- n2 n1)))
 
-(defn output-map [open-set [best-cube best-bots best-count] i]
-  {:best-cube best-cube
-     :best-distance (cube-distance-to-origin best-cube)
-     :best-visible-bots best-count
-     :max-bots (if (empty? open-set) nil (apply max (map (fn [[c b n]] n) open-set)))
-     :cubes (count open-set)
-     :smallest-cube (if (empty? open-set) nil (apply min (map (fn [[c b n]] (cube-size c)) open-set)))
-     :iterations i})
+(defn output-map [open-set i]
+  (let [[cube bots bot-count] (first open-set)
+        max-bots (if (empty? open-set) 0 (apply max (map (fn [[c b n]] n) open-set)))
+        cubes-with-max (for [[c b n] open-set :when (= n max-bots)] c)
+        maxed-cube-count (count cubes-with-max)]
+   {:cube cube
+    :distance (cube-distance-to-origin cube)
+    :bots bot-count
+    :size (cube-size cube)
+    :max-bots max-bots
+    :cubes (count open-set)
+    :maxed-cube-count maxed-cube-count
+    :smallest-cube (if (empty? open-set) nil (apply min (map (fn [[c b n]] (cube-size c)) open-set)))
+    :iterations i
+    :cubes-with-max (if (and (= 1 (cube-size cube)) (< maxed-cube-count 10)) cubes-with-max)}))
 
 (defn find-result-subdivision [bots max-i]
   (loop [open-set (sorted-set-by compare-cubes-with-bots [(get-bounding-cube bots) (seq bots) 1])
-         best (first open-set)
          i 0]
     ;; (println "loop open-set" open-set)
-    (if (or (empty? open-set) (and (= 1 (count open-set)) (> 0 i)) (= i max-i))
-      (output-map open-set best i)
-      (let [[cube cube-bots cube-count :as current] (first open-set)
-            [best-cube best-bots best-count] best
-            ;; best-count best-count
-            ;; max-bots (apply max (map (fn [[k v]] (count v)) open-set))
-            ;; cube-sizes (map (fn [[c b]] (cube-size c)) open-set)
-            _ (if (= 0 (mod i 20))
-                (println "Iteration" i
-                         "cube count" (count open-set)
-                         "max-bots" (if (empty? open-set) nil (apply max (map (fn [[c b n]] n) open-set)))
-                         "current cube size/bots" [(cube-size cube) cube-count]
-                         ;; "\ncube sizes" [(if (empty? open-set) nil (apply min cube-sizes))
-                         ;;               (if (empty? open-set) nil (apply max cube-sizes))
-                         ;;               (sort-by second (frequencies cube-sizes))]
-                         "\nbest" {:best best-cube :best-size (cube-size best-cube) :bots best-count :distance (distance (first best-cube) [0 0 0])}))
-            bots-by-cube (assign-bots-to-sub-cubes bots cube)
-            ;; subcube-size (cube-size (first (first bots-by-cube)))
-            new-open-set (into (disj (conj open-set best) current) bots-by-cube)
-            [new-best-cube new-best-bots new-best-count :as new-best] (first (sort-by identity compare-cubes-with-bots new-open-set))
-            new-best-size (cube-size new-best-cube)
-            ;; _ (println "Pre-removal new-open-set" (map (fn [[c b]] (list c (count b))) new-open-set))
-            new-open-set (into (sorted-set-by compare-cubes-with-bots)
-                               (remove (fn [[c b n]]
-                                         (or (= 1 (cube-size c))
-                                             (empty? b)
-                                             (and (= 1 new-best-size) (< n new-best-count))))
-                                       new-open-set))
-            ;; _ (println "Post-removal new-open-set" (map (fn [[c b]] (list c (count b))) new-open-set))
-            ]
-        (recur new-open-set new-best (inc i))))))
+    (let [[cube cube-bots cube-count :as current] (first open-set)]
+     (if (or (empty? open-set)
+             (= 1 (cube-size cube))
+             (= i max-i))
+       (output-map open-set i)
+       (let [_ (if (= 0 (mod i 20)) (println (output-map open-set i)))
+             bots-by-cube (assign-bots-to-sub-cubes bots cube)
+             new-open-set (into (disj open-set current) bots-by-cube)
+             ]
+         (recur new-open-set (inc i)))))))
 
 ;; Looks like the cube subdivision method has an off-by-one error.
 
@@ -436,3 +425,30 @@
 ;; Other incorrect answers:
 ;; 94481124
 ;; 94481126
+
+(defn count-bots-visible [bots pos]
+  (count (filter true? (map (fn [bot] (in-range? pos bot)) bots))))
+
+
+;; This finally got it! I found a Reddit comment that explained my bug: when sorting the cubes,
+;; I wasn't taking into account their size. The sort criteria need to be: number of bots visible
+;; from within the cube; _the_cube_size!_; and the distance of the cube from the origin. With that
+;; change in place, not only is the solution correct, but it's also discovered very quickly.
+
+;; (time (find-result-subdivision (parse-input large-input) 10000))
+;; {:maxed-cube-count 1, :bots 1, :size 536870912, :iterations 0, :cube [[-178506040 -141655043 -96576988] [3.58364871E8 3.95215868E8 4.40293923E8]], :cubes 1, :distance 416738071, :smallest-cube 536870912, :max-bots 1, :cubes-with-max nil}
+;; {:maxed-cube-count 3, :bots 977, :size 65536, :iterations 20, :cube [[26752712 46564349 20994596] [26818247 46629884 21060131]], :cubes 134, :distance 94311657, :smallest-cube 65536, :max-bots 977, :cubes-with-max nil}
+;; {:maxed-cube-count 2, :bots 977, :size 512, :iterations 40, :cube [[26794696 46607357 21078564] [26795207 46607868 21079075]], :cubes 257, :distance 94480617, :smallest-cube 256, :max-bots 977, :cubes-with-max nil}
+;; {:maxed-cube-count 2, :bots 977, :size 4, :iterations 60, :cube [[26794904 46607437 21078784] [26794907 46607440 21078787]], :cubes 383, :distance 94481125, :smallest-cube 2, :max-bots 977, :cubes-with-max nil}
+;; "Elapsed time: 3034.8029 msecs"
+;; {:maxed-cube-count 1,
+;;  :bots 977,
+;;  :size 1,
+;;  :iterations 63,
+;;  :cube [[26794906 46607439 21078785] [26794906 46607439 21078785]],
+;;  :cubes 404,
+;;  :distance 94481130,
+;;  :smallest-cube 1,
+;;  :max-bots 977,
+;;  :cubes-with-max ([[26794906 46607439 21078785] [26794906 46607439 21078785]])}
+;; advent-23.core> 
