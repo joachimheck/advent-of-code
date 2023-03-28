@@ -195,8 +195,11 @@
          i 0]
     (if (< (count (group-by :army groups)) 2)
       {:winner (:army (first groups))
-       :units (apply + (map :units groups))}
-      (recur (process-fight groups) (inc i)))))
+         :units (apply + (map :units groups))}
+      (let [new-groups (process-fight groups)]
+        (if (= new-groups groups)
+          groups
+          (recur new-groups (inc i)))))))
 
 (defn find-minimum-boost [groups]
   (let [max-boost (loop [amount 1]
@@ -207,12 +210,38 @@
            smallest-effective max-boost
            i 0]
       (println "Iteration" i [largest-ineffective smallest-effective])
-      (if (or (> i 12)
-              (= 1 (- smallest-effective largest-ineffective)))
+      (if (= 1 (- smallest-effective largest-ineffective))
         {:boost smallest-effective
          :results (process-war-2 (boost groups smallest-effective))}
-        (let [current (quot (+ largest-ineffective smallest-effective) 2)]
-          (if (= (:winner (process-war-2 (boost groups current))) "Immune System")
+        (let [current (quot (+ largest-ineffective smallest-effective) 2)
+              current-groups (boost groups current)
+              result (process-war-2 current-groups)]
+          (if (= (:winner result) "Immune System")
             (recur largest-ineffective current (inc i))
             (recur current smallest-effective (inc i))))))))
 
+;; (find-minimum-boost (parse-input small-input))
+;; Iteration 0 [0 2048]
+;; Iteration 1 [1024 2048]
+;; Iteration 2 [1536 2048]
+;; Iteration 3 [1536 1792]
+;; Iteration 4 [1536 1664]
+;; Iteration 5 [1536 1600]
+;; Iteration 6 [1568 1600]
+;; Iteration 7 [1568 1584]
+;; Iteration 8 [1568 1576]
+;; Iteration 9 [1568 1572]
+;; Iteration 10 [1568 1570]
+;; Iteration 11 [1569 1570]
+;; {:boost 1570, :results {:winner "Immune System", :units 51}}
+
+;; (find-minimum-boost (parse-input large-input))
+;; Iteration 0 [0 128]
+;; Iteration 1 [64 128]
+;; Iteration 2 [96 128]
+;; Iteration 3 [96 112]
+;; Iteration 4 [96 104]
+;; Iteration 5 [96 100]
+;; Iteration 6 [98 100]
+;; Iteration 7 [99 100]
+;; {:boost 100, :results {:winner "Immune System", :units 7500}}
