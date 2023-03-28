@@ -56,7 +56,7 @@
         [x (dec y)]))
 
 (defn adjacent [[x y] field]
-  (map (fn [p] [p (get field p nil)]) (adjacent-points [x y])))
+  (map (fn [p] [p (get field p)]) (adjacent-points [x y])))
 
 (defn find-open-adjacent [targets field]
   (distinct
@@ -86,9 +86,13 @@
           (some #{end-p} open-set)
           (compute-path start-p end-p distance visited)
           :else
-          (let [new-open-set (set (map first (find-open-adjacent (map (fn [p] [p nil]) open-set) field)))
+          (let [new-open-set (set (remove (set (keys visited)) (map first (find-open-adjacent (map (fn [p] [p nil]) open-set) field))))
+;;                _ (println "new-open-set" new-open-set)
                 new-distance (inc distance)
-                new-visited (reduce (fn [acc p] (if (get acc p) acc (assoc acc p distance))) visited open-set)]
+;;                _ (println "new-distance" new-distance)
+                new-visited (reduce (fn [acc p] (if (get acc p) acc (assoc acc p distance))) visited open-set)
+;;                _ (println "new-visited" new-visited)
+                ]
             (recur new-open-set new-distance new-visited)))))
 
 (defn list-with-distance [[p _ :as start] options]
@@ -101,13 +105,30 @@
                                           (dec (count the-path))))))
        options))
 
-(defn find-closest [[p _ :as start] options field]
-  (let [options-distance (remove #(nil? (second %)) (list-with-path-length start options field))
-        sorted (sort-by second options-distance)
-        min-distance (second (first sorted))
-        at-min-distance (filter #(= min-distance (second %)) sorted)
-        re-sorted (sort-positions (map first at-min-distance))]
-    (first re-sorted)))
+;; (defn find-closest [[p _ :as start] options field]
+;;   (let [options-distance (remove #(nil? (second %)) (list-with-path-length start options field))
+;;         sorted (sort-by second options-distance)
+;;         min-distance (second (first sorted))
+;;         at-min-distance (filter #(= min-distance (second %)) sorted)
+;;         re-sorted (sort-positions (map first at-min-distance))]
+;;     (first re-sorted)))
+
+(defn find-closest [unit targets field]
+  (let [targets-distance (sort-by second (list-with-distance unit targets))]
+    (first (reduce (fn [[closest-target closest-path-length :as closest] [target distance]]
+                     ;; (println "reduce-fn" closest [target distance])
+                     (if (> distance closest-path-length)
+                       closest
+                       (let [target-path-length (count (path unit target field))]
+                         (cond (> target-path-length closest-path-length)
+                               closest
+                               (< target-path-length closest-path-length)
+                               [target target-path-length]
+                               (= target-path-length closest-path-length)
+                               [(first (sort-positions (list closest-target target))) target-path-length]))))
+                   [nil Integer/MAX_VALUE]
+                   targets-distance))))
+
 
 (defn first-read-order [points]
   (first (sort-positions points)))
@@ -123,16 +144,32 @@
             (recur (apply conj (disj open-set current) (remove visited (set (map first (find-open-adjacent (list [current nil]) field)))))
                    (conj visited current))))))
  
+;; (defn move [[p state :as unit] field]
+;;   (let [targets (find-targets unit field)]
+;;     (if (empty? targets)
+;;       (assoc field :finished true)
+;;       (let [distances-to-target (list-with-distance unit targets)
+;;             adjacent-target (first-read-order (map first (filter #(= 1 (second %)) distances-to-target)))]
+;;         (if adjacent-target
+;;           field
+;;           (let [destinations (filter #(reachable-from? % unit field) (find-open-adjacent targets field))
+;;                 destination (find-closest unit destinations field)]
+;;             (if destination
+;;               (let [available-steps (filter #(reachable-from? % destination field) (find-open-adjacent (list unit) field))
+;;                     step (find-closest destination available-steps field)]
+;;                 (-> field
+;;                     (dissoc p)
+;;                     (assoc (first step) state)))
+;;               field)))))))
+
 (defn move [[p state :as unit] field]
   (let [targets (find-targets unit field)]
     (if (empty? targets)
       (assoc field :finished true)
-      (let [distances-to-target (list-with-distance unit targets)
-            adjacent-target (first-read-order (map first (filter #(= 1 (second %)) distances-to-target)))]
-        (if adjacent-target
+      (let [destinations (filter #(reachable-from? % unit field) (find-open-adjacent targets field))]
+        (if (some #{p} destinations) ; already adjacent to a target
           field
-          (let [destinations (filter #(reachable-from? % unit field) (find-open-adjacent targets field))
-                destination (find-closest unit destinations field)]
+          (let [destination (find-closest unit destinations field)]
             (if destination
               (let [available-steps (filter #(reachable-from? % destination field) (find-open-adjacent (list unit) field))
                     step (find-closest destination available-steps field)]
@@ -158,6 +195,7 @@
 
 (defn print-field [field]
   (let [field (dissoc field :finished)
+        _ (if (empty? (map first (map first field))) (println "EMPTY FIELD" field))
         maxx (apply max (map first (map first field)))
         maxy (apply max (map second (map first field)))]
     (str/join "\n"
@@ -178,7 +216,6 @@
                                :let [{:keys [type hp]} (get field [i j])]
                                :when (or (= type :elf) (= type :goblin))]
                            (format "%s(%03d), " (if (= type :elf) "E" "G") hp))))))))
-
 (defn get-unit-by-id [id field]
   (first (filter #(= id (get (second %) :id)) field)))
 
@@ -186,21 +223,25 @@
   (let [field (move unit field)]
     (if (get field :finished)
       field
-      (let [unit (get-unit-by-id id field)
-            field (attack unit field)]
-        field))))
+      (let [unit (get-unit-by-id id field)]
+        (attack unit field)))))
 
 (defn proc-all [field]
-  (let [combatants (sort-positions (combatants field))]
-    (reduce (fn [acc combatant]
-              (if (some #(= (get % :id) (get (second combatant) :id)) (vals acc))
-                (let [processed (proc-unit combatant acc)]
-                  (if (get processed :finished)
-                    (reduced processed)
-                    processed))
-                acc))
-            field
-            combatants)))
+  (let [combatant-ids (map :id (map second (sort-positions (combatants field))))
+        result (reduce (fn [acc combatant-id]
+                         (let [combatant (get-unit-by-id combatant-id acc)]
+                           ;; (println "reduce-fn" combatant-id ":" combatant)
+                           (if combatant
+                             (let [processed (proc-unit combatant acc)]
+                               (if (get processed :finished)
+                                 (reduced processed)
+                                 processed))
+                             acc)))
+                       field
+                       combatant-ids)]
+    (if (nil? result)
+      (println "Nil result for field:" field))
+    result))
 
 (defn total-hp [field]
   (apply + (map #(get % :hp 0) (vals field))))
@@ -250,18 +291,37 @@
 (defn run-combat-2 [initial-field power]
   (loop [i 0 field (set-attack-power initial-field power)]
     (let [processed (proc-all field)]
-      (if (get processed :finished)
+      ;; (if (and (> i 0) (= 0 (mod i 1000)))
+      ;;   (println processed)
+      ;;   ;; (println (print-field processed))
+      ;;   ;; (println (combatants processed))
+      ;;   ;; (println "elves:" (filter #(= :elf (:type %)) (vals processed))
+      ;;   ;;            "goblins:" (filter #(= :goblin (:type %)) (vals processed)))
+      ;;   )
+      ;; (if (<= 100 i 105)
+      ;;   (println (print-field processed)))
+      (cond
+        ;; (= processed field)
+        ;;     {:winner "loop" :rounds i}
+        ;; (and (<= (count-by-type processed :elf) 0)
+        ;;      (<= (count-by-type processed :goblin) 0 ))
+        ;; {:winner "all dead" :rounds i}
+        (get processed :finished)
         (let [elves-left (count-by-type processed :elf)
               goblins-left (count-by-type processed :goblin)
               winner (if (> elves-left goblins-left) "Elves" "Goblins")
               elves-lost (- (count-by-type initial-field :elf) elves-left)]
           {:winner winner :elves-lost elves-lost :rounds i :final-field processed :power power :initial-field initial-field})
+        :else
         (recur (inc i) processed)))))
 
 (defn find-optimal-attack-power [field]
   (let [[result max-power prev-power] (loop [power 4 prev-power 4]
                                         (println (java.util.Date.) "Looping up range" prev-power power)
                                         (let [result (run-combat-2 field power)]
+                                          (println (-> result
+                                                       (assoc :final-field nil)
+                                                       (assoc :initial-field nil)))
                                           (if (and (= "Elves" (:winner result))
                                                    (= 0 (:elves-lost result)))
                                             [result power prev-power]
@@ -277,6 +337,24 @@
             (recur power min-power (assoc results power result))
             (recur max-power power results)))))))
 
+(defn summarize [result]
+  (let [rounds (get result :rounds)
+        _ (println "result hps" (map :hp (map second (combatants (get result :final-field)))))
+        hps (apply + (map :hp (map second (combatants (get result :final-field)))))
+        result (if (and rounds hps)
+                 (assoc result :outcome (* rounds hps))
+                 result)
+        result (dissoc result :final-field :initial-field)
+        ]
+    result))
+
 ;; 22932
 ;; ---> answer <---
 ;; 67160
+;; 73170
+
+
+;; (summarize (run-combat-2 (parse-input large-input) 3))
+;; result hps (119 107 134 113 74 134 191 194 173 41 149 56 68 119 98)
+;; {:winner "Goblins", :elves-lost 10, :rounds 150, :power 3, :outcome 265500}
+;; The correct answer, from above, is 264384.
