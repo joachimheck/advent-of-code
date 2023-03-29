@@ -167,7 +167,8 @@
     (if (empty? targets)
       (assoc field :finished true)
       (let [destinations (filter #(reachable-from? % unit field) (find-open-adjacent targets field))]
-        (if (some #{p} destinations) ; already adjacent to a target
+        ;; (println "Moving" unit "already adjacent?" (some (set (adjacent-points p)) (map first targets)) (set (adjacent-points p)) (map first targets))
+        (if (some (set (adjacent-points p)) (map first targets)) ; already adjacent to a target
           field
           (let [destination (find-closest unit destinations field)]
             (if destination
@@ -288,24 +289,14 @@
     (printf "Elf attack power: %d\n" power)
     (printf "Outcome: %d * %d = %d\n" rounds (total-hp final-field) (* rounds (total-hp final-field)))))
 
-(defn run-combat-2 [initial-field power]
+(defn run-combat-2 [initial-field power & {:keys [debug] :as opts}]
   (loop [i 0 field (set-attack-power initial-field power)]
+    (if debug
+      (do
+       (println "\nAfter" i "rounds:")
+       (println (print-field field))))
     (let [processed (proc-all field)]
-      ;; (if (and (> i 0) (= 0 (mod i 1000)))
-      ;;   (println processed)
-      ;;   ;; (println (print-field processed))
-      ;;   ;; (println (combatants processed))
-      ;;   ;; (println "elves:" (filter #(= :elf (:type %)) (vals processed))
-      ;;   ;;            "goblins:" (filter #(= :goblin (:type %)) (vals processed)))
-      ;;   )
-      ;; (if (<= 100 i 105)
-      ;;   (println (print-field processed)))
       (cond
-        ;; (= processed field)
-        ;;     {:winner "loop" :rounds i}
-        ;; (and (<= (count-by-type processed :elf) 0)
-        ;;      (<= (count-by-type processed :goblin) 0 ))
-        ;; {:winner "all dead" :rounds i}
         (get processed :finished)
         (let [elves-left (count-by-type processed :elf)
               goblins-left (count-by-type processed :goblin)
@@ -339,7 +330,6 @@
 
 (defn summarize [result]
   (let [rounds (get result :rounds)
-        _ (println "result hps" (map :hp (map second (combatants (get result :final-field)))))
         hps (apply + (map :hp (map second (combatants (get result :final-field)))))
         result (if (and rounds hps)
                  (assoc result :outcome (* rounds hps))
@@ -358,3 +348,45 @@
 ;; result hps (119 107 134 113 74 134 191 194 173 41 149 56 68 119 98)
 ;; {:winner "Goblins", :elves-lost 10, :rounds 150, :power 3, :outcome 265500}
 ;; The correct answer, from above, is 264384.
+
+
+;; (time (find-optimal-attack-power (parse-input small-input)))
+;; #inst "2023-03-29T12:40:04.372-00:00" Looping up range 4 4
+;; {:winner Goblins, :elves-lost 2, :rounds 47, :final-field nil, :power 4, :initial-field nil}
+;; #inst "2023-03-29T12:40:04.428-00:00" Looping up range 4 8
+;; {:winner Goblins, :elves-lost 2, :rounds 49, :final-field nil, :power 8, :initial-field nil}
+;; #inst "2023-03-29T12:40:04.456-00:00" Looping up range 8 16
+;; {:winner Elves, :elves-lost 0, :rounds 27, :final-field nil, :power 16, :initial-field nil}
+;; #inst "2023-03-29T12:40:04.471-00:00" Binary search range 8 16
+;; #inst "2023-03-29T12:40:04.486-00:00" Binary search range 12 16
+;; #inst "2023-03-29T12:40:04.500-00:00" Binary search range 14 16
+;; #inst "2023-03-29T12:40:04.516-00:00" Binary search range 14 15
+;; Combat ends after 29 full rounds
+;; Elves win with 172 total hit points left
+;; Elf losses: 0
+;; Elf attack power: 15
+;; Outcome: 29 * 172 = 4988
+;; "Elapsed time: 147.6266 msecs"
+;; nil
+
+;; (time (find-optimal-attack-power (parse-input large-input)))
+;; #inst "2023-03-29T12:40:36.084-00:00" Looping up range 4 4
+;; {:winner Goblins, :elves-lost 10, :rounds 100, :final-field nil, :power 4, :initial-field nil}
+;; #inst "2023-03-29T12:41:53.850-00:00" Looping up range 4 8
+;; {:winner Elves, :elves-lost 8, :rounds 117, :final-field nil, :power 8, :initial-field nil}
+;; #inst "2023-03-29T12:42:55.529-00:00" Looping up range 8 16
+;; {:winner Elves, :elves-lost 2, :rounds 55, :final-field nil, :power 16, :initial-field nil}
+;; #inst "2023-03-29T12:43:57.525-00:00" Looping up range 16 32
+;; {:winner Elves, :elves-lost 0, :rounds 41, :final-field nil, :power 32, :initial-field nil}
+;; #inst "2023-03-29T12:44:54.497-00:00" Binary search range 16 32
+;; #inst "2023-03-29T12:45:59.443-00:00" Binary search range 16 24
+;; #inst "2023-03-29T12:47:02.822-00:00" Binary search range 16 20
+;; #inst "2023-03-29T12:48:00.298-00:00" Binary search range 18 20
+;; #inst "2023-03-29T12:48:55.740-00:00" Binary search range 19 20
+;; Combat ends after 46 full rounds
+;; Elves win with 1457 total hit points left
+;; Elf losses: 0
+;; Elf attack power: 20
+;; Outcome: 46 * 1457 = 67022
+;; "Elapsed time: 499663.788 msecs"
+;; nil
