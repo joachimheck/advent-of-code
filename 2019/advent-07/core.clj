@@ -60,10 +60,10 @@
    (assoc memory c (* (get-value a memory (get p-modes 0 0)) (get-value b memory (get p-modes 1 0))))
    inputs outputs])
 
-(defn op-set [a b c p-modes ip memory inputs outputs]
-  [(+ ip 2) (assoc memory a (first inputs)) (rest inputs) outputs])
+(defn op-in [a b c p-modes ip memory inputs outputs]
+  [(+ ip 2) (assoc memory a (first inputs)) (vec (rest inputs)) outputs])
 
-(defn op-get [a b c p-modes ip memory inputs outputs]
+(defn op-out [a b c p-modes ip memory inputs outputs]
   [(+ ip 2) memory inputs (conj outputs (get-value a memory (get p-modes 0 0)))])
 
 (defn op-jt [a b c p-modes ip memory inputs outputs]
@@ -97,8 +97,8 @@
 
 (def ops-by-code {1 op-add
                   2 op-mul
-                  3 op-set
-                  4 op-get
+                  3 op-in
+                  4 op-out
                   5 op-jt
                   6 op-jf
                   7 op-lt
@@ -147,4 +147,62 @@
 
 
 ;; Part 2
-;; 
+;; Loop the amplifiers. What's the highest signal that can be sent to the thrusters?
+(defn run-amplifier [{:keys [name ip memory inputs outputs]}]
+  ;; (println "run-amplifier" name inputs)
+  (loop [ip ip
+         memory memory
+         inputs inputs
+         outputs outputs]
+    ;; (println "loop" ip memory inputs)
+    (let [[operation a b c] (for [i (range 4)] (get memory (+ ip i) 0))
+          {:keys [opcode p-modes]} (parse-operation operation)]
+      (if (or (= (get ops-by-code opcode) op-ex)
+              (and (= (get ops-by-code opcode) op-in) (empty? inputs)))
+        {:name name
+         :ip ip
+         :memory memory
+         :inputs []
+         :outputs outputs}
+        (let [[new-ip new-memory new-inputs new-outputs] (do-op opcode a b c p-modes ip memory inputs outputs)]
+          ;; (println "inputs before/after" (get ops-by-code opcode) inputs new-inputs)
+          (recur new-ip new-memory new-inputs new-outputs))))))
+
+(defn running? [{:keys [ip memory]}]
+  (not= (get memory ip) 99))
+
+(defn loop-amplifiers [program phase-settings]
+  (let [phase-settings (vec phase-settings)
+        states (vec (for [i (range (count phase-settings))]
+                      {:name (get ["A" "B" "C" "D" "E"] i)
+                       :ip 0
+                       :memory (pad-array program)
+                       :inputs (if (= i 0) [(get phase-settings i) 0] [(get phase-settings i)])
+                       :outputs []}))]
+    (loop [amp 0 states states previous-output nil i 0]
+      (if (not (running? (get states amp)))
+        previous-output
+        (let [new-state (run-amplifier (get states amp))
+              outputs (:outputs new-state)
+              next-amp (mod (inc amp) 5)
+              new-states (-> states
+                             (assoc amp (assoc new-state :outputs []))
+                             (assoc next-amp (update (get states next-amp) :inputs #(vec (concat % outputs)))))]
+          (recur next-amp new-states (first outputs) (inc i)))))))
+
+(defn compute-max-thruster-signal-2 [program]
+  (last (sort-by second (map (fn [settings]
+                               ;; (println (vec settings))
+                               ;; (println (list settings (loop-amplifiers program settings)))
+                               (list settings (loop-amplifiers program settings)))
+                             (permutations [5 6 7 8 9])))))
+
+;; (loop-amplifiers [3,26,1001,26,-4,26,3,27,1002,27,2,27,1,27,26,27,4,27,1001,28,-1,28,1005,28,6,99,0,0,5] [9 8 7 6 5])
+;; 139629729
+
+;; (loop-amplifiers [3,52,1001,52,-5,52,3,53,1,52,56,54,1007,54,5,55,1005,55,26,1001,54,-5,54,1105,1,12,1,53,54,53,1008,54,0,55,1001,55,1,55,2,53,55,53,4,53,1001,56,-1,56,1005,56,6,99,0,0,0,0,10] [9 7 8 5 6])
+;; 18216
+
+;; (time (compute-max-thruster-signal-2 (parse-input large-input)))
+;; "Elapsed time: 135.0536 msecs"
+;; ((6 7 9 5 8) 79846026)
