@@ -18,7 +18,7 @@
 ;; Day 7: Amplification Circuit
 
 ;; Part 1
-;; 
+;; What's the highest signal that can be sent to the thrusters?
 
 (defn parse-input [f]
   (load-string (str/join (list "[" (first (read-lines f)) "]"))))
