@@ -84,8 +84,11 @@
                               (str (count-visible [i j] asteroids))
                               ".")))))))
 
+(defn sort-by-visibility [asteroids]
+  (sort-by second (map #(list % (count-visible % asteroids)) asteroids)))
+
 (defn find-highest-visibility [asteroids]
-  (last (sort-by second (map #(list % (count-visible % asteroids)) asteroids))))
+  (last (sort-by-visibility asteroids)))
 
 (def small-input-2 "small-input-2.txt")
 (def small-input-3 "small-input-3.txt")
@@ -132,3 +135,44 @@
 ;; Part 2
 ;; What is (+ y (* 100 x)) for the x and y coordinates of the last asteroid to be vaporized?
 ;; TODO: compute the angle to each visible asteroid, remove in angle order, repeat with remaining asteroids.
+(defn round-it [n]
+  (/ (Math/round (* n 65536)) 65536))
+
+(defn to-polar [x y]
+  [(Math/sqrt (+ (* x x) (* y y))) (round-it (Math/atan2 y x))])
+
+(def small-input-6 "small-input-6.txt")
+
+(defn lazerize-asteroids [[ax ay :as asteroid] asteroids]
+  (loop [asteroids (remove #{asteroid} asteroids)
+         vaporized []
+         i 0]
+    (if (or (= 20 i) (empty? asteroids))
+      vaporized
+      (let [data (sort-by last
+                          (map (fn [[x y]]
+                                 (let [[r theta] (to-polar (- x ax) (- y ay))]
+                                   (list [x y]
+                                         [r theta]
+                                         (if (< (+ theta (round-it (/ Math/PI 2))) 0) (round-it (+ theta (* 2 Math/PI))) theta))))
+                               (visible-from asteroid asteroids)))
+            new-asteroids (remove (set (map first data)) asteroids)
+            vaporized (vec (concat vaporized (map first data)))]
+        (println "Vaporized" (count data) "asteroids," (count new-asteroids) "remaining.")
+        (recur new-asteroids vaporized (inc i))))))
+
+;; ---> answer <---
+;; 2600
+;; Also wrong:
+;; ([0 7] 7) ([4 10] 410)
+
+(def test-input "test-input.txt")
+(def test-input-2 "test-input-2.txt")
+
+(defn find-200th-vaporized [asteroid asteroids]
+  (let [[x y] (nth (lazerize-asteroids asteroid asteroids) 200)]
+    (list [x y] (+ (* 100 x) y))))
+
+(defn find-last-vaporized [asteroid asteroids]
+  (let [[x y] (last (lazerize-asteroids asteroid asteroids))]
+    (list [x y] (+ (* 100 x) y))))
