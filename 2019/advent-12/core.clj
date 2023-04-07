@@ -47,12 +47,8 @@
   (reduce (fn [moons [[name1 moon1] [name2 moon2]]]
             (let [p1 (:position moon1)
                   p2 (:position moon2)
-                  change1 [(velocity-change (get p1 0) (get p2 0))
-                           (velocity-change (get p1 1) (get p2 1))
-                           (velocity-change (get p1 2) (get p2 2))]
-                  change2 [(velocity-change (get p2 0) (get p1 0))
-                           (velocity-change (get p2 1) (get p1 1))
-                           (velocity-change (get p2 2) (get p1 2))]]
+                  change1 (vec (map velocity-change p1 p2))
+                  change2 (vec (map velocity-change p2 p1))]
               (-> moons
                   (update-in [name1 :velocity] #(vec+ % change1))
                   (update-in [name2 :velocity] #(vec+ % change2)))))
@@ -105,4 +101,58 @@
 
 
 ;; Part 2
-;; 
+;; How many steps does it take to reach a previous state?
+(def apply-all (comp apply-total-energy apply-ke apply-pe apply-velocity apply-gravity))
+
+(def apply-all-2 (comp apply-total-energy apply-ke apply-pe apply-velocity apply-gravity-2))
+
+(defn apply-gravity-one-dimension [moons dimension]
+  (let [sorted (sort-by first (apply merge-with concat (map (fn [[name stats]] {(get-in stats [:position dimension]) (list name)}) moons)))
+        pos-count (count sorted)
+        indexed (map-indexed list sorted)]
+    ;; (println "indexed" indexed)
+    (reduce (fn [acc [index [pos moons-at-pos]]]
+              (let [before (apply + (map #(count (second (second %))) (filter #(< (first %) index) indexed)))
+                    after (apply + (map #(count (second (second %))) (filter #(> (first %) index) indexed)))]
+                (reduce (fn [acc m] (assoc acc m (- after before))) acc moons-at-pos)))
+            {}
+            indexed)))
+
+(defn apply-gravity-2 [moons]
+  (let [accelerations (vec (for [dimension [0 1 2]]
+                          (apply-gravity-one-dimension moons dimension)))]
+    (reduce (fn [moons name]
+              (update-in moons [name :velocity] (fn [v] (vec+ v (mapv #(get-in accelerations [% name]) [0 1 2])))))
+            moons
+            (keys moons))))
+
+(defn apply-acceleration [moons]
+  (let [by-dimension (vec (for [dimension [0 1 2]]
+                   (apply-gravity-one-dimension moons dimension)))]
+    (reduce (fn [acc name]
+              (assoc-in acc [name :acceleration] (mapv #(get-in by-dimension [% name]) [0 1 2])))
+            moons
+            moon-names)))
+
+(defn run-until-initial-state [moons process-fn]
+  (let [initial-moons (process-fn moons)]
+    (loop [moons initial-moons
+           i 0]
+      ;; (if (and (> i 0) (= 0 (mod i 100)))
+      ;;   (println ))
+      (if (and (> i 0) (= moons initial-moons))
+        i
+        (recur (apply-all moons) (inc i))))))
+
+(defn compute-orbit-2 [moons steps]
+  (nth (iterate (comp apply-total-energy apply-ke apply-pe apply-velocity apply-gravity-2) moons) steps))
+
+(defn sum-total-energy-2 [moons steps]
+  (apply + (map :total-energy (vals (compute-orbit-2 moons steps)))))
+
+
+(deftest test-sum-total-energy-2
+  (is (= 179 (sum-total-energy-2 (parse-input small-input) 10)))
+  (is (= 1940 (sum-total-energy-2 (parse-input small-input-2) 100))))
+
+;; TODO: From the accelerations, figure out how many steps we can go until the moons change position.
