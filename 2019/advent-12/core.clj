@@ -142,7 +142,7 @@
         i
         (recur (apply-all moons) (inc i))))))
 
-(def apply-all-2 (comp apply-total-energy apply-ke apply-pe apply-velocity apply-gravity-2))
+(def apply-all-2 (comp apply-acceleration apply-velocity apply-gravity))
 
 (defn compute-orbit-2 [moons steps]
   (nth (iterate (comp apply-total-energy apply-ke apply-pe apply-velocity apply-gravity-2) moons) steps))
@@ -164,44 +164,126 @@
 ;; (+ (* 2 pa) (* 2 va t) (* aa t t)) = (+ (* 2 pb) (* 2 vb t) (* ab t t))
 ;; (- (+ (* 2 va t) (* aa t t)) (+ (* 2 vb t) (* ab t t))) = (- (* 2 pb) (* 2 pa))
 (defn roots [a b c]
-  [(/ (+ (- b) (Math/sqrt (- (* b b) (* 4 a c)))) (* 2 a))
-   (/ (- (- b) (Math/sqrt (- (* b b) (* 4 a c)))) (* 2 a))])
+  (filter
+   #(and (not= ##NaN %) (not= ##Inf %) (not= ##-Inf %))
+   [(/ (+ (- b) (Math/sqrt (- (* b b) (* 4 a c)))) (* 2 a))
+    (/ (- (- b) (Math/sqrt (- (* b b) (* 4 a c)))) (* 2 a))]))
 
 (defn intersection [p1 v1 a1 p2 v2 a2]
-  (roots (- a1 a2) (- (* 2 v1) (* 2 v2)) (- p1 p2)))
+  (if (= p1 p2)
+    [1]
+    (roots (- a1 a2) (- (* 2 v1) (* 2 v2)) (- p1 p2))))
 
 (defn steps-until-intersection [moon1 moon2]
+  ;; (println "steps-until-intersection" moon1 moon2)
   (let [[p1 v1 a1] (let [{:keys [position velocity acceleration]} moon1] [position velocity acceleration])
         [p2 v2 a2] (let [{:keys [position velocity acceleration]} moon2] [position velocity acceleration])
         _ (if (some nil? [p1 v1 a1 p2 v2 a2]) (println "nil input" moon1 moon2))
-        intersections (map #(intersection (get p1 %) (get v1 %) (get a1 %) (get p2 %) (get v2 %) (get a2 %)) [0 1 2])]
-    (apply min (map #(int (Math/ceil %)) (flatten (map (fn [v] (filter #(> % 0) v)) intersections))))))
+        intersections (map #(intersection (get p1 %) (get v1 %) (get a1 %) (get p2 %) (get v2 %) (get a2 %)) [0 1 2])
+        int-intersections (map #(int (Math/floor %)) (flatten (map (fn [v] (filter #(> % 0) v)) intersections)))]
+    ;; (println "int-intersections" int-intersections)
+    (if (= (count int-intersections) 0)
+      1
+      (max 1 (apply min int-intersections)))))
+
+(defn steps-until-direction-change [moon1 moon2 axis]
+  (let [v1 (get-in (second moon1) [:velocity axis])
+        a1 (get-in (second moon1) [:acceleration axis])
+        v2 (get-in (second moon2) [:velocity axis])
+        a2 (get-in (second moon2) [:acceleration axis])]
+    (if (or (and (neg? v1) (pos? v2)) (and (pos? v1) (neg? v2)))
+      (min (filter pos? (list (if (= a1 0) -1 (int (Math/ceil (- (/ v1 a1))))) (if (= a2 0) -1 (int (Math/ceil (- (/ v2 a2))))))))
+      1)))
+
+(defn steps-until-intersection-2 [moons]
+  (let [moon-pairs (pairs moons)]
+    (apply min (flatten (map (fn [[moon1 moon2]] (map (fn [axis] (steps-until-direction-change moon1 moon2 axis)) [0 1 2])) moon-pairs)))))
 
 (defn vec* [v k]
   (mapv #(* k %) v))
 
+;; if even (n+1)(n/2)
+;; if odd (n+1)(floor n/2) + (ceil n/2)
+
+(defn sum-to-n [n]
+  (if (even? n)
+    (* (+ n 1) (quot n 2))
+    (+ (* (+ n 1) (quot n 2)) (+ 1 (quot n 2)))))
+
 (defn compute-velocity-and-position [moons steps]
   (reduce (fn [moons [name {:keys [position velocity acceleration] :as moon}]]
-            (-> moons
-                (assoc name {:velocity (vec+ velocity (vec* acceleration steps))})
-                (assoc name {:position (vec+ position (vec* velocity steps) (vec* acceleration (/ (* steps steps) 2)))})))
-          {}
+            (let [new-v (vec+ velocity (vec* acceleration steps))
+                  new-p (vec+ position (vec+ (vec* velocity steps) (vec* acceleration (sum-to-n steps))))]
+              (-> moons
+                  (assoc-in [name :velocity] new-v)
+                  (assoc-in [name :position] new-p))))
+          moons
           moons))
 
-(defn run-until-initial-state-2 [moons]
+(defn state-after-steps [moons steps]
   (let [initial-moons (apply-acceleration moons)]
     (loop [moons initial-moons
+           step 0]
+      (if (= step steps)
+        moons
+        (recur (apply-all-2 moons) (inc step))))))
+
+(defn run-until-initial-state-2 [moons max-iterations]
+  (let [initial-moons (apply-acceleration moons)]
+    (loop [moons initial-moons
+           check-moons initial-moons
            i 0
            total-steps 0]
-      (if (and (> i 0) (= moons initial-moons))
-        {:iterations i
-         :steps total-steps}
-        (let [steps (apply min (map (fn [[[_ moon1] [_ moon2]]] (steps-until-intersection moon1 moon2)) (pairs moons)))]
-          (if (= steps 0) (println "zero steps"))
-          (recur (compute-velocity-and-position moons steps) (inc i) (+ total-steps steps)))))))
+      ;; (if (and (> i 0) (= 0 (mod i 100))) (println i))
+      (if (not= moons check-moons)
+          {:error "incorrect state"
+           :iterations i
+           :steps total-steps
+           :moons moons
+           :correct-moons check-moons}
+          (if (or (= i max-iterations) (and (> i 0) (= moons initial-moons)))
+            {:iterations i
+             :steps total-steps
+             :moons moons}
+            (let [
+                  ;; steps (apply min (map (fn [[[_ moon1] [_ moon2]]] (steps-until-intersection moon1 moon2)) (pairs moons)))
+                  steps (steps-until-intersection-2 moons)
+                  ]
+              ;; (println "About to take" steps "steps. moons:" moons)
+              (if (= steps 0) (println "zero steps"))
+              (recur (apply-acceleration (compute-velocity-and-position moons steps))
+                     (state-after-steps moons steps)
+                     (inc i)
+                     (+ total-steps steps))))))))
 
 
 ;; We're losing acceleration and velocity, and getting fractional position values.
 ;; Also, the current code doesn't handle the points where the moons change orders (and accelerations).
 ;; (run-until-initial-state-2 (parse-input small-input))
 ;; nil input {:position [1/2 -1/2 3/2]} {:position [5/2 -17/2 -11/2]}
+
+;; (run-until-initial-state-2 (parse-input small-input) 2800)
+;; {:iterations 2800,
+;;  :steps 2802,
+;;  :moons
+;;  {"Io" {:position [-1 -3 6], :velocity [0 -2 1], :acceleration [3 -1 -3]},
+;;   "Europa" {:position [4 -2 3], :velocity [1 5 3], :acceleration [-3 -3 -1]},
+;;   "Ganymede" {:position [2 -4 -2], :velocity [-1 3 -3], :acceleration [1 2 1]},
+;;   "Callisto" {:position [3 -4 -5], :velocity [0 -6 -1], :acceleration [-1 2 3]}}}
+
+;; I think the code is working as designed now but we're skipping over the initial state, so we don't stop correctly.
+;; Furthermore, doing 2802 steps in 2800 iterations is hardly enough savings to solve the problem.
+;; Weird - does that mean we are only skipping steps exactly as we reach the initial state again? Is that a coincidence?
+;; I don't see how the energy calculations from part 1 can help, but maybe that could bear some more consideration.
+
+;; (run-until-initial-state-2 (parse-input small-input) 3000)
+;; {:iterations 2772,
+;;  :steps 2772,
+;;  :moons
+;;  {"Io" {:position [-1 0 2], :velocity [0 0 0], :acceleration [3 -1 -1]},
+;;   "Europa" {:position [2 -10 -7], :velocity [0 0 0], :acceleration [1 3 3]},
+;;   "Ganymede" {:position [4 -8 8], :velocity [0 0 0], :acceleration [-3 1 -3]},
+;;   "Callisto" {:position [3 5 -1], :velocity [0 0 0], :acceleration [-1 -3 1]}}}
+
+;; I replaced the intersection computation with one to check when velocities stop having opposite direction.
+;; Now it seems we don't skip any steps at all!
