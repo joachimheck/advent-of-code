@@ -150,7 +150,6 @@
 (defn sum-total-energy-2 [moons steps]
   (apply + (map :total-energy (vals (compute-orbit-2 moons steps)))))
 
-
 (deftest test-sum-total-energy-2
   (is (= 179 (sum-total-energy-2 (parse-input small-input) 10)))
   (is (= 1940 (sum-total-energy-2 (parse-input small-input-2) 100))))
@@ -234,6 +233,9 @@
            check-moons initial-moons
            i 0
            total-steps 0]
+      (println i (:position (get moons "Io")))
+      ;; (let [with-energy (apply-ke (apply-pe moons))]
+      ;;  (println i "/" total-steps "pe" (apply + (map (comp :pe second) with-energy)) "ke" (apply + (map (comp :ke second) with-energy))))
       ;; (if (and (> i 0) (= 0 (mod i 100))) (println i))
       (if (not= moons check-moons)
           {:error "incorrect state"
@@ -287,3 +289,39 @@
 
 ;; I replaced the intersection computation with one to check when velocities stop having opposite direction.
 ;; Now it seems we don't skip any steps at all!
+
+;; I checked with the internet - I hadn't noticed that the individual coordinates of the moons' positions move in
+;; repeating cycles. So the trick is to identify the lengths of all the cycles.
+
+(defn all-indexes-of [n coll]
+  (map first (filter #(= (second %) n) (map-indexed vector coll))))
+
+(defn loops [seen potential-loops]
+  (filter (fn [[a b]]
+            (> (- (count seen) b) (- b a))
+            )
+          potential-loops))
+
+(defn find-loop [ns]
+  (loop [ns ns
+         seen []
+         potential-loops []]
+    (let [loops (filter (fn [[a b]] (> (- (count seen) b) (inc (- b a)))) potential-loops)]
+      (if (empty? loops)
+       (let [n (first ns)
+             new-seen (conj seen n)
+             current-index (count seen)
+             previous-indices (all-indexes-of n seen)
+             new-potential-loops (apply conj potential-loops (mapv #(list % current-index) previous-indices))
+             new-potential-loops (vec (remove (fn [[a b]]
+                                                (let [s2 (subvec seen b)
+                                                      s1 (subvec seen a (+ a (count s2)))]
+                                                  (not= s1 s2)))
+                                              new-potential-loops))]
+         (recur (rest ns) new-seen new-potential-loops))
+       loops))))
+
+;; (find-loop (take 20 (apply concat (repeat [1 2 3 3 2 1]))))
+;; ((0 6))
+
+;; OK, I have a loop finder so now I need to apply it to the various coordinate numbers coming out of the orbit simulation.
