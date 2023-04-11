@@ -325,3 +325,40 @@
 ;; ((0 6))
 
 ;; OK, I have a loop finder so now I need to apply it to the various coordinate numbers coming out of the orbit simulation.
+
+;; TODO: instead of seqs, use vs where each v is in an infinite sequence of vectors.
+
+(defn find-loops [seqs]
+  (loop [state {:seqs (vec seqs)
+                :seen {}
+                :potential-loops {}
+                :loops {}}]
+    (let [{:keys [seen loops]} state]
+      (if (= (count loops) (count seqs))
+        loops
+        (recur
+         (reduce (fn [acc [i ns]]
+                   (let [seen (get-in acc [:seen i] [])
+                         potential-loops (get-in acc [:potential-loops i] [])
+                         loops (get-in acc [:loops i] [])]
+                     (if (get loops i)
+                       acc
+                       (let [n (first ns)
+                             new-seen (conj seen n)
+                             current-index (count seen)
+                             previous-indices (all-indexes-of n seen)
+                             new-potential-loops (apply conj potential-loops (mapv #(list % current-index) previous-indices))
+                             new-potential-loops (vec (remove (fn [[a b]]
+                                                                (let [s2 (subvec seen b)
+                                                                      s1 (subvec seen a (+ a (count s2)))]
+                                                                  (not= s1 s2)))
+                                                              new-potential-loops))
+                             new-loops (filter (fn [[a b]] (> (- (count seen) b) (inc (- b a)))) potential-loops)]
+                         (-> acc
+                             (assoc-in [:seqs i] (rest ns))
+                             (assoc-in [:seen i] new-seen)
+                             (assoc-in [:potential-loops i] new-potential-loops)
+                             (assoc-in [:loops i] new-loops))
+                         ))))
+                 state
+                 (map-indexed list seqs)))))))
