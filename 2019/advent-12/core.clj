@@ -343,11 +343,12 @@
                                                  (or (not= s1 s2)
                                                      (< (- b a) 3))))
                                              new-potential-loops))
-            new-loops (filter (fn [[a b]] (> (- (count seen) b) (inc (- b a)))) potential-loops)]
+            new-loops (filter (fn [[a b]] (> (- (count seen) b) (inc (- b a)))) potential-loops)
+            loop (if (and (empty? loops) (seq new-loops)) (first new-loops))]
         (cond-> acc
-          true (assoc-in [:seen i] new-seen)
-          true (assoc-in [:potential-loops i] new-potential-loops)
-          (and (empty? loops) (seq new-loops)) (assoc-in [:loops i] (first new-loops)))))))
+          true (assoc-in [:seen i] (if loop [] new-seen))
+          true (assoc-in [:potential-loops i] (if loop [] new-potential-loops))
+          loop (assoc-in [:loops i] loop))))))
 
 (defn break-up-state [moons]
   (for [moon-name (keys moons)
@@ -440,10 +441,10 @@
 ;;                   (distinct (map (fn [k-tuple] (prime-factors (apply * (map (fn [k] (second (get loops k))) k-tuple)))) k-tuples)))
 
 (defn lcm [ns]
-  (reduce (fn [acc [n p]]
-            (* acc (apply * (repeat p n))))
-          1
-          (apply merge-with max (map prime-factors ns))))
+  (long (reduce (fn [acc [n p]]
+                  (* (bigint acc) (apply * (repeat (bigint p) (bigint n)))))
+                1
+                (apply merge-with max (map prime-factors ns)))))
 
 (defn find-shortest-loop [moons]
   (let [loops (:loops (find-loops (iterate apply-all-3 (apply-velocity moons))))]
@@ -456,3 +457,122 @@
 ;; ...
 ;; 57600 22
 ;; 57700 23
+
+(defn break-up-state-2 [moons]
+  (into {}
+        (for [moon-name (keys moons)
+              coordinate [["x" 0] ["y" 1] ["z" 2]]]
+          [(format "%s-%s" moon-name (first coordinate))
+           (map #(get-in moons [moon-name % (second coordinate)]) [:position :velocity])])))
+
+(defn find-loops-initial [moon-states-initial]
+  (loop [moon-states (rest moon-states-initial)
+         state {:initial (break-up-state-2 (first moon-states-initial))
+                :loops {}}
+         i 1]
+    ;; (println state)
+    ;; (if (and (> i 0) (= 0 (mod i 100))) (println i (count (:loops state))))
+    (let [{:keys [initial loops]} state]
+      ;; (println "Considering" (keys (apply dissoc initial (set (keys loops)))))
+      ;; (println "loops" loops)
+      (if (or (empty? moon-states) (= (count loops) 12))
+        {:iterations i
+         :loops loops}
+        (recur (rest moon-states)
+               (assoc state :loops (merge loops (into {} (map (fn [[name [p v]]] [name i])
+                                                              (filter (set (break-up-state-2 (first moon-states)))
+                                                                      (apply dissoc initial (set (keys loops))))))))
+               (inc i))))))
+
+(defn find-shortest-loop-initial [moons]
+  (let [loops (:loops (find-loops-initial (iterate apply-all-3 (apply-velocity moons))))]
+    (println "loops" loops)
+    (lcm (for [moon-name moon-names]
+           (lcm (for [c ["x" "y" "z"]]
+                  (get loops (format "%s-%s" moon-name c))))))))
+
+;; ---> answer <---
+;; 611985407937120
+
+;; Reddit says checking the six parameters independently will result in false positives when detecting loops,
+;; so I'll try doing it per moon, checking all six parameters for each moon.
+(defn find-loops-per-moon [moon-states-initial]
+  (loop [moon-states (rest moon-states-initial)
+         state {:initial (first moon-states-initial)
+                :loops {}}
+         i 1]
+    ;; (println state)
+    ;; (if (and (> i 0) (= 0 (mod i 100))) (println i (count (:loops state))))
+    (let [{:keys [initial loops]} state]
+      ;; (println "Considering" (keys (apply dissoc initial (set (keys loops)))))
+      ;; (println "loops" loops)
+      (if (or (empty? moon-states) (= (count loops) 4))
+        {:iterations i
+         :loops loops}
+        (recur (rest moon-states)
+               (assoc state :loops
+                      (merge loops (into {} (map (fn [[name {:keys [position velocity]}]] [name i])
+                                                 (filter (set (apply dissoc initial (set (keys loops))))
+                                                         (set (first moon-states)))))))
+               (inc i))))))
+
+(defn find-shortest-loop-per-moon [moons]
+  (let [loops (:loops (find-loops-per-moon (iterate apply-all-3 (apply-velocity moons))))]
+    (println "loops" loops)
+    (lcm (vals loops))))
+
+
+;; Looks like I can't even read Reddit right. They're doing it per-axis, not per-moon.
+(defn break-up-state-per-axis [moons]
+  (into {}
+        (for [axis [["x" 0] ["y" 1] ["z" 2]]]
+          [(first axis) (for [parameter [:position :velocity]
+                              moon-name moon-names]
+                          (get-in moons [moon-name parameter (second axis)]))])))
+
+(defn find-loops-per-axis [moon-states-initial]
+  (loop [moon-states (rest moon-states-initial)
+         state {:initial (break-up-state-per-axis (first moon-states-initial))
+                :loops {}}
+         i 1]
+    ;; (println state)
+    ;; (if (and (> i 0) (= 0 (mod i 100))) (println i (count (:loops state))))
+    (let [{:keys [initial loops]} state]
+      ;; (println "Considering" (keys (apply dissoc initial (set (keys loops)))))
+      ;; (println "loops" loops)
+      (if (or (empty? moon-states) (= (count loops) 3))
+        {:iterations i
+         :loops loops}
+        (recur (rest moon-states)
+               (assoc state :loops
+                      (merge loops (into {} (map (fn [[axis _]] [axis i])
+                                                 (filter (set (apply dissoc initial (set (keys loops))))
+                                                         (set (break-up-state-per-axis (first moon-states))))))))
+               (inc i))))))
+
+(defn find-shortest-loop-per-axis [moons]
+  (let [loops (:loops (find-loops-per-axis (iterate apply-all-3 (apply-velocity moons))))]
+    (println "loops" loops)
+    (lcm (vals loops))))
+
+
+;; Ok, that was it. All I had to do was go to reddit for the idea, then go to reddit again for the details
+;; of how to implement the idea, then go back to reddit a third time to figure out what was wrong with my
+;; implementation of the idea. This wasn't a big win for me. That said, I feel like the various choices
+;; I cycled through were all pretty arbitrary and any of them could have solved the problem in theory. I'm
+;; not sure how I was supposed to deduce which way was the right way.
+
+;; (time (find-shortest-loop-per-axis (parse-input small-input)))
+;; loops {x 18, y 28, z 44}
+;; "Elapsed time: 7.7735 msecs"
+;; 2772
+
+;; (time (find-shortest-loop-per-axis (parse-input small-input-2)))
+;; loops {x 2028, z 4702, y 5898}
+;; "Elapsed time: 532.1378 msecs"
+;; 4686774924
+
+;; (time (find-shortest-loop-per-axis (parse-input large-input)))
+;; loops {z 144624, x 161428, y 193052}
+;; "Elapsed time: 16276.0546 msecs"
+;; 281691380235984
