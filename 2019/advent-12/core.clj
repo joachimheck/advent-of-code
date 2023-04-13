@@ -316,7 +316,8 @@
              new-potential-loops (vec (remove (fn [[a b]]
                                                 (let [s2 (subvec seen b)
                                                       s1 (subvec seen a (+ a (count s2)))]
-                                                  (not= s1 s2)))
+                                                  (or (not= s1 s2)
+                                                      (< (- b a) 3))))
                                               new-potential-loops))]
          (recur (rest ns) new-seen new-potential-loops))
        loops))))
@@ -326,39 +327,132 @@
 
 ;; OK, I have a loop finder so now I need to apply it to the various coordinate numbers coming out of the orbit simulation.
 
-;; TODO: instead of seqs, use vs where each v is in an infinite sequence of vectors.
+(defn find-loop-multi [acc [i n]]
+  (let [seen (get-in acc [:seen i] [])
+        potential-loops (get-in acc [:potential-loops i] [])
+        loops (get-in acc [:loops i] [])]
+    (if (get loops i)
+      acc
+      (let [new-seen (conj seen n)
+            current-index (count seen)
+            previous-indices (all-indexes-of n seen)
+            new-potential-loops (apply conj potential-loops (mapv #(list % current-index) previous-indices))
+            new-potential-loops (vec (remove (fn [[a b]]
+                                               (let [s2 (subvec seen b)
+                                                     s1 (subvec seen a (+ a (count s2)))]
+                                                 (or (not= s1 s2)
+                                                     (< (- b a) 3))))
+                                             new-potential-loops))
+            new-loops (filter (fn [[a b]] (> (- (count seen) b) (inc (- b a)))) potential-loops)]
+        (cond-> acc
+          true (assoc-in [:seen i] new-seen)
+          true (assoc-in [:potential-loops i] new-potential-loops)
+          (and (empty? loops) (seq new-loops)) (assoc-in [:loops i] (first new-loops)))))))
 
-(defn find-loops [seqs]
-  (loop [state {:seqs (vec seqs)
-                :seen {}
+(defn break-up-state [moons]
+  (for [moon-name (keys moons)
+        parameter [:position :velocity]
+        coordinate [0 1 2]]
+    (list (format "%s-%s-%d" moon-name parameter coordinate) (get-in moons [moon-name parameter coordinate]))))
+
+(defn find-loops [moon-states]
+  (loop [moon-states moon-states
+         state {:seen {}
                 :potential-loops {}
-                :loops {}}]
+                :loops {}}
+         i 0]
+    (if (and (> i 0) (= 0 (mod i 100))) (println i (count (:loops state))))
     (let [{:keys [seen loops]} state]
-      (if (= (count loops) (count seqs))
-        loops
-        (recur
-         (reduce (fn [acc [i ns]]
-                   (let [seen (get-in acc [:seen i] [])
-                         potential-loops (get-in acc [:potential-loops i] [])
-                         loops (get-in acc [:loops i] [])]
-                     (if (get loops i)
-                       acc
-                       (let [n (first ns)
-                             new-seen (conj seen n)
-                             current-index (count seen)
-                             previous-indices (all-indexes-of n seen)
-                             new-potential-loops (apply conj potential-loops (mapv #(list % current-index) previous-indices))
-                             new-potential-loops (vec (remove (fn [[a b]]
-                                                                (let [s2 (subvec seen b)
-                                                                      s1 (subvec seen a (+ a (count s2)))]
-                                                                  (not= s1 s2)))
-                                                              new-potential-loops))
-                             new-loops (filter (fn [[a b]] (> (- (count seen) b) (inc (- b a)))) potential-loops)]
-                         (-> acc
-                             (assoc-in [:seqs i] (rest ns))
-                             (assoc-in [:seen i] new-seen)
-                             (assoc-in [:potential-loops i] new-potential-loops)
-                             (assoc-in [:loops i] new-loops))
-                         ))))
-                 state
-                 (map-indexed list seqs)))))))
+      (if (or (empty? moon-states) (= (count loops) 24))
+        {:iterations i
+         :loops loops}
+        (recur (rest moon-states)
+               (reduce find-loop-multi state (break-up-state (first moon-states)))
+               (inc i))))))
+
+(def apply-all-3 (comp apply-velocity apply-gravity))
+
+(defn parse-input-vector [f]
+  (->> f
+       (read-lines)
+       (map #(rest (re-matches #".+?([-\d]+).+?([-\d]+).+?([-\d]+).+" %)))
+       (map #(mapv parse-long %))
+       (flatten)
+       (vec)))
+
+(defn find-orbit-loops [moons]
+  (let [initial-moons (apply-all moons)]
+    (iterate apply-all moons)))
+
+
+;; (sort (:loops (find-loops (iterate apply-all-3 (apply-velocity (parse-input small-input))))))
+;; (["Callisto-:position-0" (0 6)]
+;;  ["Callisto-:position-1" (0 28)]
+;;  ["Callisto-:position-2" (0 44)]
+;;  ["Callisto-:velocity-0" (0 6)]
+;;  ["Callisto-:velocity-1" (0 28)]
+;;  ["Callisto-:velocity-2" (0 44)]
+;;  ["Europa-:position-0" (0 18)]
+;;  ["Europa-:position-1" (0 28)]
+;;  ["Europa-:position-2" (0 44)]
+;;  ["Europa-:velocity-0" (0 18)]
+;;  ["Europa-:velocity-1" (0 28)]
+;;  ["Europa-:velocity-2" (0 44)]
+;;  ["Ganymede-:position-0" (0 18)]
+;;  ["Ganymede-:position-1" (0 28)]
+;;  ["Ganymede-:position-2" (0 44)]
+;;  ["Ganymede-:velocity-0" (0 18)]
+;;  ["Ganymede-:velocity-1" (0 28)]
+;;  ["Ganymede-:velocity-2" (0 44)]
+;;  ["Io-:position-0" (0 6)]
+;;  ["Io-:position-1" (0 28)]
+;;  ["Io-:position-2" (0 44)]
+;;  ["Io-:velocity-0" (0 6)]
+;;  ["Io-:velocity-1" (0 28)]
+;;  ["Io-:velocity-2" (0 44)])
+
+(defn prime-factors [n]
+  (frequencies
+   (loop [n n
+          factors []]
+     (let [new-factor (reduce (fn [acc d] (if (= 0 (mod n d)) (reduced d) 0))
+                              0
+                              (range 2 (inc n)))]
+       (if (= new-factor n)
+         (conj factors new-factor)
+         (recur (quot n new-factor) (conj factors new-factor)))))))
+
+;; TODO: for each xyz triplet, compute the least common multiple (? the product of all the prime factors
+;; after factors common to all three numbers have been removed). Then, for the four numbers, compute the
+;; greatest common divisor?
+
+;; (apply * [6 28 44])
+;; 7392
+;; advent-12.core> (* (* 2 3) (* 2 2 7) (* 2 2 11))
+;; 7392
+;; advent-12.core> (* (* 3) (* 2 7) (* 2 11))
+;; 924
+
+;; (let [loops (:loops (find-loops (iterate apply-all-3 (apply-velocity (parse-input small-input)))))
+;;                       k-tuples (for [n moon-names]
+;;                                  (for [c [0 1 2]]
+;;                                    (format "%s-:position-%d" n c)))]
+;;                   (distinct (map (fn [k-tuple] (prime-factors (apply * (map (fn [k] (second (get loops k))) k-tuple)))) k-tuples)))
+
+(defn lcm [ns]
+  (reduce (fn [acc [n p]]
+            (* acc (apply * (repeat p n))))
+          1
+          (apply merge-with max (map prime-factors ns))))
+
+(defn find-shortest-loop [moons]
+  (let [loops (:loops (find-loops (iterate apply-all-3 (apply-velocity moons))))]
+    (println "loops" loops)
+    (lcm (for [moon-name moon-names]
+           (lcm (for [i [0 1 2]]
+                  (apply - (reverse (get loops (format "%s-:position-%d" moon-name i))))))))))
+
+;; (find-shortest-loop (parse-input large-input))
+;; ...
+;; 57600 22
+;; 57700 23
