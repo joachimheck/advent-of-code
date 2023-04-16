@@ -272,11 +272,9 @@
 
 (defn predict-x-intercept [[[x y] dir] grid]
   (let [[[ix iy] idir :as intercept] (first (drop-while (fn [[[x y] dir grid]] (or (< y 18) (and (>= y 18) (or (= dir :ne) (= dir :nw)))))
-                                                        (take 100 (iterate predict-next-ball-state [[x y] dir grid]))
-                                                        ;; (take 100 (iterate (fn [[[x y] dir]] (predict-next-ball-state [x y] dir grid)) [[x y] dir grid]))
-))]
+                                                        (take 100 (iterate predict-next-ball-state [[x y] dir grid]))))]
     ;; (println "predict-x-intercept" intercept)
-    (if ix ix 20)))
+    (if ix ix x)))
 
 (defn advance-program [state]
   (loop [state state]
@@ -314,44 +312,86 @@
          score 0
          blocks-left nil
          steps 0]
+
+    ;; (let [actual-pos (first (first (first (filter (fn [[[x y] v]] (= v 3)) grid))))]
+    ;;   (if (and (not= actual-pos nil) (not= paddle-pos actual-pos))
+    ;;     (println "Paddle position mismatch at step" steps "paddle-pos" paddle-pos "actual-pos" actual-pos)))
+
     (let [result (advance-program state)
           result-state (:state result)
-          outputs (:outputs result)
-          new-blocks-left (if (= -1 (first outputs)) (count (filter #(= 2 %) (vals grid))) blocks-left)]
+          [x y b :as outputs] (:outputs result)
+          new-blocks-left (if (= -1 x) (count (filter #(= 2 %) (vals grid))) blocks-left)]
+      ;; (if (and (not= -1 x) (= 3 b)) (println "setting paddle pos to" x))
       ;; (println "play-game" ball-state "prev-outputs" (:outputs state) "outputs" outputs "state outputs" (:outputs result-state))
       (cond
         ;; (and (= score 856) (= blocks-left 223)) (do (println "Ball" ball-state "intercept" (predict-x-intercept ball-state grid))
         ;;                                             (println (draw-grid grid)))
-        (or (:finished result) (and (> score 0) (= new-blocks-left 0))) (do (println (draw-grid grid))
-                                                                            {:final-score score
-                                                                             :blocks-left blocks-left
-                                                                             :ball-state ball-state
-                                                                             :steps steps})
+        (or (:finished result) (and (> score 0) (= new-blocks-left 0) (= -1 x))) (do (println (draw-grid grid))
+                                                                                     {:final-score b
+                                                                                      :blocks-left blocks-left
+                                                                                      :ball-state ball-state
+                                                                                      :steps steps})
         outputs (let [new-state (assoc result-state :outputs [])
                       new-grid (add-to-grid grid outputs)
-                      new-ball-state (if (= 4 (last outputs)) (determine-ball-state ball-state outputs) ball-state)
-                      new-score (if (= -1 (first outputs)) (last outputs) score)]
+                      new-ball-state (if (and (not= -1 x) (= 4 b)) (determine-ball-state ball-state outputs) ball-state)
+                      new-paddle-pos (if (and (not= -1 x) (= 3 b)) x paddle-pos)
+                      new-score (if (= -1 x) b score)]
                   (if (not= blocks-left new-blocks-left) (println "score" new-score "blocks" new-blocks-left "steps" steps))
-                  (recur new-state new-grid new-ball-state paddle-pos new-score new-blocks-left steps))
-        (:input-required result) (do (if (>= steps pause-after-steps)
-                                       (do
-                                         (newline)
-                                         (println "Ball state" (drop-last ball-state)
-                                                  "next" (drop-last (predict-next-ball-state [(first ball-state) (second ball-state) grid])))
-                                         (println "x-intercept" (predict-x-intercept ball-state grid))
-                                         (println (draw-grid grid))))
-                                     (if (or (< steps pause-after-steps) (= (read-line) " "))
-                                       (let [x-intercept (predict-x-intercept ball-state grid)
-                                             direction (compare x-intercept paddle-pos)]
+                  (recur new-state new-grid new-ball-state new-paddle-pos new-score new-blocks-left steps))
+        (:input-required result) (let [x-intercept (predict-x-intercept ball-state grid)
+                                       direction (compare x-intercept paddle-pos)]
+                                   
+                                   (do (if (>= steps pause-after-steps)
+                                         (do
+                                           (newline)
+                                           (println "Ball state" (drop-last ball-state)
+                                                    "next" (drop-last (predict-next-ball-state [(first ball-state) (second ball-state) grid])))
+                                           (println "x-intercept" x-intercept
+                                                    "paddle" paddle-pos
+                                                    "move" direction)
+                                           (println (draw-grid grid))))
+
+                                       (if (or (< steps pause-after-steps) (= (read-line) " "))
                                          (recur (assoc result-state :inputs [direction])
                                                 grid
                                                 ball-state
-                                                (+ paddle-pos direction)
+                                                paddle-pos ;; (+ paddle-pos direction)
                                                 score
                                                 new-blocks-left
-                                                (inc steps)))
-                                       :finished))))))
+                                                (inc steps))
+                                         :finished)))))))
 
 ;; TODO: game fails at step 250.
 ;; (play-game (parse-input large-input) 240)
 
+;; 11633
+;; ---> answer <---
+
+;; I needed to wait for the program to output the final score.
+
+;; (play-game (parse-input large-input) 100000)
+;; score 0 blocks 242 steps 0
+;; ...
+;; Score 11633
+;; WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
+;; W            O                         W
+;; W                                      W
+;; W                                      W
+;; W                                      W
+;; W                                      W
+;; W                                      W
+;; W                                      W
+;; W                                      W
+;; W                                      W
+;; W                                      W
+;; W                                      W
+;; W                                      W
+;; W                                      W
+;; W                                      W
+;; W                                      W
+;; W                                      W
+;; W                                      W
+;; W                                      W
+;; W     P                                W
+;; W                                      W
+;; {:final-score 11641, :blocks-left 1, :ball-state [[13 1] :nw], :steps 4356}
