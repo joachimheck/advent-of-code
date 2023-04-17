@@ -45,6 +45,7 @@
        1 0)))
 
 (defn get-required-inputs [[needed chemical] reactions]
+  ;; (println "get-required-inputs" needed chemical)
   (let [[[p-q _] inputs :as producer] (find-reaction-producing chemical reactions)
           multiple (if (> p-q needed)
                      1
@@ -88,3 +89,26 @@
 ;; and overallocating.
 ;; Build a tree with the required numbers of each chemical, then add the numbers for each chemical
 ;; to find the amounts of the precursor chemicals required. ?
+;; (build-tree '([1 "FUEL"]) reactions)
+(defn build-tree [[amount chemical :as parent] reactions]
+  ;; (println "build-tree" parent)
+  (if (= chemical "ORE")
+    (list amount chemical)
+    (concat (list parent) (map #(build-tree % reactions) (get-required-inputs parent reactions)))))
+
+;; ([1 "FUEL"]
+;;  ([7 "A"]
+;;   (10 "ORE"))
+;;  ([1 "E"]
+;;   ([7 "A"]
+;;    (10 "ORE"))
+;;   ([1 "D"]
+;;    ([7 "A"]
+;;     (10 "ORE"))
+;;    ([1 "C"]
+;;     ([7 "A"]
+;;      (10 "ORE"))
+;;     ([1 "B"]
+;;      (1 "ORE"))))))
+
+;; (build-tree [1 "FUEL"] (parse-input small-input))
