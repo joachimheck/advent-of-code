@@ -44,7 +44,7 @@
      (if (> (rem dividend divisor) 0)
        1 0)))
 
-(defn get-required-inputs [[needed chemical] reactions]
+(defn get-required-inputs-integer [[needed chemical] reactions]
   ;; (println "get-required-inputs" needed chemical)
   (let [[[p-q _] inputs :as producer] (find-reaction-producing chemical reactions)
           multiple (if (> p-q needed)
@@ -53,6 +53,16 @@
       (map (fn [[i-q i-chemical]]
              [(* multiple i-q) i-chemical])
            inputs)))
+
+(defn get-required-inputs [[needed chemical] reactions]
+  ;; (println "get-required-inputs" needed chemical)
+  (let [[[p-q _] inputs :as producer] (find-reaction-producing chemical reactions)
+        multiple (if (> p-q needed)
+                   1
+                   (/ needed p-q))]
+    (map (fn [[i-q i-chemical]]
+           [(* multiple i-q) i-chemical])
+         inputs)))
 
 (defn ore-required-for-one-fuel [reactions]
   (let [ore-successors (get-ore-successors reactions)
@@ -90,25 +100,107 @@
 ;; Build a tree with the required numbers of each chemical, then add the numbers for each chemical
 ;; to find the amounts of the precursor chemicals required. ?
 ;; (build-tree '([1 "FUEL"]) reactions)
-(defn build-tree [[amount chemical :as parent] reactions]
-  ;; (println "build-tree" parent)
-  (if (= chemical "ORE")
-    (list amount chemical)
-    (concat (list parent) (map #(build-tree % reactions) (get-required-inputs parent reactions)))))
+(defn build-tree
+  [[amount chemical :as parent] reactions]
+   ;; (println "build-tree" parent)
+   (if (= chemical "ORE")
+     '()
+     (concat (list parent) (map #(build-tree % reactions) (get-required-inputs parent reactions)))))
 
-;; ([1 "FUEL"]
-;;  ([7 "A"]
-;;   (10 "ORE"))
-;;  ([1 "E"]
-;;   ([7 "A"]
-;;    (10 "ORE"))
-;;   ([1 "D"]
-;;    ([7 "A"]
-;;     (10 "ORE"))
-;;    ([1 "C"]
-;;     ([7 "A"]
-;;      (10 "ORE"))
-;;     ([1 "B"]
-;;      (1 "ORE"))))))
+(defn get-precursor-counts [tree]
+  (let [sequenced (tree-seq #(and (seq %) (not (empty? (rest %)))) rest tree)
+        leaves (filter #(and (= (count %) 2) (empty? (second %))) sequenced)
+        grouped (group-by second (map first leaves))]
+    (map (fn [[chemical pairs]]
+           (list (apply + (map first pairs)) chemical))
+         grouped)))
 
-;; (build-tree [1 "FUEL"] (parse-input small-input))
+
+;; FUEL
+;; STKFG FUEL
+;; MNCFX FUEL
+;; VJHF FUEL
+;; HVMC FUEL
+;; CXFTF FUEL
+;; GNMV FUEL
+;; VPVL STKFG
+;; FWMGM STKFG
+;; CXFTF STKFG
+;; MNCFX STKFG
+;; NVRVD VPVL
+;; JNWZP VPVL
+;; VJHF FWMGM
+;; MNCFX FWMGM
+;; ORE NVRVD
+;; ORE JNWZP
+;; MNCFX HVMC
+;; RFSQX HVMC
+;; FWMGM HVMC
+;; VPVL HVMC
+;; CXFTF HVMC
+;; VJHF GNMV
+;; MNCFX GNMV
+;; VPVL GNMV
+;; CXFTF GNMV
+;; ORE MNCFX
+;; NVRVD CXFTF
+;; VJHF RFSQX
+;; MNCFX RFSQX
+;; ORE VJHF
+
+(defn get-required-and-leftovers [[needed chemical] leftovers reactions]
+  ;; (println "get-required-and-leftovers" needed chemical)
+  (let [[[p-q _] inputs :as producer] (find-reaction-producing chemical reactions)
+        leftover-chemical (get leftovers chemical 0)
+        actually-needed (max (- needed leftover-chemical) 0)
+        _ (if (< actually-needed needed) (println "Need" needed chemical "actually need only" actually-needed))
+        new-leftover (max (- leftover-chemical actually-needed) 0)
+        multiple (if (> p-q actually-needed)
+                   1
+                   (+ (quot actually-needed p-q) (if (> (rem actually-needed p-q) 0) 1 0)))
+        leftover (- (* multiple p-q) actually-needed)]
+    {:required (map (fn [[i-q i-chemical]] [(* multiple i-q) i-chemical]) inputs)
+     :new-leftovers (merge-with + (assoc leftovers chemical new-leftover) {chemical leftover})}))
+
+(defn compute-ore [reactions]
+  (loop [open-set '([1 "FUEL"])
+         leftovers {}]
+    (println "loop" open-set leftovers)
+    (let [non-ores (remove #(= (second %) "ORE") open-set)]
+      (if (empty? non-ores)
+        (apply + (map first open-set))
+        (let [{:keys [required new-leftovers]} (get-required-and-leftovers (first non-ores) leftovers reactions)]
+          (recur (concat (rest open-set) required)
+                 new-leftovers))))))
+
+
+;; advent-14.core> (compute-ore (parse-input small-input))
+;; loop ([1 FUEL]) {}
+;; loop ([7 A] [1 E]) {FUEL 0}
+;; loop ([1 E] [10 ORE]) {FUEL 0, A 3}
+;; loop ([10 ORE] [7 A] [1 D]) {FUEL 0, A 3, E 0}
+;; Need 7 A actually need only 4
+
+;; Shouldn't the next iteration have ([1 D] [10 ORE] [10 ORE])? We get that one iteration later.
+
+;; loop ([7 A] [1 D] [10 ORE]) {FUEL 0, A 6, E 0}
+;; Need 7 A actually need only 1
+;; loop ([1 D] [10 ORE] [10 ORE]) {FUEL 0, A 14, E 0}
+;; loop ([10 ORE] [10 ORE] [7 A] [1 C]) {FUEL 0, A 14, E 0, D 0}
+;; Need 7 A actually need only 0
+;; loop ([10 ORE] [7 A] [1 C] [10 ORE]) {FUEL 0, A 24, E 0, D 0}
+;; Need 7 A actually need only 0
+;; loop ([7 A] [1 C] [10 ORE] [10 ORE]) {FUEL 0, A 34, E 0, D 0}
+;; Need 7 A actually need only 0
+;; loop ([1 C] [10 ORE] [10 ORE] [10 ORE]) {FUEL 0, A 44, E 0, D 0}
+;; loop ([10 ORE] [10 ORE] [10 ORE] [7 A] [1 B]) {FUEL 0, A 44, E 0, D 0, C 0}
+;; Need 7 A actually need only 0
+;; loop ([10 ORE] [10 ORE] [7 A] [1 B] [10 ORE]) {FUEL 0, A 54, E 0, D 0, C 0}
+;; Need 7 A actually need only 0
+;; loop ([10 ORE] [7 A] [1 B] [10 ORE] [10 ORE]) {FUEL 0, A 64, E 0, D 0, C 0}
+;; Need 7 A actually need only 0
+;; loop ([7 A] [1 B] [10 ORE] [10 ORE] [10 ORE]) {FUEL 0, A 74, E 0, D 0, C 0}
+;; Need 7 A actually need only 0
+;; loop ([1 B] [10 ORE] [10 ORE] [10 ORE] [10 ORE]) {FUEL 0, A 84, E 0, D 0, C 0}
+;; loop ([10 ORE] [10 ORE] [10 ORE] [10 ORE] [1 ORE]) {FUEL 0, A 84, E 0, D 0, C 0, B 0}
+;; 41
