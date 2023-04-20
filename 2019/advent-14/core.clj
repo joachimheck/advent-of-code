@@ -29,6 +29,7 @@
        (into {})))
 
 (defn find-reaction-producing [chemical reactions]
+  ;; (println "find-reaction-producing" chemical "=>" (first (filter (fn [[[q c] v]] (= chemical c)) reactions)))
   (first (filter (fn [[[q c] v]] (= chemical c)) reactions)))
 
 (defn get-ore-successors [reactions]
@@ -79,6 +80,7 @@
         ores (apply concat (map (fn [[chemical needed]] (get-required-inputs [needed chemical] reactions)) basic-chemicals))]
     (apply + (map first ores))))
 
+;; 733822
 ;; ---> answer <---
 ;; 2067236
 
@@ -87,12 +89,12 @@
 (def small-input-4 "small-input-4.txt")
 (def small-input-5 "small-input-5.txt")
 
-(deftest test-ore-required-for-one-fuel
-  (is (= 31 (ore-required-for-one-fuel (parse-input small-input))))
-  (is (= 165 (ore-required-for-one-fuel (parse-input small-input-2))))
-  (is (= 13312 (ore-required-for-one-fuel (parse-input small-input-3))))
-  (is (= 180697 (ore-required-for-one-fuel (parse-input small-input-4))))
-  (is (= 2210736 (ore-required-for-one-fuel (parse-input small-input-5)))))
+;; (deftest test-ore-required-for-one-fuel
+;;   (is (= 31 (ore-required-for-one-fuel (parse-input small-input))))
+;;   (is (= 165 (ore-required-for-one-fuel (parse-input small-input-2))))
+;;   (is (= 13312 (ore-required-for-one-fuel (parse-input small-input-3))))
+;;   (is (= 180697 (ore-required-for-one-fuel (parse-input small-input-4))))
+;;   (is (= 2210736 (ore-required-for-one-fuel (parse-input small-input-5)))))
 
 ;; TODO: I think I'm allocating extra input chemicals all through the process. Whenever two reactions
 ;; share an input chemical, the inputs can be distributed between them, but I'm treating them separately
@@ -148,59 +150,113 @@
 ;; MNCFX RFSQX
 ;; ORE VJHF
 
-(defn get-required-and-leftovers [[needed chemical] leftovers reactions]
-  ;; (println "get-required-and-leftovers" needed chemical)
-  (let [[[p-q _] inputs :as producer] (find-reaction-producing chemical reactions)
-        leftover-chemical (get leftovers chemical 0)
-        actually-needed (max (- needed leftover-chemical) 0)
-        _ (if (< actually-needed needed) (println "Need" needed chemical "actually need only" actually-needed))
-        new-leftover (max (- leftover-chemical actually-needed) 0)
-        multiple (if (> p-q actually-needed)
-                   1
-                   (+ (quot actually-needed p-q) (if (> (rem actually-needed p-q) 0) 1 0)))
-        leftover (- (* multiple p-q) actually-needed)]
-    {:required (map (fn [[i-q i-chemical]] [(* multiple i-q) i-chemical]) inputs)
-     :new-leftovers (merge-with + (assoc leftovers chemical new-leftover) {chemical leftover})}))
+(defn multiple [needed produced]
+  (+ (quot needed produced) (if (zero? (rem needed produced)) 0 1)))
+
+(defn get-required-and-available [[amount chemical] available reactions]
+  (let [amount-available (get available chemical 0)]
+    (if (>= amount-available amount)
+      {:required '()
+       :new-available (update available chemical #(- % amount))}
+      (let [actual-amount (- amount amount-available)
+            [[produced-amount _] inputs] (find-reaction-producing chemical reactions)
+            m (multiple actual-amount produced-amount)]
+        {:required (map (fn [[i-q i-chemical]] [(* m i-q) i-chemical]) inputs)
+         :new-available (assoc available chemical 0)}))))
+
+;; First try, works on all but small-input-5 and large-input.
+(defn compute-ore [reactions]
+  (loop [open-set '([1 "FUEL"])
+         ores '()
+         available {}]
+    (println "loop" open-set ores available)
+    (if (empty? open-set)
+      {:ore (apply + (map first ores)) :available available}
+      (let [current (first open-set)
+            {:keys [required new-available]} (get-required-and-available current available reactions)
+            {:keys [new-ores non-ores]} (group-by #(if (= (second %) "ORE") :new-ores :non-ores) required)]
+        (recur (concat (rest open-set) non-ores)
+               (concat ores new-ores)
+               new-available)))))
+
+
+;; Thought I might need to think about which reactions depend on others. Same result, though further from the
+;; right answer for small-input-5.
+;; (defn precursors [chemical reactions]
+;;   (let [[in out] (first (filter (fn [[[_ k] v]] (= k chemical)) reactions))]
+;;     (map second out)))
+
+;; (defn is-precursor? [chemical chemicals reactions]
+;;   ;; (println "is-precursor?" chemical chemicals)
+;;   (some #{chemical} (apply concat (map #(precursors % reactions) chemicals))))
+
+;; (defn compute-ore [reactions]
+;;   (loop [open-set '([1 "FUEL"])
+;;          ores '()
+;;          available {}]
+;;     ;; (println "loop" open-set ores available)
+;;     (if (empty? open-set)
+;;       (list (apply + (map first ores)) available)
+;;       ;; (apply + (map first ores))
+;;       (let [
+;;             current (first (remove empty? (map (fn [[[n c] ncs]]
+;;                                                  (if (is-precursor? c (map second ncs) reactions) '() [n c]))
+;;                                                (map #(list % (remove #{%} open-set)) open-set))))
+;;             {:keys [required new-available]} (get-required-and-available current available reactions)
+;;             {:keys [new-ores non-ores]} (group-by #(if (= (second %) "ORE") :new-ores :non-ores) required)]
+;;         ;; There could be multiple instances of current; just remove the first one.
+;;         (recur (let [[n m] (split-with (partial not= current) open-set)]
+;;                  (concat non-ores n (rest m)))
+;;                (concat ores new-ores)
+;;                new-available)))))
+
+(defn is-basic? [chemical reactions]
+  ;; (println "is-basic?" chemical (seq (filter (fn [[[_ k] [[_ v]]]] (and (= k chemical) (= v "ORE"))) reactions)))
+  (seq (filter (fn [[[_ k] [[_ v]]]] (and (= k chemical) (= v "ORE"))) reactions)))
+
+(defn sum-chemicals [chemicals reactions]
+  (let [grouped (group-by second chemicals)]
+    (map (fn [[chemical pairs]]
+           (list (apply + (map first pairs)) chemical))
+         grouped)))
+
+(defn debug [x]
+  (println "debug" x)
+  x)
+
+(defn compute-ore-from-basics [basics reactions]
+  (as-> basics v
+      (sum-chemicals v reactions)
+      (map #(get-required-and-available % {} reactions) v)
+      (map :required v)
+      (apply concat v)
+      (map first v)
+      (apply + v)))
 
 (defn compute-ore [reactions]
   (loop [open-set '([1 "FUEL"])
-         leftovers {}]
-    (println "loop" open-set leftovers)
-    (let [non-ores (remove #(= (second %) "ORE") open-set)]
-      (if (empty? non-ores)
-        (apply + (map first open-set))
-        (let [{:keys [required new-leftovers]} (get-required-and-leftovers (first non-ores) leftovers reactions)]
-          (recur (concat (rest open-set) required)
-                 new-leftovers))))))
+         basics '()
+         available {}]
+    ;; (println "loop" open-set basics available)
+    (if (empty? open-set)
+      {:basics basics :ore (compute-ore-from-basics basics reactions)}
+      (let [current (first open-set)
+            {:keys [required new-available]} (get-required-and-available current available reactions)
+            {:keys [new-basics non-basics]} (group-by #(if (is-basic? (second %) reactions) :new-basics :non-basics) required)]
+        (recur (concat (rest open-set) non-basics)
+               (concat basics new-basics)
+               new-available)))))
 
+(deftest test-compute-ore
+  (is (= 31 (:ore (compute-ore (parse-input small-input)))))
+  (is (= 165 (:ore (compute-ore (parse-input small-input-2)))))
+  (is (= 13312 (:ore (compute-ore (parse-input small-input-3)))))
+  (is (= 180697 (:ore (compute-ore (parse-input small-input-4)))))
+  (is (= 2210736 (:ore (compute-ore (parse-input small-input-5))))))
 
-;; advent-14.core> (compute-ore (parse-input small-input))
-;; loop ([1 FUEL]) {}
-;; loop ([7 A] [1 E]) {FUEL 0}
-;; loop ([1 E] [10 ORE]) {FUEL 0, A 3}
-;; loop ([10 ORE] [7 A] [1 D]) {FUEL 0, A 3, E 0}
-;; Need 7 A actually need only 4
+;; Suitable for https://csacademy.com/app/graph_editor/
+(defn produce-graph-inputs [reactions]
+  (apply concat (map (fn [[[_ k] vs]] (map (fn [[_ v]] (str v " " k)) vs)) reactions)))
 
-;; Shouldn't the next iteration have ([1 D] [10 ORE] [10 ORE])? We get that one iteration later.
-
-;; loop ([7 A] [1 D] [10 ORE]) {FUEL 0, A 6, E 0}
-;; Need 7 A actually need only 1
-;; loop ([1 D] [10 ORE] [10 ORE]) {FUEL 0, A 14, E 0}
-;; loop ([10 ORE] [10 ORE] [7 A] [1 C]) {FUEL 0, A 14, E 0, D 0}
-;; Need 7 A actually need only 0
-;; loop ([10 ORE] [7 A] [1 C] [10 ORE]) {FUEL 0, A 24, E 0, D 0}
-;; Need 7 A actually need only 0
-;; loop ([7 A] [1 C] [10 ORE] [10 ORE]) {FUEL 0, A 34, E 0, D 0}
-;; Need 7 A actually need only 0
-;; loop ([1 C] [10 ORE] [10 ORE] [10 ORE]) {FUEL 0, A 44, E 0, D 0}
-;; loop ([10 ORE] [10 ORE] [10 ORE] [7 A] [1 B]) {FUEL 0, A 44, E 0, D 0, C 0}
-;; Need 7 A actually need only 0
-;; loop ([10 ORE] [10 ORE] [7 A] [1 B] [10 ORE]) {FUEL 0, A 54, E 0, D 0, C 0}
-;; Need 7 A actually need only 0
-;; loop ([10 ORE] [7 A] [1 B] [10 ORE] [10 ORE]) {FUEL 0, A 64, E 0, D 0, C 0}
-;; Need 7 A actually need only 0
-;; loop ([7 A] [1 B] [10 ORE] [10 ORE] [10 ORE]) {FUEL 0, A 74, E 0, D 0, C 0}
-;; Need 7 A actually need only 0
-;; loop ([1 B] [10 ORE] [10 ORE] [10 ORE] [10 ORE]) {FUEL 0, A 84, E 0, D 0, C 0}
-;; loop ([10 ORE] [10 ORE] [10 ORE] [10 ORE] [1 ORE]) {FUEL 0, A 84, E 0, D 0, C 0, B 0}
-;; 41
+(def test-input-1 "test-input-1.txt")
+(def test-input-2 "test-input-2.txt")
