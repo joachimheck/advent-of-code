@@ -602,7 +602,7 @@
       (let [actual-amount (- amount amount-available)
             [[produced-amount _] inputs] (find-reaction-producing chemical reactions)
             m (multiple actual-amount produced-amount)]
-        ;; (if (= "VPVL" chemical)
+        ;; (if (= "A" chemical)
         ;;   (println [amount chemical] ":" amount-available "available, actual amount:" actual-amount
         ;;            "required:" (map (fn [[i-q i-chemical]] [(* m i-q) i-chemical]) inputs)
         ;;            "leftover:" (- (* m produced-amount) actual-amount)))
@@ -660,7 +660,7 @@
   ;; (println "is-basic?" chemical (seq (filter (fn [[[_ k] [[_ v]]]] (and (= k chemical) (= v "ORE"))) reactions)))
   (seq (filter (fn [[[_ k] [[_ v]]]] (and (= k chemical) (= v "ORE"))) reactions)))
 
-(defn sum-chemicals [chemicals reactions]
+(defn sum-chemicals [chemicals]
   (let [grouped (group-by second chemicals)]
     (map (fn [[chemical pairs]]
            (list (apply + (map first pairs)) chemical))
@@ -672,26 +672,44 @@
 
 (defn compute-ore-from-basics [basics reactions]
   (as-> basics v
-      (sum-chemicals v reactions)
-      (map #(get-required-and-available % {} reactions) v)
-      (map :required v)
-      (apply concat v)
-      (map first v)
-      (apply + v)))
+    (map #(get-required-and-available % {} reactions) v)
+    (map :required v)
+    (apply concat v)
+    (map first v)
+    (apply + v)))
 
-(defn compute-ore-basic [reactions]
-  (loop [open-set '([1 "FUEL"])
-         basics '()
-         available {}]
-    ;; (println "loop" (sort-by second open-set) (sort-by second basics) available)
-    (if (empty? open-set)
-      {:basics basics :ore (compute-ore-from-basics basics reactions)}
-      (let [current (first open-set)
-            {:keys [required new-available]} (get-required-and-available current available reactions)
-            {:keys [new-basics non-basics]} (group-by #(if (is-basic? (second %) reactions) :new-basics :non-basics) required)]
-        (recur (sum-chemicals (concat (rest open-set) non-basics) reactions)
-               (sum-chemicals (concat basics new-basics) reactions)
-               new-available)))))
+;; (defn compute-ore-basic
+;;   ([reactions] (compute-ore-basic 1 reactions))
+;;   ([fuel-amount reactions]
+;;    (loop [open-set (list [fuel-amount "FUEL"])
+;;           basics '()
+;;           available {}]
+;;      (println "loop" (sort-by second open-set) (sort-by second basics) available)
+;;      (if (empty? open-set)
+;;        {:basics basics :available available :ore (compute-ore-from-basics basics reactions)}
+;;        (let [current (first open-set)
+;;              {:keys [required new-available]} (get-required-and-available current available reactions)
+;;              {:keys [new-basics non-basics]} (group-by #(if (is-basic? (second %) reactions) :new-basics :non-basics) required)]
+;;          (recur (sum-chemicals (concat (rest open-set) non-basics))
+;;                 (sum-chemicals (concat basics new-basics))
+;;                 new-available))))))
+
+(defn compute-ore-basic
+  ([reactions] (compute-ore-basic 1 reactions))
+  ([fuel-amount reactions]
+   (loop [open-set (list [fuel-amount "FUEL"])
+          ore 0
+          available {}]
+     ;; (println "loop" (sort-by second open-set) ore available)
+     (if (empty? open-set)
+       {:available available :ore ore}
+       (let [current (first open-set)
+             {:keys [required new-available]} (get-required-and-available current available reactions)
+             [ores non-ores] (split-with #(= "ORE" (second %)) required)
+             [basics non-basics] (split-with #(is-basic? (second %) reactions) (sum-chemicals (concat (rest open-set) non-ores)))]
+         (recur (concat non-basics basics)
+                (+ ore (apply + (map first ores)))
+                new-available))))))
 
 ;; (deftest test-compute-ore
 ;;   (is (= 31 (:ore (compute-ore (parse-input small-input)))))
@@ -783,4 +801,36 @@
 
 
 ;; Part 2
-;; 
+;; Given 1 trillion ORE, what is the maximum amount of FUEL you can produce?
+(defn how-much-fuel [reactions]
+  (let [available-ore 1000000000000
+        minimum-fuel (loop [fuel-amount 1
+                            previous {}]
+                       (let [ore-used (:ore (compute-ore-basic fuel-amount reactions))]
+                         (if (> ore-used available-ore)
+                           (:fuel-produced previous)
+                           (recur (* 2 fuel-amount) {:fuel-produced fuel-amount :ore-used ore-used}))))
+        fuel (loop [largest-working minimum-fuel
+                    smallest-nonworking (* 2 minimum-fuel)]
+               (if (= 1 (- smallest-nonworking largest-working))
+                 largest-working
+                 (let [middle (quot (+ largest-working smallest-nonworking) 2)
+                       ore-used (:ore (compute-ore-basic middle reactions))]
+                   (if (> ore-used available-ore)
+                     (recur largest-working middle)
+                     (recur middle smallest-nonworking)))))]
+    fuel))
+
+;; (how-much-fuel (parse-input small-input-3))
+;; 82892753
+
+;; (how-much-fuel (parse-input small-input-4))
+;; 5586022
+
+;; (how-much-fuel (parse-input small-input-5))
+;; 460664
+
+;; (how-much-fuel (parse-input large-input))
+;; 1639374
+
+;; Egads, this was shockingly easier than part 1. Part 2 took me 55 minutes. Part 1 took me FIVE DAYS.
