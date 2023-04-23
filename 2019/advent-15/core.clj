@@ -293,3 +293,114 @@
 
 ;; Part 2
 ;; How many minutes will it take to fill with oxygen?
+;; We need to map out the entire space first.
+(defn neighbors [pos]
+  (list (move pos :north)
+        (move pos :south)
+        (move pos :west)
+        (move pos :east)))
+
+(defn count-unmapped [grid]
+  (let [empty-spaces (filter (fn [pos] (not= (get grid pos) :wall)) (keys grid))
+        empty-neighbors (distinct (mapcat neighbors empty-spaces))
+        unmapped-neighbors (filter (fn [pos] (nil? (get grid pos))) empty-neighbors)]
+    (count unmapped-neighbors)))
+
+(defn map-space [program pause-after-steps]
+  (loop [state {:ip 0 :memory program :inputs [] :outputs [] :relative-base 0}
+         grid {[0 0] :empty}
+         path [[0 0]]
+         direction :north
+         steps 0]
+    (let [result (advance-program state)
+          result-state (:state result)
+          status (get statuses (first (:outputs result)))]
+      (cond
+        status (let [new-state (assoc result-state :outputs [])
+                     [new-grid new-pos] (process-status grid (last path) direction status)]
+                 (if (= 0 (count-unmapped new-grid))
+                   (do (println (draw-grid new-grid))
+                       (println "Finished in" steps "steps.")
+                       (println "Unmapped spaces:" (count-unmapped new-grid))
+                       grid)
+                   (recur new-state new-grid (update-path path new-pos) nil steps)))
+        (:input-required result) (let [new-direction (choose-direction path grid)]
+                                   (if (>= steps pause-after-steps)
+                                     (do (println (draw-grid grid))
+                                         (println "Unmapped spaces:" (count-unmapped grid))))
+                                   (if (or (< steps pause-after-steps) (= (read-line) " "))
+                                     (recur (assoc result-state :inputs [(get code-directions new-direction)])
+                                            grid
+                                            path
+                                            new-direction
+                                            (inc steps))
+                                     :finished))
+        :else (do (println (draw-grid grid))
+                  (println "Unmapped spaces:" (count-unmapped grid))
+                  (list :finished-else status grid ))))))
+
+(defn fill-with-oxygen [grid]
+  (let [start (first (filter (fn [pos] (= (get grid pos) :oxygen-system)) (keys grid)))]
+    (loop [open-set (list start)
+           grid (assoc grid start :oxygen)
+           minutes 0]
+      ;; (println "loop open-set" open-set)
+      (if (empty? open-set)
+        (dec minutes)
+        (let [new-open-set (->> open-set
+                                (mapcat neighbors)
+                                (distinct)
+                                (filter #(= :empty (get grid %))))
+              new-grid (apply assoc grid (apply concat (map (fn [pos] [pos :oxygen]) open-set)))]
+          (recur new-open-set new-grid (inc minutes)))))))
+
+;; ---> answer <---
+;; 335
+
+
+;; (time (fill-with-oxygen (map-space (parse-input large-input) 5000)))
+;;  ##### ##### ### ############# ######### 
+;; #.....#.....#...#.............#.........#
+;;  ##.#.###.#.#.#.#.#####.#####.###.#####.#
+;; #...#...#.#...#.#.#...#.#.....#...#.....#
+;; #.#####.#.#.#####.#.#.#.#.#####.###.#### 
+;; #.#...#...#.#...#...#.#.#.....#...#.#...#
+;; #.#.#.#######.#.#####.#.#####.###.#.###.#
+;; #...#.........#.......#.....#.....#...#.#
+;; #.## ######################.###### ##.#.#
+;; #...#.....#.....#.#.......#...#...#...#.#
+;;  ##.#.###.#.###.#.#.#####.###.#.#.#.###.#
+;; #...#...#...#.#...#.#...#...#.#.#...#...#
+;; #.#####.#####.###.#.###.###.#.#.#######.#
+;; #.......#...#.....#...#.......#...#.....#
+;;  ########.#.#.#### ##.###.#######.###.## 
+;; #...#.....#.#.#...#.#...#.#.....#...#...#
+;; #.###.#####.#.#.#.#.###.###.###.###.###.#
+;; #.....#.#...#...#.....#.....#.#.#.......#
+;; #.#####.#.###########.#######.#.#######.#
+;; #.#.....#.........#.......#...#.....#...#
+;; #.#.###.#####.#.###.#####.###.#####.#### 
+;; #...#...#...#.#.#...#...#.........#.#...#
+;;  ####.###.#.#.###.#####.###.#######.#.#.#
+;; #.....#...#.#.........#.#...#.......#.#.#
+;; #.#####.###.###########.#.###.#####.#.#.#
+;; #...#...#.#.............#.#...#.....#.#.#
+;;  ##.#.###.#################.#.#######.#.#
+;; #.#.#...#...#.......#.....#.#.#.....#.#.#
+;; #.#.###.#.#.#.#####.###.#.#.#.#.###.#.#.#
+;; #...#...#.#...#...#.#...#...#.#...#...#.#
+;; #.###.###.#####.###.#.###########.#####.#
+;; #...#.#.....#...#...#.............#...#.#
+;;  ##.#.#####.#.#.#.###.#########.###.#.#.#
+;; #...#.....#.#.#.#.#...#.......#.....#O#.#
+;; #.#######.#.#.#.#.#####.#####.###### ##.#
+;; #.....#.#...#.#...#.....#...#...#...#...#
+;;  ####.#.#####.#####.#####.#.###.#.#.#.## 
+;; #...#.....#...#...#.....#.#...#...#.#...#
+;; #.#.#####.#.###.#.#####.#.###.#####.###.#
+;; #.#.......#.....#.......#...#...........#
+;;  # ####### ##### ####### ### ########### 
+;; Finished in 2447 steps.
+;; Unmapped spaces: 0
+;; "Elapsed time: 7336.1268 msecs"
+;; 334
