@@ -40,21 +40,6 @@
 (defn apply-pattern [signal pattern]
   (parse-long (str (last (str (apply + (map * signal pattern)))))))
 
-;; (defn apply-pattern [signal pattern]
-;;   (- (int (last (digits (apply + (map * signal pattern))))) (int \0)))
-
-;; (defn digits [n]
-;;   ;; (println "digits" n)
-;;   (let [n (abs n)]
-;;    (if (< n 10)
-;;      [n]
-;;      (let [quotient (quot n 10)
-;;            remainder (rem n 10)]
-;;        (conj (digits quotient) remainder)))))
-
-;; (defn apply-pattern [signal pattern]
-;;   (last (digits (apply + (map * signal pattern)))))
-
 (defn run-fft-phase [signal]
   (for [i (range (count signal))]
     (apply-pattern signal (generate-pattern (count signal) (inc i)))))
@@ -111,10 +96,10 @@
   (let [signal (apply concat (repeat 10000 initial-signal))]
     (first-8-after-fft signal 2)))
 
-(deftest test-decode-signal
-  (is (= 84462026 (find-offset (parse-line "03036732577212944063491565474664"))))
-  (is (= 78725270 (find-offset (parse-line "02935109699940807407585447034323"))))
-  (is (= 53553731 (find-offset (parse-line "03081770884921959731165446850517")))))
+;; (deftest test-decode-signal
+;;   (is (= 84462026 (find-offset (parse-line "03036732577212944063491565474664"))))
+;;   (is (= 78725270 (find-offset (parse-line "02935109699940807407585447034323"))))
+;;   (is (= 53553731 (find-offset (parse-line "03081770884921959731165446850517")))))
 
 
 (defn apply-pattern-groups [signal digit]
@@ -141,8 +126,8 @@
 (defn run-fft-phase-groups [signal]
   (for [i (range (count signal))]
     (do
-      (if (power-of-2? i)
-        (println "run-fft-phase-groups" i))
+      ;; (if (power-of-2? i)
+      ;;   (println "run-fft-phase-groups" i))
       (apply-pattern-groups signal (inc i)))))
 
 (defn run-fft-groups [signal phases]
@@ -167,3 +152,70 @@
 ;; Very slow.
 ;; TODO: maybe the problem is a lot of copying of data. How about if I leave the signal alone
 ;; and get subvectors out of it at each iteration?
+(defn apply-pattern-in-place [signal digit]
+  (let [pattern-size (* 4 digit)
+        signal-size (count signal)]
+    (reduce (fn [acc base]
+              (let [[pos-min pos-max] [(+ base digit) (min (+ base digit digit) signal-size)]
+                    [neg-min neg-max] [(+ base (* 3 digit)) (min (+ base (* 4 digit)) signal-size)]]
+                (if (>= pos-min (count signal))
+                  (reduced (mod (abs acc) 10))
+                  (let [pos-sum (if (< pos-min signal-size)
+                                  (reduce (fn [pos-acc i] (+ pos-acc (get signal i 0))) 0 (range pos-min pos-max))
+                                  0)
+                        neg-sum (if (< neg-min signal-size)
+                                  (reduce (fn [neg-acc i] (- neg-acc (get signal i 0))) 0 (range neg-min neg-max))
+                                  0)]
+                    (+ acc pos-sum neg-sum)))))
+            0
+            (map #(- (* % pattern-size) 1) (range)))))
+
+
+(defn run-fft-phase-in-place [signal]
+  (mapv (fn [digit] (apply-pattern-in-place signal (inc digit)))
+        (range (count signal))))
+
+(defn run-fft-in-place [signal phases]
+  (loop [signal signal
+         phase 0]
+    ;; (println "phase" phase "signal start" (take 20 signal) "size" (count signal) (new java.util.Date))
+    (if (= phase phases)
+      signal
+      (recur (run-fft-phase-in-place signal) (inc phase)))))
+
+(defn first-8-after-fft-in-place [signal phases]
+  (str/join
+    (map str
+         (take 8
+               (run-fft-in-place (vec signal) phases)))))
+
+(deftest test-first-8-after-fft-in-place
+  (is (= "01029498" (first-8-after-fft-in-place (parse-line "12345678") 4)))
+  (is (= "24176176" (first-8-after-fft-in-place (parse-line "80871224585914546619083218645595") 100)))
+  (is (= "73745418" (first-8-after-fft-in-place (parse-line "19617804207202209144916044189917") 100)))
+  (is (= "52432133" (first-8-after-fft-in-place (parse-line "69317163492948606335995924319873") 100))))
+
+;; This is good; it's 25 times faster than the original.
+;; (time (first-8-after-fft-in-place (parse-input large-input) 100))
+;; "Elapsed time: 895.5379 msecs"
+;; "94960436"
+
+;; Replacing the string stuff with mod and capping the ranges at the end of the signal cut the time down even more.
+;; (time (first-8-after-fft-in-place (parse-input large-input) 100))
+;; "Elapsed time: 567.1624 msecs"
+;; "94960436"
+
+
+(defn decode-signal-in-place [initial-signal]
+  (let [signal (apply concat (repeat 10000 initial-signal))]
+    (first-8-after-fft-in-place signal 2)))
+
+(deftest test-decode-signal-in-place
+  (is (= 84462026 (decode-signal-in-place (parse-line "03036732577212944063491565474664"))))
+  (is (= 78725270 (decode-signal-in-place (parse-line "02935109699940807407585447034323"))))
+  (is (= 53553731 (decode-signal-in-place (parse-line "03081770884921959731165446850517")))))
+
+;; Took a vague hint from reddit.
+;; I've got a positive sum and a negative sum. Compared to the sum from the previous digit,
+;; each one drops the first number and adds two new numbers. Instead of adding all the digits,
+;; I just need to subtract on and add two at each step.
