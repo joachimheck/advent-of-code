@@ -1,0 +1,30 @@
+  012345678901234567890123456789
+ 1 + - + - + - + - + - + - + - +
+ 2  ++  --  ++  --  ++  --  ++  
+ 3   +++   ---   +++   ---   +++
+ 4    ++++    ----    ++++    --
+ 5     +++++     -----     +++++
+ 6      ++++++      ------      
+ 7       +++++++       -------  
+ 8        ++++++++        ------
+ 9         +++++++++         ---
+10          ++++++++++
+
+
+1: term-10: digit-0 term-11: digit-1
+2: term-20: (+ term-10 term-11) term-21: (+ term-12 term-13)
+3: term-30: (+ term-10 term-11 term-12) term-31: (+ term-13 term-14 term-15)
+4: term-40: (+ term-20 term-21) term-41: (+ term-22 term-23)
+5: term-50: (+ term-20 term-21 term-14) term-51: (+ term-15 term-23 term-24)
+
+I'm thinking I can check each digit in a pattern block to see if it lines up with a pattern block
+from a previous digit. Once it does, I add in that previous block and repeat the process starting
+from the next digit in the block. This seems only to be required for odd-numbered digits; the even
+digit blockss can always be broken up into half-size blocks.
+
+Example: digit 7 pattern block 1 (digits 7-13)
+  Digit 7 isn't the start of any previous block until the blocks for digit 1: digit 1 block 7, length 1
+  Digit 8 is the start of digit 4 block 2, length 4
+  Digit 12 is the start of digit 2 block 6, length 2
+  We've exhausted all the digits in the block.
+  
