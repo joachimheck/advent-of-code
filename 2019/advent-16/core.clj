@@ -152,23 +152,27 @@
 ;; Very slow.
 ;; TODO: maybe the problem is a lot of copying of data. How about if I leave the signal alone
 ;; and get subvectors out of it at each iteration?
-(defn apply-pattern-in-place [signal digit]
-  (let [pattern-size (* 4 digit)
-        signal-size (count signal)]
-    (reduce (fn [acc base]
-              (let [[pos-min pos-max] [(+ base digit) (min (+ base digit digit) signal-size)]
-                    [neg-min neg-max] [(+ base (* 3 digit)) (min (+ base (* 4 digit)) signal-size)]]
-                (if (>= pos-min (count signal))
-                  (reduced (mod (abs acc) 10))
-                  (let [pos-sum (if (< pos-min signal-size)
-                                  (reduce (fn [pos-acc i] (+ pos-acc (get signal i 0))) 0 (range pos-min pos-max))
-                                  0)
-                        neg-sum (if (< neg-min signal-size)
-                                  (reduce (fn [neg-acc i] (- neg-acc (get signal i 0))) 0 (range neg-min neg-max))
-                                  0)]
-                    (+ acc pos-sum neg-sum)))))
-            0
-            (map #(- (* % pattern-size) 1) (range)))))
+(defn apply-pattern-in-place 
+  ([signal digit] (apply-pattern-in-place signal digit 0))
+  ([signal digit start]
+   (let [pattern-size (* 4 digit)
+         signal-size (count signal)]
+     (reduce (fn [acc base]
+               (if (< (+ base pattern-size) start)
+                 acc
+                 (let [[pos-min pos-max] [(+ base digit) (min (+ base digit digit) signal-size)]
+                       [neg-min neg-max] [(+ base (* 3 digit)) (min (+ base (* 4 digit)) signal-size)]]
+                   (if (>= pos-min (count signal))
+                     (reduced (mod (abs acc) 10))
+                     (let [pos-sum (if (and (< pos-min signal-size) (>= pos-max start))
+                                     (reduce (fn [pos-acc i] (+ pos-acc (get signal i 0))) 0 (range (max pos-min start) (min pos-max signal-size)))
+                                     0)
+                           neg-sum (if (and (< neg-min signal-size) (>= neg-max start))
+                                     (reduce (fn [neg-acc i] (- neg-acc (get signal i 0))) 0 (range (max neg-min start) (min neg-max signal-size)))
+                                     0)]
+                       (+ acc pos-sum neg-sum))))))
+             0
+             (map #(- (* % pattern-size) 1) (range))))))
 
 
 (defn run-fft-phase-in-place [signal]
@@ -219,3 +223,65 @@
 ;; I've got a positive sum and a negative sum. Compared to the sum from the previous digit,
 ;; each one drops the first number and adds two new numbers. Instead of adding all the digits,
 ;; I just need to subtract on and add two at each step.
+(defn sum-blocks [blocks]
+  ;; (println "sum-blocks" blocks)
+  (mod (abs
+        (reduce (fn [acc i]
+                  (case (mod i 4)
+                    1 (+ acc (get blocks i))
+                    3 (- acc (get blocks i))
+                    acc))
+                0
+                (range (count blocks))))
+       10))
+
+(defn apply-pattern-recursive [blocks-by-digit digit]
+  (let [signal (get blocks-by-digit 0)
+        block-size digit
+        pattern-size (* 4 block-size)
+        signal-size (count signal)]
+    (let [whole-blocks (quot signal-size block-size)
+          remainder (rem signal-size block-size)
+          blocks (reduce (fn [blocks block]
+                           ;; (println "reduce-fn" "blocks" blocks "digit" digit "block" block)
+                           (if (even? digit)
+                             (assoc blocks block (apply + (subvec (get blocks-by-digit (quot digit 2)) (* 2 block) (+ (* 2 block) 2))))
+                             (let [block-start (* block-size block)
+                                   block-end (+ block-start block-size)]
+                               (assoc blocks block (apply + (subvec signal block-start block-end))))))
+                         []
+                         (range whole-blocks))
+          blocks (if (> remainder 0)
+                   (let [block-start (* block-size whole-blocks)]
+                     (assoc blocks whole-blocks (apply + (subvec signal block-start))))
+                   blocks)]
+      {:blocks (assoc blocks-by-digit digit blocks) :sum (sum-blocks blocks)})))
+
+(defn run-fft-phase-recursive [signal]
+  (:sums
+   (reduce (fn [{:keys [blocks sums]} digit]
+             (let [{:keys [blocks sum]} (apply-pattern-recursive blocks (inc digit))]
+               ;; (println "phase fn" "digit" digit "blocks" blocks "sum" sum)
+               {:blocks blocks :sums (conj sums sum)}))
+           {:blocks [(apply conj [0] signal)] :sums []}
+           (range (count signal)))))
+
+(defn run-fft-recursive [signal phases]
+  (loop [signal signal
+         phase 0]
+    ;; (println "phase" phase "signal start" (take 20 signal) "size" (count signal) (new java.util.Date))
+    (if (= phase phases)
+      signal
+      (recur (run-fft-phase-recursive signal) (inc phase)))))
+
+(defn first-8-after-fft-recursive [signal phases]
+  (str/join
+    (map str
+         (take 8
+               (run-fft-recursive (vec signal) phases)))))
+
+(deftest test-first-8-after-fft-recursive
+  (is (= "01029498" (first-8-after-fft-recursive (parse-line "12345678") 4)))
+  (is (= "24176176" (first-8-after-fft-recursive (parse-line "80871224585914546619083218645595") 100)))
+  (is (= "73745418" (first-8-after-fft-recursive (parse-line "19617804207202209144916044189917") 100)))
+  (is (= "52432133" (first-8-after-fft-recursive (parse-line "69317163492948606335995924319873") 100))))
