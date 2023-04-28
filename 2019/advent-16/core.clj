@@ -223,7 +223,7 @@
 ;; I've got a positive sum and a negative sum. Compared to the sum from the previous digit,
 ;; each one drops the first number and adds two new numbers. Instead of adding all the digits,
 ;; I just need to subtract on and add two at each step.
-(def blocks-by-level (atom []))
+(def blocks-by-level (atom {}))
 
 (defn sum-blocks [blocks]
   ;; (println "sum-blocks" blocks)
@@ -247,38 +247,17 @@
                 (for [size sizes]
                   (list size (<= (+ size (dec size)) block-size)))))))))
 
-;; (defn apply-pattern-recursive [blocks-by-digit digit]
-;;   (let [signal (get blocks-by-digit 0)
-;;         block-size digit
-;;         pattern-size (* 4 block-size)
-;;         signal-size (count signal)]
-;;     (let [whole-blocks (quot signal-size block-size)
-;;           remainder (rem signal-size block-size)
-;;           blocks (reduce (fn [blocks block]
-;;                            ;; (println "reduce-fn" "blocks" blocks "digit" digit "block" block)
-;;                            (if (even? digit)
-;;                              (assoc blocks block (apply + (subvec (get blocks-by-digit (quot digit 2)) (* 2 block) (+ (* 2 block) 2))))
-;;                              (let [block-start (* block-size block)
-;;                                    block-end (+ block-start block-size)]
-;;                                (assoc blocks block (apply + (subvec signal block-start block-end))))))
-;;                          []
-;;                          (range whole-blocks))
-;;           blocks (if (> remainder 0)
-;;                    (let [block-start (* block-size whole-blocks)]
-;;                      (assoc blocks whole-blocks (apply + (subvec signal block-start))))
-;;                    blocks)]
-;;       {:blocks (assoc blocks-by-digit digit blocks) :sum (sum-blocks blocks)})))
+(declare get-block-at-digit)
 
 (defn compute-block [level block]
   ;; (println "compute-block" "blocks-by-level" @blocks-by-level "level" level "block" block)
-  (let [block-size level
-        sub-block-size (largest-block-that-must-fit block-size)
-        block-start (* block-size block)
-        block-end (+ block-start block-size)]
-    (if (nil? (get @blocks-by-level level)) (reset! blocks-by-level (assoc @blocks-by-level level [])))
+  (let [block-start (* level block)
+        block-end (min (+ block-start level) (count (get @blocks-by-level 1)))
+        sub-block-size (largest-block-that-must-fit (- block-end block-start))]
+    (if (nil? (get @blocks-by-level level)) (reset! blocks-by-level (assoc @blocks-by-level level {})))
     (let [block-sum (loop [i block-start
                            sum 0]
-                      ;; (println "loop" "block-start" block-start "block-end" block-end "i" i)
+                      ;; (println "loop" "level" level "sub-level" sub-block-size "block-start" block-start "block-end" block-end "i" i)
                       (if (= i block-end)
                         sum
                         (if (and (= 0 (mod i sub-block-size)) (< (+ i sub-block-size) block-end))
@@ -296,11 +275,6 @@
       block-sum
       (compute-block level block))))
 
-(defn put-block [level block v]
-  (if (nil? (get @blocks-by-level level)) (reset! blocks-by-level (assoc @blocks-by-level level [])))
-  (if (nil? (get-in @blocks-by-level [level block]))
-    (reset! blocks-by-level (assoc-in @blocks-by-level [level block] v))))
-
 (defn get-block-at-digit [level digit]
   ;; (println "get-block-at-digit" level digit)
   (let [block-num (quot digit level)
@@ -309,33 +283,27 @@
       block
       (compute-block level block-num))))
 
-(defn apply-pattern-recursive [digit]
+(defn apply-pattern-recursive [level]
   (let [signal (get @blocks-by-level 1)
-        block-size digit
+        block-size level
         pattern-size (* 4 block-size)
         signal-size (count signal)]
-    (let [whole-blocks (quot signal-size block-size)
+    (let [block-count (+ (quot (dec signal-size) block-size) (if (rem signal-size block-size) 1 0))
           remainder (rem signal-size block-size)
-          ;; _ (println "level" digit "reducing over whole blocks" (range whole-blocks))
+          ;; _ (println "level" level "reducing over whole blocks" (range block-count))
           blocks (reduce (fn [blocks block]
                            (if (or (= (mod block 4) 1) (= (mod block 4) 3))
-                             (conj blocks (get-block digit block))
-                             (do
-                               (put-block digit block nil)
-                               (conj blocks nil))))
+                             (conj blocks (get-block level block))
+                             (conj blocks nil)))
                          []
-                         (range whole-blocks))
-          blocks (if (> remainder 0)
-                   (let [block-start (* block-size whole-blocks)]
-                     (assoc blocks whole-blocks (apply + (subvec signal block-start))))
-                   blocks)]
+                         (range block-count))]
       (sum-blocks blocks))))
 
 (defn run-fft-phase-recursive [signal]
-  (reset! blocks-by-level [[] (vec signal)])
+  (reset! blocks-by-level {1 (vec signal)})
   (reduce (fn [sums digit]
-            (if (power-of-2? digit)
-              (println "run-fft-phase-recursive" digit))
+            ;; (if (power-of-2? digit)
+            ;;   (println "run-fft-phase-recursive" digit))
             (let [sum (apply-pattern-recursive digit)]
               ;; (println "phase fn" "digit" digit "blocks" blocks "sum" sum)
               (conj sums sum)))
@@ -345,7 +313,7 @@
 (defn run-fft-recursive [signal phases]
   (loop [signal signal
          phase 0]
-    (println "phase" phase "signal start" (take 20 signal) "size" (count signal) (new java.util.Date))
+    ;; (println "phase" phase "signal start" (take 20 signal) "size" (count signal) (new java.util.Date))
     (if (= phase phases)
       signal
       (recur (run-fft-phase-recursive (apply conj [0] (vec signal))) (inc phase)))))
