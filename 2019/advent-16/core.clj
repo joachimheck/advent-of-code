@@ -248,59 +248,30 @@
                   (list size (<= (+ size (dec size)) block-size)))))))))
 
 (declare get-block-at-digit)
+(declare get-block)
 
-;; (defn compute-block [level block]
-;;   ;; (println "compute-block" "blocks-by-level" @blocks-by-level "level" level "block" block)
-;;   (let [block-start (* level block)
-;;         block-end (min (+ block-start level) (count (get @blocks-by-level 1)))
-;;         sub-block-size (largest-block-that-must-fit (- block-end block-start))]
-;;     (if (nil? (get @blocks-by-level level)) (reset! blocks-by-level (assoc @blocks-by-level level {})))
-;;     (let [block-sum (loop [i block-start
-;;                            sum 0]
-;;                       ;; (println "loop" "level" level "sub-level" sub-block-size "block-start" block-start "block-end" block-end "i" i)
-;;                       (if (= i block-end)
-;;                         sum
-;;                         (if (and (= 0 (mod i sub-block-size)) (< (+ i sub-block-size) block-end))
-;;                           (let [block-at-digit (get-block-at-digit sub-block-size i)]
-;;                             (recur (+ i sub-block-size) (+ sum block-at-digit)))
-;;                           (recur (inc i) (+ sum (get-in @blocks-by-level [1 i]))))))]
-;;       ;; (println "inserting block" level block block-sum "into" (get @blocks-by-level level))
-;;       (reset! blocks-by-level (assoc-in @blocks-by-level [level block] block-sum))
-;;       block-sum)))
+(defn sub-block-at-start [level block-start block-end]
+  (first (for [sub-level (reverse (range 1 (max (- block-end block-start) 2)))
+               :when (= (mod block-start sub-level) 0)]
+           [sub-level (quot block-start sub-level)])))
+
+(defn sub-blocks [level block]
+  (if (even? level)
+    (let [sub-level (quot level 2)]
+      [[sub-level (* 2 block)] [sub-level (inc (* 2 block))]])
+    (loop [block-start (* level block)
+           block-end (* level (inc block))
+           sub-blocks []]
+      ;; (println "block-start" block-start "block-end" block-end "sub-blocks" sub-blocks)
+      (if (= block-start block-end)
+        sub-blocks
+        (let [sub-block (sub-block-at-start level block-start block-end)]
+          (recur (+ block-start (first sub-block)) block-end (conj sub-blocks sub-block)))))))
 
 (defn compute-block [level block]
-  (println "compute-block" "blocks-by-level" @blocks-by-level "level" level "block" block)
+  ;; (println "compute-block" "blocks-by-level" @blocks-by-level "level" level "block" block)
   (if (nil? (get @blocks-by-level level)) (reset! blocks-by-level (assoc @blocks-by-level level {})))
-  (let [sub-level (quot (if (even? level) level (dec level)) 2)
-        block-sum (if (even? level)
-                    (let [sub-level (quot level 2)]
-                      (+ (get-block sub-level (* 2 block)) (get-block sub-level (inc (* 2 block)))))
-                    (let [sub-level (quot (dec level) 2)
-                          block-start (* level block)
-                          block-end (dec (min (+ block-start level) (count (get @blocks-by-level 1))))
-                          aligned-with-sub-block (= 0 (mod block-start sub-level))
-
-                          ;; 5/0: [2/0 2/1] 1/4
-                          ;; 5/1: [2/3 2/4] 1/5
-                          ;; 5/2: [2/5 2/6] 1/14
-                          ;; 5/3: [2/8 2/9] 1/15
-                          ;; 5/4: 2/10 2/11 2/12
-                          ;; 5/5: 2/12 2/13 2/14
-                          ;; even: [(* 5 (quot block 2)) (inc (* 5 (quot block 2)))] + (dec (* level (inc block)))
-                          ;; odd:  [(+ 3 (* 5 (quot (dec block) 2))) (+ 4 (* 5 (quot (dec block) 2)))] + (* level block)
-]
-                      (let [first-digit (* level block)
-                            second-digit (inc first-digit)
-                            last-digit (dec (+ first-digit level))
-                            first-full-block (if aligned-with-sub-block (quot first-digit sub-level) (quot second-digit sub-level))
-                            extra-digit (if aligned-with-sub-block last-digit first-digit)]
-                        (if (odd? level)
-                          (println "compute-block" level "/" block "sub-blocks" "size" sub-level
-                                   (list "extra "extra-digit (get-block 1 extra-digit))
-                                   (list "first" first-full-block (get-block sub-level first-full-block))
-                                   (list "second" (inc first-full-block) (get-block sub-level (inc first-full-block)))
-                                   "sum" (+ (get-block 1 extra-digit) (get-block sub-level first-full-block) (get-block sub-level (inc first-full-block)))))
-                        (+ (get-block 1 extra-digit) (get-block sub-level first-full-block) (get-block sub-level (inc first-full-block))))))]
+  (let [block-sum (apply + (map (fn [[b l]] (get-block b l)) (sub-blocks level block)))]
     ;; (println "inserting block" level block block-sum "into" (get @blocks-by-level level))
     (reset! blocks-by-level (assoc-in @blocks-by-level [level block] block-sum))
     block-sum))
@@ -369,3 +340,13 @@
 (defn decode-signal-recursive [initial-signal]
   (let [signal (apply concat (repeat 10000 initial-signal))]
     (first-8-after-fft-recursive signal 2)))
+
+
+;; Doh! The sums repeat horizontally as well as being tied together vertically.
+;; (let [signal (apply concat (repeat 3 (parse-line "12345678")))
+;;                       signal-size (count signal)
+;;                       level 2]
+;;                   (reset! blocks-by-level {1 (vec signal)})
+;;                   (for [block (range (quot signal-size level))]
+;;                     (list block (get-block level block))))
+;; ((0 3) (1 7) (2 11) (3 15) (4 3) (5 7) (6 11) (7 15) (8 3) (9 7) (10 11) (11 15))
