@@ -224,6 +224,7 @@
 ;; each one drops the first number and adds two new numbers. Instead of adding all the digits,
 ;; I just need to subtract on and add two at each step.
 (def blocks-by-level (atom {}))
+(def input-length (atom 0))
 
 (defn sum-blocks [blocks]
   ;; (println "sum-blocks" blocks)
@@ -247,7 +248,6 @@
                 (for [size sizes]
                   (list size (<= (+ size (dec size)) block-size)))))))))
 
-(declare get-block-at-digit)
 (declare get-block)
 
 (defn sub-block-at-start [level block-start block-end]
@@ -276,30 +276,33 @@
     (reset! blocks-by-level (assoc-in @blocks-by-level [level block] block-sum))
     block-sum))
 
+;; (defn get-block [level block]
+;;   ;; (println "get-block" "blocks-by-level" @blocks-by-level "level" level "block" block)
+;;   (if (>= (* level block) (count (get @blocks-by-level 1)))
+;;     0
+;;     (let [block-sum (get-in @blocks-by-level [level block])]
+;;       (if block-sum
+;;         block-sum
+;;         (compute-block level block)))))
+
 (defn get-block [level block]
   ;; (println "get-block" "blocks-by-level" @blocks-by-level "level" level "block" block)
   (if (>= (* level block) (count (get @blocks-by-level 1)))
     0
-    (let [block-sum (get-in @blocks-by-level [level block])]
-      (if block-sum
-        block-sum
-        (compute-block level block)))))
-
-(defn get-block-at-digit [level digit]
-  ;; (println "get-block-at-digit" level digit)
-  (let [block-num (quot digit level)
-        block (get-in @blocks-by-level [level block-num])]
-    (if block
-      block
-      (compute-block level block-num))))
+    (let [block-start (* level block)
+          block-end (* level (inc block))]
+      (if (and (> level 1) (> block @input-length))
+        (get-block level (mod block @input-length))
+        (let [block-sum (get-in @blocks-by-level [level block])]
+          (if block-sum
+            block-sum
+            (compute-block level block)))))))
 
 (defn apply-pattern-recursive [level]
   (let [signal (get @blocks-by-level 1)
         block-size level
-        pattern-size (* 4 block-size)
         signal-size (count signal)]
     (let [block-count (+ (quot (dec signal-size) block-size) (if (rem signal-size block-size) 1 0))
-          remainder (rem signal-size block-size)
           ;; _ (println "level" level "reducing over whole blocks" (range block-count))
           blocks (reduce (fn [blocks block]
                            (if (or (= (mod block 4) 1) (= (mod block 4) 3))
@@ -328,8 +331,12 @@
       signal
       (recur (run-fft-phase-recursive (apply conj [0] (vec signal))) (inc phase)))))
 
-(defn first-8-after-fft-recursive [signal phases]
-  (str/join (map str (take 8 (run-fft-recursive signal phases)))))
+(defn first-8-after-fft-recursive
+  ([signal phases]
+   (first-8-after-fft-recursive signal phases (count signal)))
+  ([signal phases length]
+   (reset! input-length length)
+   (str/join (map str (take 8 (run-fft-recursive signal phases))))))
 
 (deftest test-first-8-after-fft-recursive
   (is (= "01029498" (first-8-after-fft-recursive (parse-line "12345678") 4)))
@@ -337,9 +344,11 @@
   (is (= "73745418" (first-8-after-fft-recursive (parse-line "19617804207202209144916044189917") 100)))
   (is (= "52432133" (first-8-after-fft-recursive (parse-line "69317163492948606335995924319873") 100))))
 
-(defn decode-signal-recursive [initial-signal]
-  (let [signal (apply concat (repeat 10000 initial-signal))]
-    (first-8-after-fft-recursive signal 2)))
+(defn decode-signal-recursive [input repeats phases]
+  (let [signal (apply concat (repeat repeats input))
+        offset (find-offset input)]
+    (reset! input-length (count input))
+    (str/join (map str (take 8 (drop offset (run-fft-recursive signal phases)))))))
 
 
 ;; Doh! The sums repeat horizontally as well as being tied together vertically.
@@ -350,3 +359,10 @@
 ;;                   (for [block (range (quot signal-size level))]
 ;;                     (list block (get-block level block))))
 ;; ((0 3) (1 7) (2 11) (3 15) (4 3) (5 7) (6 11) (7 15) (8 3) (9 7) (10 11) (11 15))
+
+(deftest test-decode-signal-recursive
+  (is (= 84462026 (decode-signal-recursive (parse-line "03036732577212944063491565474664") 10000 100)))
+  (is (= 78725270 (decode-signal-recursive (parse-line "02935109699940807407585447034323") 10000 100)))
+  (is (= 53553731 (decode-signal-recursive (parse-line "03081770884921959731165446850517") 10000 100))))
+
+;; That doesn't work - it's still way too slow. I think I need to go back to before my recursive idea.
