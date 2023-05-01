@@ -256,17 +256,16 @@
            [sub-level (quot block-start sub-level)])))
 
 (defn sub-blocks [level block]
-  (if (even? level)
-    (let [sub-level (quot level 2)]
-      [[sub-level (* 2 block)] [sub-level (inc (* 2 block))]])
-    (loop [block-start (* level block)
-           block-end (* level (inc block))
-           sub-blocks []]
-      ;; (println "block-start" block-start "block-end" block-end "sub-blocks" sub-blocks)
-      (if (= block-start block-end)
-        sub-blocks
-        (let [sub-block (sub-block-at-start level block-start block-end)]
-          (recur (+ block-start (first sub-block)) block-end (conj sub-blocks sub-block)))))))
+  (let [the-sub-blocks (loop [block-start (* level block)
+                                block-end (min (* level (inc block)) (count (get @blocks-by-level 1)))
+                                sub-blocks []]
+                           ;; (println "block-start" block-start "block-end" block-end "sub-blocks" sub-blocks)
+                           (if (= block-start block-end)
+                             sub-blocks
+                             (let [sub-block (sub-block-at-start level block-start block-end)]
+                               (recur (+ block-start (first sub-block)) block-end (conj sub-blocks sub-block)))))]
+    ;; (println "sub-blocks for level" level "block" block ":" the-sub-blocks)
+    the-sub-blocks))
 
 (defn compute-block [level block]
   ;; (println "compute-block" "blocks-by-level" @blocks-by-level "level" level "block" block)
@@ -326,7 +325,7 @@
 (defn run-fft-recursive [signal phases]
   (loop [signal signal
          phase 0]
-    ;; (println "phase" phase "signal start" (take 20 signal) "size" (count signal) (new java.util.Date))
+    (println "phase" phase "signal start" (take 20 signal) "size" (count signal) (new java.util.Date))
     (if (= phase phases)
       signal
       (recur (run-fft-phase-recursive (apply conj [0] (vec signal))) (inc phase)))))
@@ -348,7 +347,8 @@
   (let [signal (apply concat (repeat repeats input))
         offset (find-offset input)]
     (reset! input-length (count input))
-    (str/join (map str (take 8 (drop offset (run-fft-recursive signal phases)))))))
+    ;; (str/join (map str (take 8 (drop offset (run-fft-recursive signal phases)))))
+    (run-fft-recursive signal phases)))
 
 
 ;; Doh! The sums repeat horizontally as well as being tied together vertically.
@@ -366,3 +366,18 @@
   (is (= 53553731 (decode-signal-recursive (parse-line "03081770884921959731165446850517") 10000 100))))
 
 ;; That doesn't work - it's still way too slow. I think I need to go back to before my recursive idea.
+
+(defn print-blocks-by-level []
+  (println (str/join "\n"
+                     (concat
+                      (list
+                       (str/join
+                        (concat (list (format "  1: "))
+                                (for [digit (get @blocks-by-level 1)]
+                                  (format "%3d " digit)))))
+                      (for [level (rest (sort (keys @blocks-by-level)))]
+                        (str/join
+                         (concat (list (format "%3d: " level))
+                                 (let [blocks (get @blocks-by-level level)]
+                                   (for [digit (sort (keys blocks))]
+                                     (format "%3d " (get blocks digit)))))))))))
