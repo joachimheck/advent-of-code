@@ -381,3 +381,6 @@
                                  (let [blocks (get @blocks-by-level level)]
                                    (for [digit (sort (keys blocks))]
                                      (format "%3d " (get blocks digit)))))))))))
+
+;; I guess I need to work backward from the last digit (on the last phase) and figure out how each digit
+;; effects the next (or previous, I guess).
