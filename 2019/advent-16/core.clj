@@ -382,5 +382,40 @@
                                    (for [digit (sort (keys blocks))]
                                      (format "%3d " (get blocks digit)))))))))))
 
+
 ;; I guess I need to work backward from the last digit (on the last phase) and figure out how each digit
 ;; effects the next (or previous, I guess).
+
+(defn run-fft-phase [signal]
+  (loop [sum 0
+         digits '()
+         i (dec (count signal))]
+    (if (< i 0)
+      (vec digits)
+      (if (nil? (get signal i))
+        (println "nil value for i =" i)
+        (let [new-sum (+ sum (get signal i))]
+          (recur new-sum
+                 (conj digits (mod new-sum 10))
+                 (dec i)))))))
+
+(defn decode-signal-sums [input]
+  (let [signal (apply concat (repeat 10000 input))
+        signal-length (count signal)
+        half-length (quot signal-length 2)
+        half-signal (vec (drop half-length signal))
+        offset (find-offset input)
+        half-offset (- offset half-length)
+        result-digits (nth (iterate run-fft-phase half-signal) 100)]
+    (str/join (map str (take 8 (drop half-offset result-digits))))))
+
+(deftest test-decode-signal-sums
+  (is (= "84462026" (decode-signal-sums (parse-line "03036732577212944063491565474664"))))
+  (is (= "78725270" (decode-signal-sums (parse-line "02935109699940807407585447034323"))))
+  (is (= "53553731" (decode-signal-sums (parse-line "03081770884921959731165446850517")))))
+
+;; And there it is, I just had to sum some numbers. This one completely stumped me but
+;; the actual code, once I knew how to do it, was trivial.
+;; (time (decode-signal-sums (parse-input large-input)))
+;; "Elapsed time: 50180.2451 msecs"
+;; "57762756"

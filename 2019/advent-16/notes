@@ -92,3 +92,25 @@ blocks
 [7 2]: (+ 6 7 8 1 2 3 4) = 31
 [7 2]: [2 7] + [4 4] + [1 20] => (+ 13 14 4) = 31
 
+
+
+The block thing wasn't remotely fast enough so I consulted reddit. It looks like maybe I can
+figure out a digit from nearby digits so I'll try to think it through myself. Apparently I
+need to work through the digits in reverse.
+
+Given a k-digit number n0 = d01d02...d0k, one phase will turn it into d11d12...d1k, and
+k phases will turn it into dk1dk2...dkk. The pattern sub-groups have length k but the pattern
+is offset to the left by one, so the pattern element at dkk (pkk) is 1 and for the rest of
+row k it's 0. So dkk = d(k-1)k. This also means the last digit is always the same.
+
+dkk = d(k-1)k
+
+dk(k-1) = d(k-1)(k-1) + d(k-1)k = d(k-1)(k-1) + dkk
+
+dk(k-2) = d(k-1)(k-2) + d(k-1)(k-1) + d(k-1)k
+
+I guess the trick is that the offset numbers they give us (which I was waiting to look until
+I figured out the rest) are always more than half the digits, so only the first half of the
+pattern applies, and the equations above are general. So for every digit drk,
+
+drk = mod10(sum[i=k..n] d(r-1)i)
