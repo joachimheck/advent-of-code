@@ -187,3 +187,89 @@
 ;; (sum-intersection-alignment-parameters (parse-output (run-program (parse-input large-input) [])))
 ;; 6520
 
+
+
+
+;; Part 2
+;; After visiting every part of the scaffold at least once, how much dust does the vacuum robot report it has collected?
+(defn neighbors [[x y]]
+  (list [x (dec y)]
+        [(inc x) y]
+        [x (inc y)]
+        [(dec x) y]))
+
+(defn opposite [[x y] [a b]]
+  [(- x (- a x)) (- y (- b y))])
+
+(defn get-next-pos [pos prev grid]
+  (let [available (filter #(= \# (get-in grid (reverse %)))
+                          (remove #{prev} (neighbors pos)))
+        opposite-pos (if prev (opposite pos prev) nil)]
+    (if (some #{opposite-pos} available)
+      opposite-pos
+      (first available))))
+
+(defn direction [[x1 y1] [x2 y2]]
+  ;; (println "direction" [x1 y1] [x2 y2])
+  (cond (< y2 y1) :north
+        (> x2 x1) :east
+        (> y2 y1) :south
+        (< x2 x1) :west))
+
+(defn get-turn [dir new-dir]
+  (let [directions [:north :east :south :west :north :east :south :west]
+        dir-index (.indexOf directions dir)
+        clockwise (.indexOf (drop dir-index directions) new-dir)]
+    (case clockwise
+      0 :straight
+      1 :right
+      2 :right
+      3 :left)))
+
+(defn move [[x y] dir]
+  (case dir
+    :north [x (dec y)]
+    :east [(inc x) y]
+    :south [x (inc y)]
+    :west [(dec x) y]))
+
+(defn turn [dir turn]
+  (let [directions [:north :east :south :west]
+        turns [:left :straight :right]]
+    (get directions (mod (+ (.indexOf directions dir) (dec (.indexOf turns turn))) 4))))
+
+(defn create-path [grid]
+  (let [start-pos (reverse (first (filter #(> (second %) 0) (map #(list (first %) (.indexOf (second %) "^")) (map-indexed list grid)))))
+        start-dir :north]
+    (loop [pos start-pos dir start-dir prev-pos nil path []]
+      ;; (println "loop" pos dir prev-pos path)
+      (let [next-pos (get-next-pos pos prev-pos grid)]
+        (if (or (nil? next-pos) (> (count path) 200))
+          path
+          (let [next-dir (direction pos next-pos)]
+            (if (= dir (direction pos next-pos))
+              (recur next-pos dir pos (conj (vec (drop-last path)) (inc (last path))))
+              (let [next-turn (get-turn dir next-dir)]
+                (recur pos (turn dir next-turn) prev-pos (apply conj path [(case next-turn :left \L :right \R) 0]))))))))))
+
+;; (println (create-path (parse-output (run-program (parse-input large-input) []))))
+;; [L 12 L 8 R 10 R 10 L 6 L 4 L 12 L 12 L 8 R 10 R 10 L 6 L 4 L 12 R 10 L 8 L 4 R 10 L 6 L 4 L 12 L 12 L 8 R 10 R 10 R 10 L 8 L 4 R 10 L 6 L 4 L 12 R 10 L 8 L 4 R 10]
+
+;; I manually figured this out:
+;; A = R 10 L 8 L 4 R 10
+;; B = L 6 L 4 L 12
+;; C = L 12 L 8 R 10 R 10
+;; [C B C B A B C A B A]
+
+(defn asciify [v]
+  (concat (map int v) (list 10)))
+
+(defn visit-scaffold [program]
+  (let [;; grid (parse-output (run-program (parse-input large-input) []))
+        main-routine "C,B,C,B,A,B,C,A,B,A"
+        fn-a "R,10,L,8,L,4,R,10"
+        fn-b "L,6,L,4,L,12"
+        fn-c "L,12,L,8,R,10,R,10"
+        video "n"
+        inputs (apply concat (map asciify (list main-routine fn-a fn-b fn-c video)))]
+    (last (run-program (assoc program 0 2) inputs))))
