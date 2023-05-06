@@ -44,7 +44,8 @@
      :keys (set keys)
      :doors (set doors)
      :grid (assoc grid start \.)
-     :steps 0}))
+     :steps 0
+     :path []}))
 
 (defn neighbors [[x y]]
   (list [x (dec y)]
@@ -110,32 +111,42 @@
 
 (defn collect-keys [state]
   (loop [states (list state)
-         finished '()]
+         finished '()
+         i 0]
     ;; (println "collect-keys loop" (count states) (count finished))
     ;; (println "states" (map #(list (:keys %) (:steps %)) states))
     ;; (println "finished" (map #(:steps %) finished))
-    (if (empty? states)
-      (apply min (map #(:steps %) finished))
-      (let [state (first states)
-            ;; _ (println "state" (dissoc state :grid) (count (:grid state)))
-            pos (:pos state)
-            state-keys (:keys state)
-            state-doors (:doors state)
-            grid (:grid state)]
-        (let [reachable (reachable-keys pos grid)
-              ;; _ (println "reachable" reachable)
-              ;; _ (println (print-grid grid pos))
-              new-states (map (fn [[k steps]]
-                                (let [key-pos (first (first (find-matching grid (re-pattern (str k)))))]
-                                  {:pos key-pos
-                                   :steps (+ (:steps state) steps)
-                                   :grid (use-key k grid)
-                                   :keys (disj state-keys k)
-                                   :doors (disj state-doors (door-for-key k))}))
-                              reachable)
-              new-finished (if (empty? reachable) (conj finished state))]
-          (recur (distinct (remove #(empty? (:keys %)) (concat (rest states) new-states)))
-                 (filter #(empty? (:keys %)) (concat finished (conj new-states state)))))))))
+    (if (= 0 (mod i 1000))
+      (println "iteration" i "states" (count states)))
+    (cond (empty? states)
+          (let [result (first (sort-by :steps finished))]
+            ;; (println "finished" finished)
+            (list "complete in" i "steps:" (:steps result) (:path result)))
+          ;; (= i 200)
+          ;; (list "iteration limit states:" (reverse (sort-by first (map (fn [s] (list (:steps s) (:path s))) states))))
+          :else
+          (let [state (first (sort-by :steps states))
+                ;; _ (println "state" (dissoc state :grid) (count (:grid state)))
+                pos (:pos state)
+                state-keys (:keys state)
+                state-doors (:doors state)
+                grid (:grid state)]
+            (let [reachable (reachable-keys pos grid)
+                  ;; _ (println "reachable" reachable)
+                  ;; _ (println (print-grid grid pos))
+                  new-states (map (fn [[k steps]]
+                                    (let [key-pos (first (first (find-matching grid (re-pattern (str k)))))]
+                                      {:pos key-pos
+                                       :steps (+ (:steps state) steps)
+                                       :path (conj (:path state) k)
+                                       :grid (use-key k grid)
+                                       :keys (disj state-keys k)
+                                       :doors (disj state-doors (door-for-key k))}))
+                                  reachable)
+                  new-finished (if (empty? reachable) (conj finished state))]
+              (recur (concat (remove #{state} states) (remove #(empty? (:keys %)) new-states))
+                     (concat finished (filter #(empty? (:keys %)) (conj new-states state)))
+                     (inc i)))))))
 
 (def small-input-2 "small-input-2.txt")
 (def small-input-3 "small-input-3.txt")
