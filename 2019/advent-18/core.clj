@@ -61,10 +61,10 @@
     ;; (println "reachable-keys loop" "open-set" open-set "visited" visited "keys" keys "steps" steps)
     (if (empty? open-set)
       keys
-      (let [raw-adjacent (distinct (apply concat (map neighbors open-set)))
-            adjacent (remove visited (filter #(re-matches #"[a-z\.]" (str (get grid %))) raw-adjacent))
-            new-keys (apply merge keys (map (fn [pos] [(get grid pos) steps]) (filter #(re-matches #"[a-z]" (str (get grid %))) adjacent)))]
-        (recur adjacent (apply conj visited open-set) new-keys (inc steps))))))
+      (let [adjacent (distinct (apply concat (map neighbors open-set)))
+            accessible (remove visited (filter #(re-matches #"\." (str (get grid %))) adjacent))
+            new-keys (apply merge keys (map (fn [pos] [(get grid pos) {:steps steps :pos pos}]) (filter #(re-matches #"[a-z]" (str (get grid %))) adjacent)))]
+        (recur accessible (apply conj visited open-set) new-keys (inc steps))))))
 
 (defn door-for-key [key]
   (char (- (int key) 32)))
@@ -82,6 +82,9 @@
       (assoc grid key-pos \. door-pos \.)
       without-key)))
 
+(defn use-keys [keys grid]
+  (reduce (fn [acc k] (use-key k acc)) grid keys))
+
 (defn steps [start goal grid]
   (loop [open-set (list start)
          visited #{}
@@ -92,10 +95,10 @@
       (some #{goal} open-set)
       steps
       :else
-      (let [current (first open-set)
-            new-open-set (concat (rest open-set) (remove visited (filter #(re-matches #"[a-z\.]" (str (get grid %))) (neighbors current))))]
-       (recur new-open-set
-              (conj visited current)
+      (let [adjacent (distinct (apply concat (map neighbors open-set)))
+            accessible (remove visited (filter #(re-matches #"[A-Za-z\.]" (str (get grid %))) adjacent))]
+       (recur accessible
+              (apply conj visited open-set)
               (inc steps))))))
 
 (defn print-grid [grid pos]
@@ -119,36 +122,142 @@
     (if (= 0 (mod i 1000))
       (println "iteration" i "states" (count states)))
     (cond (empty? states)
-          (let [result (first (sort-by :steps finished))]
+          (let [result (first (doall (sort-by :steps finished)))]
             ;; (println "finished" finished)
             (list "complete in" i "steps:" (:steps result) (:path result)))
           ;; (= i 200)
           ;; (list "iteration limit states:" (reverse (sort-by first (map (fn [s] (list (:steps s) (:path s))) states))))
           :else
-          (let [state (first (sort-by :steps states))
+          (let [state (first (doall (sort-by :steps states)))
                 ;; _ (println "state" (dissoc state :grid) (count (:grid state)))
                 pos (:pos state)
                 state-keys (:keys state)
                 state-doors (:doors state)
                 grid (:grid state)]
-            (let [reachable (reachable-keys pos grid)
+            (let [reachable (doall (reachable-keys pos grid))
                   ;; _ (println "reachable" reachable)
                   ;; _ (println (print-grid grid pos))
-                  new-states (map (fn [[k steps]]
-                                    (let [key-pos (first (first (find-matching grid (re-pattern (str k)))))]
-                                      {:pos key-pos
-                                       :steps (+ (:steps state) steps)
-                                       :path (conj (:path state) k)
-                                       :grid (use-key k grid)
-                                       :keys (disj state-keys k)
-                                       :doors (disj state-doors (door-for-key k))}))
-                                  reachable)
-                  new-finished (if (empty? reachable) (conj finished state))]
-              (recur (concat (remove #{state} states) (remove #(empty? (:keys %)) new-states))
-                     (concat finished (filter #(empty? (:keys %)) (conj new-states state)))
+                  new-states (doall (map (fn [[k {:keys [steps]}]]
+                                           (let [key-pos (first (first (doall (find-matching grid (re-pattern (str k))))))]
+                                             {:pos key-pos
+                                              :steps (+ (:steps state) steps)
+                                              :path (conj (:path state) k)
+                                              :grid (use-key k grid)
+                                              :keys (disj state-keys k)
+                                              :doors (disj state-doors (door-for-key k))}))
+                                         reachable))
+                  new-finished (doall (if (empty? reachable) (conj finished state)))]
+              (recur (doall (concat (remove #{state} states) (remove #(empty? (:keys %)) new-states)))
+                     (doall (concat finished (filter #(empty? (:keys %)) (conj new-states state))))
                      (inc i)))))))
 
 (def small-input-2 "small-input-2.txt")
 (def small-input-3 "small-input-3.txt")
 (def small-input-4 "small-input-4.txt")
+(def small-input-5 "small-input-5.txt")
 
+(defn h-minimal [{:keys [keys pos] :as node} goal grid]
+  (- (count goal) (count keys)))
+
+(defn manhattan-distance [[x1 y1] [x2 y2]]
+  (+ (abs (- x2 x1)) (abs (- y2 y1))))
+
+(defn h-distance [{:keys [keys pos] :as node} goal grid]
+  (->> (find-matching grid #"[a-z]")
+       (remove #(some #{(second %)} keys))
+       (map first)
+       (map #(manhattan-distance pos %))
+       (apply +)))
+
+(defn h-steps [{:keys [keys pos] :as node} goal grid]
+  (->> (find-matching (use-keys keys grid) #"[a-z]")
+       (remove #(some #{(second %)} keys))
+       (map first)
+       (map #(steps pos % grid))
+       (apply +)))
+
+(defn h-steps-and-keys [{:keys [keys pos] :as node} goal grid]
+  (let [keys-left (find-matching (use-keys keys grid) #"[a-z]")]
+   (->> keys-left
+        (remove #(some #{(second %)} keys))
+        (map first)
+        (map #(steps pos % grid))
+        (apply +)
+        (+ (* 100 (count keys-left))))))
+
+(defn h-flood [{:keys [keys pos] :as node} goal grid]
+  (let [keys-left (find-matching (use-keys keys grid) #"[a-z]")]
+    (loop [open-set (list pos)
+           visited #{}
+           keys-found #{}
+           steps 0]
+      (cond
+        (set/subset? goal (apply conj keys keys-found))
+        steps
+        (empty? open-set)
+        keys-found
+        :else
+        (let [adjacent (distinct (apply concat (map neighbors open-set)))
+              new-keys (set (map first (filter #(re-matches #"[a-z]" %) (map #(str (get grid %)) adjacent))))
+              accessible (remove visited (filter #(re-matches #"[A-Za-z\.]" (str (get grid %))) adjacent))]
+          (recur accessible
+                 (apply conj visited open-set)
+                 (apply conj keys-found new-keys)
+                 (inc steps)))))))
+
+(defn reconstruct-path [froms start goal]
+  ;; (println "reconstruct-path" froms)
+  (loop [path (list {:from goal :cost 0})
+         cost 0
+         ordered-keys []]
+    (let [head (:from (first path))]
+      (if (= head start)
+        {:cost cost
+         :path (reverse (apply concat ordered-keys))}
+        (let [{next-node :from to :to next-cost :cost :as combined} (get froms head)]
+          (recur (conj path combined) (+ cost next-cost) (conj ordered-keys (remove (:keys next-node) (:keys to)))))))))
+
+(defn process-node [{current-keys :keys current-pos :pos :as current} open-set f-scores g-scores froms goal h-fn grid]
+  (let [grid (reduce (fn [acc k] (use-key k acc)) grid (:keys current))]
+    (loop [neighbors (map (fn [[k {:keys [steps pos]}]] {:keys (conj current-keys k) :pos pos :steps steps}) (reachable-keys current-pos grid))
+           open-set (disj open-set current)
+           f-scores f-scores
+           g-scores g-scores
+           froms froms]
+      (if (empty? neighbors)
+        [open-set f-scores g-scores froms]
+        (let [steps (:steps (first neighbors))
+              neighbor (dissoc (first neighbors) :steps)
+              tentative-g-score (+ (get g-scores current) steps)]
+          (if (< tentative-g-score (get g-scores (:keys neighbor) Integer/MAX_VALUE))
+            (let [new-f-score (+ tentative-g-score (h-fn neighbor goal grid))]
+             (recur (rest neighbors)
+                    (conj open-set neighbor)
+                    (assoc f-scores neighbor new-f-score)
+                    (assoc g-scores neighbor tentative-g-score)
+                    (assoc froms neighbor {:from current :to  neighbor :cost steps :f-score new-f-score})))
+            (recur (rest neighbors) open-set f-scores g-scores froms)))))))
+
+(defn collect-keys-a* [state h-fn]
+  ;; A node consists of the set of acquired keys, plus the current position.
+  (let [grid (:grid state)
+        start {:keys #{} :pos (:pos state)}
+        goal (:keys state)]
+   (loop [open-set #{start}
+          f-scores {start (h-fn start goal grid)}
+          g-scores {start 0}
+          froms {}]
+     (if (empty? open-set)
+       :error-no-open-nodes
+       (let [current (first (sort-by #(get f-scores %) open-set))]
+         (println "a*" "current" current (get f-scores current))
+         (println "f-scores" f-scores)
+         (newline)
+         (if (= goal (:keys current))
+           (reconstruct-path froms start current)
+           (let [[open-set f-scores g-scores froms] (process-node current open-set f-scores g-scores froms goal h-fn grid)]
+             (recur open-set f-scores g-scores froms))))))))
+
+;; I think h-minimal is admissive and consistent but I get the wrong answer for this:
+;; (time (collect-keys-a* (parse-input small-input-4) h-minimal))
+;; and it doesn't halt for small-input-3.
