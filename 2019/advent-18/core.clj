@@ -195,7 +195,8 @@
         (set/subset? goal (apply conj keys keys-found))
         steps
         (empty? open-set)
-        keys-found
+        ;;keys-found
+        steps
         :else
         (let [adjacent (distinct (apply concat (map neighbors open-set)))
               new-keys (set (map first (filter #(re-matches #"[a-z]" %) (map #(str (get grid %)) adjacent))))
@@ -204,6 +205,12 @@
                  (apply conj visited open-set)
                  (apply conj keys-found new-keys)
                  (inc steps)))))))
+
+(defn h-closest [{:keys [keys pos] :as node} goal grid]
+  (apply min (map :steps (vals (reachable-keys pos grid)))))
+
+(defn h-minimal-times-closest [{:keys [keys pos] :as node} goal grid]
+  (* (h-minimal node goal grid) (h-closest node goal grid)))
 
 (defn reconstruct-path [froms start goal]
   ;; (println "reconstruct-path" froms)
@@ -215,21 +222,26 @@
         {:cost cost
          :path (reverse (apply concat ordered-keys))}
         (let [{next-node :from to :to next-cost :cost :as combined} (get froms head)]
-          (recur (conj path combined) (+ cost next-cost) (conj ordered-keys (remove (:keys next-node) (:keys to)))))))))
+          (recur (conj path combined) (+ cost next-cost) (conj ordered-keys (remove (set (:keys next-node)) (:keys to)))))))))
+
+(defn neighbors-by-steps [current-keys current-pos grid]
+  (into {}
+        (map (fn [[k {:keys [steps pos]}]]
+               [{:keys (conj current-keys k) :pos pos} steps])
+             (reachable-keys current-pos grid))))
 
 (defn process-node [{current-keys :keys current-pos :pos :as current} open-set f-scores g-scores froms goal h-fn grid]
-  (let [grid (reduce (fn [acc k] (use-key k acc)) grid (:keys current))]
-    (loop [neighbors (map (fn [[k {:keys [steps pos]}]] {:keys (conj current-keys k) :pos pos :steps steps}) (reachable-keys current-pos grid))
+  (let [grid (use-keys current-keys grid)]
+    (loop [neighbors (neighbors-by-steps current-keys current-pos grid)
            open-set (disj open-set current)
            f-scores f-scores
            g-scores g-scores
            froms froms]
       (if (empty? neighbors)
         [open-set f-scores g-scores froms]
-        (let [steps (:steps (first neighbors))
-              neighbor (dissoc (first neighbors) :steps)
+        (let [[neighbor steps] (first neighbors)
               tentative-g-score (+ (get g-scores current) steps)]
-          (if (< tentative-g-score (get g-scores (:keys neighbor) Integer/MAX_VALUE))
+          (if (< tentative-g-score (get g-scores neighbor Integer/MAX_VALUE))
             (let [new-f-score (+ tentative-g-score (h-fn neighbor goal grid))]
              (recur (rest neighbors)
                     (conj open-set neighbor)
@@ -250,10 +262,10 @@
      (if (empty? open-set)
        :error-no-open-nodes
        (let [current (first (sort-by #(get f-scores %) open-set))]
-         (println "a*" "current" current (get f-scores current))
-         (println "f-scores" f-scores)
-         (newline)
-         (if (= goal (:keys current))
+         ;; (println "a*" "current" current (get f-scores current))
+         ;; (println "f-scores" f-scores)
+         ;; (newline)
+         (if (= goal (set (:keys current)))
            (reconstruct-path froms start current)
            (let [[open-set f-scores g-scores froms] (process-node current open-set f-scores g-scores froms goal h-fn grid)]
              (recur open-set f-scores g-scores froms))))))))
