@@ -38,14 +38,16 @@
         width (count (first grid))
         height (count grid)
         start (first (first (find-matching grid #"@")))
-        keys (map second (find-matching grid #"[a-z]"))
+        keys-by-position (find-matching grid #"[a-z]")
+        keys (map second keys-by-position)
         doors (map second (find-matching grid #"[A-Z]"))]
     {:pos start
      :keys (set keys)
      :doors (set doors)
      :grid (assoc grid start \.)
      :steps 0
-     :path []}))
+     :path []
+     :key-positions (assoc (set/map-invert keys-by-position) nil start)}))
 
 (defn neighbors [[x y]]
   (list [x (dec y)]
@@ -273,3 +275,65 @@
 ;; I think h-minimal is admissive and consistent but I get the wrong answer for this:
 ;; (time (collect-keys-a* (parse-input small-input-4) h-minimal))
 ;; and it doesn't halt for small-input-3.
+
+
+;; Ok, so Reddit tells me I'm barking up the wrong tree. I should just be doing a depth-first search, and caching.
+;; Also, maybe branching and bounding will help here, to prune sub-trees that take longer to traverse than some full path.
+(defn collect-keys-cache [initial-state]
+  (let [initial-grid (:grid initial-state)
+        all-keys (:keys initial-state)]
+   (loop [states (list initial-state)
+          best-state nil
+          cache {}
+          i 0]
+     ;; (println "collect-keys loop" (count states) (count finished))
+     ;; (println "states" (map #(list (:keys %) (:steps %)) states))
+     ;; (println "finished" (map #(:steps %) finished))
+     (if (= 0 (mod i 1000))
+       (println "iteration" i "states" (count states)))
+     (if (empty? states)
+       best-state
+       (let [state (first states)
+             current (last (:path state))
+             ;; pos (:pos state)
+             
+             state-keys (:keys state)
+             remaining-keys (apply disj all-keys state-keys)
+             cached (get cache [current remaining-keys])
+             grid (use-keys state-keys initial-grid)]
+         (if cached
+           cached ; TODO - what is this and how do I add it to my result?
+
+           (let [pos (first (first (find-matching initial-grid (re-pattern (str current)))))
+                 reachable (reachable-keys pos grid)
+                 new-states (map (fn [[k {:keys [steps]}]]
+                                   (let [key-pos (first (first (find-matching grid (re-pattern (str k)))))]
+                                     {:pos key-pos
+                                      :steps (+ (:steps state) steps)
+                                      :path (conj (:path state) k)
+                                      :keys (disj state-keys k)}))
+                                 reachable)
+                 new-cache (if (= (count remaining-keys) 1)
+                             (assoc cache [current remaining-keys] (:steps (first new-states))))
+
+
+
+
+                 ]
+             (recur (doall (concat (remove #{state} states) (remove #(empty? (:keys %)) new-states)))
+                    (doall (concat finished (filter #(empty? (:keys %)) (conj new-states state))))
+                    (inc i)))))))))
+
+(defn shortest-path [{:keys [path steps] :as state} grid key-positions]
+  (let [pos (get key-positions (last path))
+        reachable (reachable-keys pos (use-keys path grid))
+        remaining-keys (remove (set path) (keys key-positions))]
+    (if (empty? remaining-keys)
+      path
+      (map (fn [k] (shortest-path {:path (conj path k) :steps (+ steps (get reachable k))} (disj remaining-keys k) grid)) remaining-keys))
+
+    ;;(first (sort-by :steps (map (fn [key] (shortest-path (conj path key) (disj remaining-keys key) grid)) remaining-keys)))
+    ))
+
+;; (let [state (parse-input small-input)]
+;;                   (shortest-path state (:grid state) (:key-positions state)))
