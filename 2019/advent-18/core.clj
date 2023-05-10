@@ -28,8 +28,7 @@
             [[x y] (get-in grid [y x])]))))
 
 (defn find-matching [grid regex]
-  (filter (fn [[k v]] (re-matches regex (str v)))
-          grid))
+  (filter (fn [[k v]] (re-matches regex (str v))) grid))
 
 (defn parse-input [f]
   (let [grid (to-map (->> f
@@ -72,7 +71,7 @@
   (char (- (int key) 32)))
 
 (defn useable-keys [keys doors]
-  (println "useable-keys" keys doors)
+  ;; (println "useable-keys" keys doors)
   (filter #(some doors (list (door-for-key %))) keys))
 
 (defn use-key [key grid]
@@ -324,16 +323,83 @@
                     (doall (concat finished (filter #(empty? (:keys %)) (conj new-states state))))
                     (inc i)))))))))
 
-(defn shortest-path [{:keys [path steps] :as state} grid key-positions]
+(defn all-paths [{:keys [path steps grid key-positions] :as state}]
   (let [pos (get key-positions (last path))
-        reachable (reachable-keys pos (use-keys path grid))
-        remaining-keys (remove (set path) (keys key-positions))]
-    (if (empty? remaining-keys)
-      path
-      (map (fn [k] (shortest-path {:path (conj path k) :steps (+ steps (get reachable k))} (disj remaining-keys k) grid)) remaining-keys))
+        new-grid (use-keys path grid)
+        reachable (reachable-keys pos new-grid)
+        remaining-keys (set (remove (set path) (keys key-positions)))]
+    ;; (println "all-paths" "path" path "reachable" reachable "remaining-keys" remaining-keys)
+    (if (= #{nil} remaining-keys)
+      (list {:path path :steps steps})
+      (apply concat
+             (map (fn [[k {r-steps :steps r-pos :pos}]]
+                    (all-paths {:path (conj (vec path) k)
+                                :steps (+ steps r-steps)
+                                :grid grid
+                                :key-positions key-positions}))
+                  reachable)))))
 
-    ;;(first (sort-by :steps (map (fn [key] (shortest-path (conj path key) (disj remaining-keys key) grid)) remaining-keys)))
-    ))
+(defn all-paths-cached [{:keys [path steps grid key-positions] :as state} cache]
+  (let [pos (get key-positions (last path))
+        new-grid (use-keys path grid)
+        reachable (reachable-keys pos new-grid)
+        remaining-keys (set (remove (set path) (keys key-positions)))]
+    ;; (println "all-paths" "path" path "reachable" reachable "remaining-keys" remaining-keys)
+    (if (= #{nil} remaining-keys)
+      (list {:path path :steps steps :cache cache})
+      (let [sub-paths (into {}
+                            (map (fn [[k {r-steps :steps r-pos :pos}]]
+                                   [k (all-paths-cached {:path (conj (vec path) k)
+                                                         :steps (+ steps r-steps)
+                                                         :grid grid
+                                                         :key-positions key-positions}
+                                                 cache)])
+                                 reachable))
+            cache (reduce-kv (fn [acc k v] (assoc acc (conj (vec path) k) v))
+                               ;; (update acc (conj (vec path) k) #(if % % v))
+                             cache
+                             sub-paths)]
+        (apply concat (vals sub-paths))))))
 
-;; (let [state (parse-input small-input)]
-;;                   (shortest-path state (:grid state) (:key-positions state)))
+(def path-cache (atom {}))
+
+(defn shortest-path [{:keys [path steps grid key-positions] :as state}]
+  (let [pos (get key-positions (last path))
+        new-grid (use-keys path grid)
+        reachable (reachable-keys pos new-grid)
+        remaining-keys (set (remove (set path) (keys key-positions)))]
+    ;; (println "all-paths" "path" path "reachable" reachable "remaining-keys" remaining-keys)
+    (if (= #{nil} remaining-keys)
+      (list {:path path :steps steps})
+      (let [cache-key [(last path) remaining-keys]
+            result (if (get @path-cache cache-key)
+                     (get @path-cache cache-key)
+                     (take 1 (sort-by :steps
+                                      (apply concat
+                                             (map (fn [[k {r-steps :steps r-pos :pos}]]
+                                                    (shortest-path {:path (conj (vec path) k)
+                                                                    :steps (+ steps r-steps)
+                                                                    :grid grid
+                                                                    :key-positions key-positions}))
+                                                  reachable)))))]
+        (reset! path-cache (assoc @path-cache cache-key result))
+        result))))
+
+
+
+;; (let [input (parse-input small-input-3)]
+;;                   (time (shortest-path input)))
+;; "Elapsed time: 30616.5882 msecs"
+;; ({:path [\f \b \e \c \g \a \k \h \d \l \m \n \o \j \p \i], :steps 144})
+
+;; This is still quite slow but at least it eventually finishes. However, it's not the right answer.
+
+;; (let [input (parse-input large-input)]
+;;                   (time (shortest-path input)))
+;; "Elapsed time: 1147767.2536 msecs"
+;; ({:path [\f \b \e \c \g \a \k \h \d \l \m \j \p \i \o \n], :steps 148})
+
+;; Also incorrect
+
+;; 148
+;; ---> answer <---
