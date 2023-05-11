@@ -278,114 +278,49 @@
 
 ;; Ok, so Reddit tells me I'm barking up the wrong tree. I should just be doing a depth-first search, and caching.
 ;; Also, maybe branching and bounding will help here, to prune sub-trees that take longer to traverse than some full path.
-(defn collect-keys-cache [initial-state]
-  (let [initial-grid (:grid initial-state)
-        all-keys (:keys initial-state)]
-   (loop [states (list initial-state)
-          best-state nil
-          cache {}
-          i 0]
-     ;; (println "collect-keys loop" (count states) (count finished))
-     ;; (println "states" (map #(list (:keys %) (:steps %)) states))
-     ;; (println "finished" (map #(:steps %) finished))
-     (if (= 0 (mod i 1000))
-       (println "iteration" i "states" (count states)))
-     (if (empty? states)
-       best-state
-       (let [state (first states)
-             current (last (:path state))
-             ;; pos (:pos state)
-             
-             state-keys (:keys state)
-             remaining-keys (apply disj all-keys state-keys)
-             cached (get cache [current remaining-keys])
-             grid (use-keys state-keys initial-grid)]
-         (if cached
-           cached ; TODO - what is this and how do I add it to my result?
-
-           (let [pos (first (first (find-matching initial-grid (re-pattern (str current)))))
-                 reachable (reachable-keys pos grid)
-                 new-states (map (fn [[k {:keys [steps]}]]
-                                   (let [key-pos (first (first (find-matching grid (re-pattern (str k)))))]
-                                     {:pos key-pos
-                                      :steps (+ (:steps state) steps)
-                                      :path (conj (:path state) k)
-                                      :keys (disj state-keys k)}))
-                                 reachable)
-                 new-cache (if (= (count remaining-keys) 1)
-                             (assoc cache [current remaining-keys] (:steps (first new-states))))
-
-
-
-
-                 ]
-             (recur (doall (concat (remove #{state} states) (remove #(empty? (:keys %)) new-states)))
-                    (doall (concat finished (filter #(empty? (:keys %)) (conj new-states state))))
-                    (inc i)))))))))
-
-(defn all-paths [{:keys [path steps grid key-positions] :as state}]
-  (let [pos (get key-positions (last path))
-        new-grid (use-keys path grid)
-        reachable (reachable-keys pos new-grid)
-        remaining-keys (set (remove (set path) (keys key-positions)))]
-    ;; (println "all-paths" "path" path "reachable" reachable "remaining-keys" remaining-keys)
-    (if (= #{nil} remaining-keys)
-      (list {:path path :steps steps})
-      (apply concat
-             (map (fn [[k {r-steps :steps r-pos :pos}]]
-                    (all-paths {:path (conj (vec path) k)
-                                :steps (+ steps r-steps)
-                                :grid grid
-                                :key-positions key-positions}))
-                  reachable)))))
-
-(defn all-paths-cached [{:keys [path steps grid key-positions] :as state} cache]
-  (let [pos (get key-positions (last path))
-        new-grid (use-keys path grid)
-        reachable (reachable-keys pos new-grid)
-        remaining-keys (set (remove (set path) (keys key-positions)))]
-    ;; (println "all-paths" "path" path "reachable" reachable "remaining-keys" remaining-keys)
-    (if (= #{nil} remaining-keys)
-      (list {:path path :steps steps :cache cache})
-      (let [sub-paths (into {}
-                            (map (fn [[k {r-steps :steps r-pos :pos}]]
-                                   [k (all-paths-cached {:path (conj (vec path) k)
-                                                         :steps (+ steps r-steps)
-                                                         :grid grid
-                                                         :key-positions key-positions}
-                                                 cache)])
-                                 reachable))
-            cache (reduce-kv (fn [acc k v] (assoc acc (conj (vec path) k) v))
-                               ;; (update acc (conj (vec path) k) #(if % % v))
-                             cache
-                             sub-paths)]
-        (apply concat (vals sub-paths))))))
-
 (def path-cache (atom {}))
 
-(defn shortest-path [{:keys [path steps grid key-positions] :as state}]
-  (let [pos (get key-positions (last path))
-        new-grid (use-keys path grid)
-        reachable (reachable-keys pos new-grid)
-        remaining-keys (set (remove (set path) (keys key-positions)))]
-    ;; (println "all-paths" "path" path "reachable" reachable "remaining-keys" remaining-keys)
-    (if (= #{nil} remaining-keys)
-      (list {:path path :steps steps})
-      (let [cache-key [(last path) remaining-keys]
-            result (if (get @path-cache cache-key)
-                     (get @path-cache cache-key)
-                     (take 1 (sort-by :steps
-                                      (apply concat
-                                             (map (fn [[k {r-steps :steps r-pos :pos}]]
-                                                    (shortest-path {:path (conj (vec path) k)
-                                                                    :steps (+ steps r-steps)
-                                                                    :grid grid
-                                                                    :key-positions key-positions}))
-                                                  reachable)))))]
+(def cache-hits (atom 0))
+(def cache-misses (atom 0))
+
+(defn shortest-path [key remaining-keys grid key-positions]
+  (let [pos (get key-positions key)
+        reachable (reachable-keys pos grid)]
+    ;; (println "shortest-path" "key" key "remaining-keys" remaining-keys "reachable" reachable)
+    (if (empty? remaining-keys)
+      {:path [key] :steps 0}
+      (let [cache-key [key remaining-keys]
+            cache-result (get @path-cache cache-key)
+            result (if cache-result
+                     (do
+                       (swap! cache-hits inc)
+                       cache-result)
+                     (do
+                       (swap! cache-misses inc)
+                       (let [sub-paths (map (fn [[k {r-steps :steps r-pos :pos}]]
+                                                      (shortest-path k (set (remove #{k} remaining-keys)) (use-key k grid) key-positions))
+                                                    reachable)
+                             ;; _ (println "sub-paths" sub-paths)
+                             ]
+                        (first (sort-by #(+ (:steps (get reachable (first (:path %)))) (:steps %)) sub-paths)))))]
         (reset! path-cache (assoc @path-cache cache-key result))
-        result))))
+        ;; (println "result for" cache-key "is" result (if cache-result "hit!" "miss.") "reachable" reachable)
+        {:path (apply conj [key] (:path result))
+         :steps (+ (:steps result) (:steps (get reachable (first (:path result)))))}))))
 
-
+(defn compute-path [state]
+  (reset! path-cache {})
+  (reset! cache-hits 0)
+  (reset! cache-misses 0)
+  (let [start-t (System/currentTimeMillis)
+        result (shortest-path nil
+                              (set (remove nil? (keys (:key-positions state))))
+                              (:grid state)
+                              (:key-positions state))
+        end-t (System/currentTimeMillis)
+        hit-rate (/ @cache-hits (+ @cache-hits @cache-misses))]
+    (println (:steps result) "steps for shortest path" (rest (:path result)))
+    (printf "%dms; cache hit rate %d%%\n" (- end-t start-t) (int (* 100 hit-rate)))))
 
 ;; (let [input (parse-input small-input-3)]
 ;;                   (time (shortest-path input)))
@@ -403,3 +338,14 @@
 
 ;; 148
 ;; ---> answer <---
+
+
+;; (compute-path (parse-input small-input-3))
+;; 136 steps for shortest path (f b e c g n a k h m d l o j p i)
+;; 20755ms; cache hit rate 77%
+
+;; (compute-path (parse-input large-input))
+;; 5964 steps for shortest path (g j z i d v t l p x w r u f a y m b c s k q h e n o)
+;; 664694ms; cache hit rate 73%
+
+;; TODO: speed up with branch and bound?
