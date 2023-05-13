@@ -37,7 +37,7 @@
         width (count (first grid))
         height (count grid)
         start (first (first (find-matching grid #"@")))
-        keys-by-position (find-matching grid #"[a-z]")
+        keys-by-position (find-matching grid #"[a-z0-9]")
         keys (map second keys-by-position)
         doors (map second (find-matching grid #"[A-Z]"))]
     {:pos start
@@ -59,12 +59,12 @@
          visited #{}
          keys {}
          steps 1]
-    ;; (println "reachable-keys loop" "open-set" open-set "visited" visited "keys" keys "steps" steps)
+    (println "reachable-keys loop" "open-set" open-set "visited" visited "keys" keys "steps" steps)
     (if (empty? open-set)
       keys
       (let [adjacent (distinct (apply concat (map neighbors open-set)))
             accessible (remove visited (filter #(re-matches #"\." (str (get grid %))) adjacent))
-            new-keys (apply merge keys (map (fn [pos] [(get grid pos) {:steps steps :pos pos}]) (filter #(re-matches #"[a-z]" (str (get grid %))) adjacent)))]
+            new-keys (apply merge keys (map (fn [pos] [(get grid pos) {:steps steps :pos pos}]) (filter #(re-matches #"[a-z0-9]" (str (get grid %))) adjacent)))]
         (recur accessible (apply conj visited open-set) new-keys (inc steps))))))
 
 (defn door-for-key [key]
@@ -97,21 +97,21 @@
       steps
       :else
       (let [adjacent (distinct (apply concat (map neighbors open-set)))
-            accessible (remove visited (filter #(re-matches #"[A-Za-z\.]" (str (get grid %))) adjacent))]
+            accessible (remove visited (filter #(re-matches #"[A-Za-z0-9\.]" (str (get grid %))) adjacent))]
        (recur accessible
               (apply conj visited open-set)
               (inc steps))))))
 
-(defn print-grid [grid pos]
+(defn print-grid [grid posv]
   (let [width (inc (apply max (map first (keys grid))))
         height (inc (apply max (map second (keys grid))))]
     (str/join "\n"
-     (for [j (range height)]
-       (str/join
-        (for [i (range width)]
-          (if (= [i j] pos)
-            "@"
-            (str (get grid [i j])))))))))
+              (for [j (range height)]
+                (str/join
+                 (for [i (range width)]
+                   (if (some #{[i j]} posv)
+                     "@"
+                     (str (get grid [i j])))))))))
 
 (defn collect-keys [state]
   (loop [states (list state)
@@ -349,3 +349,68 @@
 ;; 664694ms; cache hit rate 73%
 
 ;; TODO: speed up with branch and bound?
+
+
+
+;; Part 2
+;; Collect keys from multiple areas.
+(defn split-grid [grid [x y :as start]]
+  (let [adjacent (conj (neighbors start) start)
+        new-starts (list [(dec x) (dec y)] \1
+                         [(inc x) (dec y)] \2
+                         [(inc x) (inc y)] \3
+                         [(dec x) (inc y)] \4)
+        new-values (apply conj (apply concat (map (fn [p] [p \#]) adjacent)) new-starts)
+        new-grid (apply assoc grid new-values)]
+    {:grid new-grid :starts new-starts}))
+
+(defn shortest-path-multi [keys remaining-keys grid key-positions]
+  (let [posv (mapv #(get key-positions %) keys)
+        _ (println "keys" keys "posv" posv)
+        reachablev (mapv #(reachable-keys % grid) posv)]
+    (println "shortest-path" "keys" keys "remaining-keys" remaining-keys "posv" posv "reachablev" reachablev)
+    (if (empty? remaining-keys)
+      {:path keys :steps 0}
+      (let [cache-key [keys remaining-keys]
+            cache-result (get @path-cache cache-key)
+            result (if cache-result
+                     (do
+                       (swap! cache-hits inc)
+                       cache-result)
+                     (do
+                       (swap! cache-misses inc)
+                       (let [sub-paths (apply concat
+                                              (map (fn [reachable]
+                                                     (map (fn [[k {r-steps :steps r-pos :pos}]]
+                                                            (shortest-path k (set (remove #{k} remaining-keys)) (use-key k grid) key-positions))
+                                                          reachable))
+                                                   reachablev))
+                             ;; _ (println "sub-paths" sub-paths)
+                             ]
+                         (first (sort-by #(+ (:steps (first (remove nil? (map (fn [reachable] (get reachable (first (:path %)))) reachablev))))
+                                             (:steps %))
+                                         sub-paths)))))]
+        (reset! path-cache (assoc @path-cache cache-key result))
+        ;; (println "result for" cache-key "is" result (if cache-result "hit!" "miss.") "reachable" reachable)
+        {:path (apply conj [key] (:path result))
+         :steps (+ (:steps result) (:steps (first (remove nil? (map (fn [reachable] (get reachable (first (:path result)))) reachablev)))))}))))
+
+(defn compute-path-multi [state]
+  (reset! path-cache {})
+  (reset! cache-hits 0)
+  (reset! cache-misses 0)
+  (let [{:keys [grid starts]} (split-grid (:grid state) (:pos state))
+        _ (println grid)
+        start-t (System/currentTimeMillis)
+        result (shortest-path-multi [\1 \2 \3 \4]
+                                    (set (remove nil? (keys (:key-positions state))))
+                                    grid
+                                    (:key-positions state))
+        end-t (System/currentTimeMillis)
+        hit-rate (/ @cache-hits (+ @cache-hits @cache-misses))]
+    (println (:steps result) "steps for shortest path" (rest (:path result)))
+    (printf "%dms; cache hit rate %d%%\n" (- end-t start-t) (int (* 100 hit-rate)))))
+
+(def small-input-6 "small-input-6.txt")
+(def small-input-7 "small-input-7.txt")
+(def small-input-8 "small-input-8.txt")
