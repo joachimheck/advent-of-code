@@ -59,7 +59,7 @@
          visited #{}
          keys {}
          steps 1]
-    (println "reachable-keys loop" "open-set" open-set "visited" visited "keys" keys "steps" steps)
+    ;; (println "reachable-keys loop" "open-set" open-set "visited" visited "keys" keys "steps" steps)
     (if (empty? open-set)
       keys
       (let [adjacent (distinct (apply concat (map neighbors open-set)))
@@ -354,23 +354,37 @@
 
 ;; Part 2
 ;; Collect keys from multiple areas.
-(defn split-grid [grid [x y :as start]]
-  (let [adjacent (conj (neighbors start) start)
-        new-starts (list [(dec x) (dec y)] \1
-                         [(inc x) (dec y)] \2
-                         [(inc x) (inc y)] \3
-                         [(dec x) (inc y)] \4)
-        new-values (apply conj (apply concat (map (fn [p] [p \#]) adjacent)) new-starts)
-        new-grid (apply assoc grid new-values)]
-    {:grid new-grid :starts new-starts}))
+(defn enumerate-starts [grid]
+  (first
+   (reduce-kv (fn [[m i] k v]
+                (let [start? (= v \@)]
+                  [(assoc m k (if start? (char (+ 48 i)) v))
+                   (if start? (inc i) i)]))
+              [grid 1]
+              grid)))
+
+(defn parse-input-2 [f]
+  (let [grid (enumerate-starts (to-map (->> f
+                                            (read-lines)
+                                            (mapv vec))))
+        starts (map first (find-matching grid #"[0-9]"))
+        keys-by-position (find-matching grid #"[a-z0-9]")
+        keys (map second keys-by-position)
+        doors (map second (find-matching grid #"[A-Z]"))]
+    {:starts starts
+     :keys (set keys)
+     :doors (set doors)
+     :grid grid
+     :steps 0
+     :path []
+     :key-positions (set/map-invert keys-by-position)}))
 
 (defn shortest-path-multi [keys remaining-keys grid key-positions]
   (let [posv (mapv #(get key-positions %) keys)
-        _ (println "keys" keys "posv" posv)
-        reachablev (mapv #(reachable-keys % grid) posv)]
-    (println "shortest-path" "keys" keys "remaining-keys" remaining-keys "posv" posv "reachablev" reachablev)
+        reachablev (mapv #(reachable-keys (get posv %) (use-key (get keys %) grid)) (range 4))]
+    ;; (println "shortest-path" "keys" keys "remaining-keys" remaining-keys "posv" posv "reachablev" reachablev)
     (if (empty? remaining-keys)
-      {:path keys :steps 0}
+      {:path '() :steps 0}
       (let [cache-key [keys remaining-keys]
             cache-result (get @path-cache cache-key)
             result (if cache-result
@@ -380,37 +394,43 @@
                      (do
                        (swap! cache-misses inc)
                        (let [sub-paths (apply concat
-                                              (map (fn [reachable]
+                                              (map (fn [i]
                                                      (map (fn [[k {r-steps :steps r-pos :pos}]]
-                                                            (shortest-path k (set (remove #{k} remaining-keys)) (use-key k grid) key-positions))
-                                                          reachable))
-                                                   reachablev))
-                             ;; _ (println "sub-paths" sub-paths)
-                             ]
-                         (first (sort-by #(+ (:steps (first (remove nil? (map (fn [reachable] (get reachable (first (:path %)))) reachablev))))
-                                             (:steps %))
-                                         sub-paths)))))]
+                                                            (let [{:keys [path steps]} (shortest-path-multi (assoc keys i k)
+                                                                                                            (set (remove #{k} remaining-keys))
+                                                                                                            (use-key k grid)
+                                                                                                            key-positions)]
+                                                              {:path (conj path k)
+                                                               :steps (+ steps r-steps)}))
+                                                          (get reachablev i)))
+                                                   (range 4)))]
+                         ;; (println "sub-paths" sub-paths)
+                         (first (sort-by :steps sub-paths)))))]
         (reset! path-cache (assoc @path-cache cache-key result))
-        ;; (println "result for" cache-key "is" result (if cache-result "hit!" "miss.") "reachable" reachable)
-        {:path (apply conj [key] (:path result))
-         :steps (+ (:steps result) (:steps (first (remove nil? (map (fn [reachable] (get reachable (first (:path result)))) reachablev)))))}))))
+        ;; (println "result for" cache-key "is" result (if cache-result "hit!" "miss.") "reachablev" reachablev)
+        result))))
 
 (defn compute-path-multi [state]
   (reset! path-cache {})
   (reset! cache-hits 0)
   (reset! cache-misses 0)
-  (let [{:keys [grid starts]} (split-grid (:grid state) (:pos state))
-        _ (println grid)
-        start-t (System/currentTimeMillis)
+  (let [start-t (System/currentTimeMillis)
         result (shortest-path-multi [\1 \2 \3 \4]
-                                    (set (remove nil? (keys (:key-positions state))))
-                                    grid
+                                    (set (remove #(some #{%} '(\1 \2 \3 \4)) (keys (:key-positions state))))
+                                    (use-keys [\1 \2 \3 \4] (:grid state))
                                     (:key-positions state))
         end-t (System/currentTimeMillis)
         hit-rate (/ @cache-hits (+ @cache-hits @cache-misses))]
-    (println (:steps result) "steps for shortest path" (rest (:path result)))
+    (println (:steps result) "steps for shortest path" (:path result))
     (printf "%dms; cache hit rate %d%%\n" (- end-t start-t) (int (* 100 hit-rate)))))
 
 (def small-input-6 "small-input-6.txt")
 (def small-input-7 "small-input-7.txt")
 (def small-input-8 "small-input-8.txt")
+(def small-input-9 "small-input-9.txt")
+(def large-input-2 "large-input-2.txt")
+
+
+;; (compute-path-multi (parse-input-2 large-input-2))
+;; 1996 steps for shortest path (z i d v t l p g x w j r u f a y m c b s k q h e n o)
+;; 1211205ms; cache hit rate 71%
