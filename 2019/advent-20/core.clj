@@ -23,8 +23,12 @@
 
 (def letters #{\A \B \C \D \E \F \G \H \I \J \K \L \M \N \O \P \Q \R \S \T \U \V \W \X \Y \Z})
 
+(defn outside? [[x y] width height]
+  (or (= x 2) (= y 2) (= x (- width 3)) (= y (- height 3))))
+
 (defn find-label-locations [grid width height]
-  (apply merge-with list
+  ;; (apply concat (vals (group-by #(inside? % 10 10) '([2 5] [3 7] [4 3] [8 4]))))
+  (apply merge-with (fn [a b] (if (outside? a width height) [a b] [b a]))
          (remove nil?
                  (for [i (range width)
                        j (range height)]
@@ -62,6 +66,8 @@
                         [[i j] (get-in vec-input [j i])]))
         label-locations (find-label-locations grid width height)]
     {:grid grid
+     :width width
+     :height height
      :start (get label-locations "AA")
      :end (get label-locations "ZZ")
      :label-locations (dissoc label-locations "AA" "ZZ")}))
@@ -107,3 +113,88 @@
 ;; (time (shortest-path (parse-input large-input)))
 ;; "Elapsed time: 376.0124 msecs"
 ;; 522
+
+
+
+;; Part 2
+;; Recursive spaces.
+(defn parse-input-2 [f]
+  (let [vec-input (->> f
+                       (read-lines)
+                       (mapv vec))
+        width (count (first vec-input))
+        height (count vec-input)
+        grid (into {} (for [i (range width)
+                            j (range height)
+                            :when (not= (get-in vec-input [j i]) \space)]
+                        [[i j] (get-in vec-input [j i])]))
+        label-locations (find-label-locations grid width height)]
+    {:grid grid
+     :width width
+     :height height
+     :start (get label-locations "AA")
+     :end (get label-locations "ZZ")
+     :label-locations (dissoc label-locations "AA" "ZZ")}))
+
+(defn simple-adjacent-recursive [[x y z]]
+  (list [x (dec y) z]
+        [(inc x) y z]
+        [x (inc y) z]
+        [(dec x) y z]))
+
+(defn tele-adjacent-recursive [[x y z :as p] label-locations]
+  (remove nil? (map (fn [[label [outside inside]]] (cond (and (= outside [x y]) (> z 0)) (conj inside (dec z))
+                                                         (= inside [x y]) (conj outside (inc z))))
+                    label-locations)))
+
+(defn adjacent-recursive [[x y z :as p] {:keys [grid label-locations start end] :as maze}]
+  (remove (fn [[i j k]] (and (> k 0) (or (= [i j] start) (= [i j] end))))
+          (filter (fn [[i j k]] (= \. (get grid [i j])))
+                  (concat (simple-adjacent-recursive p) (tele-adjacent-recursive p label-locations)))))
+
+(defn solve-maze-recursive [maze]
+  (let [start (conj (:start maze) 0)
+        end (conj (:end maze) 0)]
+    (loop [open-paths (list [start])
+           shortest-path nil
+           shortest-length Integer/MAX_VALUE
+           max-depth 0]
+      ;; (println "open-paths" open-paths)
+      (if (empty? open-paths)
+        (if shortest-path
+          {:path shortest-path
+           :steps (dec shortest-length)
+           :depth (apply max (map last shortest-path))
+           :max-depth max-depth}
+          {:steps :no-shortest-path})
+        (let [
+              current (first open-paths)
+              current-length (count current)
+              p (last current)
+              adjacent-points (remove #{(get current (- current-length 2))} (adjacent-recursive p maze))
+              extended-paths (map (fn [p] (conj current p)) adjacent-points)
+              new-paths (concat (rest open-paths) (remove #(>= (count %) shortest-length) extended-paths))
+              [new-shortest new-shortest-length] (if (and (= p end)
+                                                          (< current-length shortest-length))
+                                                   [current current-length]
+                                                   [shortest-path shortest-length])
+              new-max-depth (if (empty? adjacent-points) max-depth (max max-depth (apply max (map last adjacent-points))))]
+          (if (not= shortest-path new-shortest) (println "Found new shortest path with steps:" (dec new-shortest-length)))
+          ;; (if (not= max-depth new-max-depth) (println "Hit new max depth:" new-max-depth))
+          (recur
+           new-paths
+           ;; (->> new-paths
+           ;;      (sort-by count)
+           ;;      (sort-by #(last (last %)))
+           ;;      )
+           new-shortest
+           new-shortest-length
+           new-max-depth))))))
+
+(def small-input-3 "small-input-3.txt")
+(def small-input-4 "small-input-4.txt")
+
+;; (time (let [solution (solve-maze-recursive (parse-input-2 large-input))]
+;;                         (dissoc solution :path)))
+;; Execution error (StackOverflowError) at (REPL:1).
+
