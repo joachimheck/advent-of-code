@@ -147,6 +147,35 @@
                                           2 inc)])
                      open)])))))
 
+(defn is-label? [p1 p2 p3 grid]
+  (and (some #{(get grid p1)} letters)
+       (some #{(get grid p2)} letters)
+       (= \. (get grid p3))))
+
+(defn full-label-name [p1 p2 p3 grid width height]
+  (str/join (list (str (get grid p1))
+                  (str (get grid p2))
+                  (if (outside? p3 width height)
+                    "-out"
+                    "-in"))))
+
+(defn find-label-locations-2 [grid width height]
+  (apply merge
+         (remove nil?
+                 (for [i (range width)
+                       j (range height)]
+                   (let [middle [i j]
+                         right [(inc i) j]
+                         down [i (inc j)]]
+                     (cond (is-label? middle right [(+ i 2) j] grid)
+                           {(full-label-name middle right [(+ i 2) j] grid width height) [(+ i 2) j]}
+                           (is-label? middle right [(dec i) j] grid)
+                           {(full-label-name middle right [(dec i) j] grid width height) [(dec i) j]}
+                           (is-label? middle down [i (+ j 2)] grid)
+                           {(full-label-name middle down [i (+ j 2)] grid width height) [i (+ j 2)]}
+                           (is-label? middle down [i (dec j)] grid)
+                           {(full-label-name middle down [i (dec j)] grid width height) [i (dec j)]}))))))
+
 (defn parse-input-2 [f]
   (let [vec-input (->> f
                        (read-lines)
@@ -157,13 +186,13 @@
                             j (range height)
                             :when (not= (get-in vec-input [j i]) \space)]
                         [[i j] (get-in vec-input [j i])]))
-        label-locations (find-label-locations grid width height)
+        label-locations (find-label-locations-2 grid width height)
         maze {:grid grid
               :width width
               :height height
               :start (get label-locations "AA")
               :end (get label-locations "ZZ")
-              :label-locations (dissoc label-locations "AA" "ZZ")}]
+              :label-locations label-locations}]
     (assoc maze :adjacency-map (build-adjacency-map maze))))
 
 (defn adjacent-from-map [[x y z] adjacency-map]
@@ -259,3 +288,33 @@
 ;; (time (let [solution (solve-maze-recursive (parse-input-2 large-input))]
 ;;                         (dissoc solution :path)))
 ;; Execution error (StackOverflowError) at (REPL:1).
+
+(defn adjacent-spaces [[x y :as p] {:keys [grid label-locations] :as maze}]
+  ;; (println "adjacent-spaces" [x y] (filter (fn [p] (= \. (get grid p))) (simple-adjacent p)))
+  (filter (fn [p] (= \. (get grid p))) (simple-adjacent p)))
+
+(defn reachable-labels [start-label {:keys [label-locations] :as maze}]
+  (let [location-labels (set/map-invert label-locations)]
+    (loop [open-set (list (get label-locations start-label))
+           visited #{}
+           labels {}
+           steps 0]
+      ;; (println "reachable-labels" "open-set" open-set)
+      (if (empty? open-set)
+        labels
+        (let [new-open-set (remove visited (apply concat (map #(adjacent-spaces % maze) open-set)))
+              new-visited (apply conj visited open-set)
+              new-labels (merge labels (into {} (for [p open-set
+                                                      :let [label (get location-labels p)]
+                                                      :when (and label (> steps 0))]
+                                                  [label steps])))]
+          ;; (println "new-open-set" new-open-set)
+          (recur new-open-set new-visited new-labels (inc steps)))))))
+
+(defn find-paths [{:keys [grid label-locations start end width height] :as maze}]
+  (loop [open-set (keys label-locations)
+         paths {}]
+    (if (empty? open-set)
+      paths
+      (let [current (first open-set)]
+        (recur (rest open-set) (assoc paths current (reachable-labels current maze)))))))
