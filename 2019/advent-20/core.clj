@@ -318,3 +318,70 @@
       paths
       (let [current (first open-set)]
         (recur (rest open-set) (assoc paths current (reachable-labels current maze)))))))
+
+(defn get-portal-point [point level]
+  (let [[_ label suffix] (re-matches #"([A-Z][A-Z])(-in|-out)" point)]
+   (cond (or (= label "AA") (= label "ZZ"))
+         nil
+         (= suffix "-in")
+         [(str/join (list label "-out")) (inc level)]
+         (and (= suffix "-out") (> level 0))
+         [(str/join (list label "-in")) (dec level)])))
+
+(defn find-reachable [path visited paths]
+  (let [[point level] (last path)
+        available-paths (get paths point)
+        available-points (keys available-paths)
+        local (if (> level 0)
+                (remove #{"AA-in" "AA-out" "ZZ-in" "ZZ-out"} available-points)
+                available-points)
+        with-level (map (fn [p] [p level]) local)
+        portal-point (get-portal-point point level)
+        with-portal (if portal-point (conj with-level portal-point) with-level)
+        without-visited (remove visited with-portal)]
+    (map (fn [p] [p (get available-paths (first p) 1)]) without-visited)))
+
+(defn compare-paths [{path1 :path length1 :length} {path2 :path length2 :length}]
+  (let [comp (compare length1 length2)]
+    (if (not= comp 0) comp (compare path1 path2))))
+
+(defn solve-maze-paths [{:keys [grid label-locations start end width height] :as maze}]
+  (let [maze-paths (find-paths maze)
+        start [(first (filter #(str/starts-with? % "AA") (keys maze-paths))) 0]
+        end [(first (filter #(str/starts-with? % "ZZ") (keys maze-paths))) 0]]
+    (loop [;; open-paths [{:path [start] :length 0}]
+           ;; open-paths (sorted-set-by #(compare (:length %1) (:length %2)) {:path [start] :length 0})
+           open-paths (sorted-set-by compare-paths {:path [start] :length 0})
+           shortest-path nil
+           shortest-length Integer/MAX_VALUE
+           longest-reported 0
+           visited #{}]
+      (if (empty? open-paths)
+        shortest-path
+        (let [{:keys [path length] :as current} (first open-paths)]
+          (if (> length shortest-length)
+            (recur (disj open-paths current) shortest-path shortest-length longest-reported visited)
+            (let [[last-point level] (last path)
+                  new-shortest? (and (= end (last path)) (< length shortest-length))
+                  _ (if new-shortest? (println "new shortest path with length" length))
+                  previous-point (first (last (drop-last current)))
+                  reachable (find-reachable path visited maze-paths)
+                  extended-paths (map (fn [[p steps]] {:path (conj path p) :length (+ steps length)}) reachable)]
+              (recur (doall (apply conj (disj open-paths current) extended-paths))
+                     (if new-shortest? current shortest-path)
+                     (if new-shortest? length shortest-length)
+                     (if (> length longest-reported) (+ longest-reported 10) longest-reported)
+                     (apply conj visited (map first reachable))))))))))
+
+;; (time (dissoc (solve-maze-paths (parse-input-2 small-input)) :path))
+;; new shortest path with length 26
+;; "Elapsed time: 8.1338 msecs"
+;; {:length 26}
+;; (time (dissoc (solve-maze-paths (parse-input-2 small-input-3)) :path))
+;; new shortest path with length 396
+;; "Elapsed time: 41.0859 msecs"
+;; {:length 396}
+;; (time (dissoc (solve-maze-paths (parse-input-2 large-input)) :path))
+;; new shortest path with length 6300
+;; "Elapsed time: 423.443 msecs"
+;; {:length 6300}
