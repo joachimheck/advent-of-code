@@ -174,7 +174,8 @@
 
 (defn translate-output [output]
   (str/join (concat (mapv char (filter #(< % 256) output))
-                    (list "damage: " (first (filter #(> % 256) output))))))
+                    (let [damage (first (filter #(> % 256) output))]
+                      (if damage (list "damage: " damage))))))
 
 ;; (println (translate-output (run-program (parse-input large-input) (translate-script script))))
 ;; Input instructions:
@@ -182,3 +183,33 @@
 ;; Walking...
 
 ;; damage: 19352638
+
+
+
+;; Part 2
+;; The springdroid can also run. How much hull damage does it report?
+(def script-2 (list "NOT A J"
+                    "NOT B T"
+                    "OR T J"
+                    "NOT C T"
+                    "OR T J"
+                    "AND D J"
+                    "AND E T"
+                    "OR H T"
+                    "AND T J"
+                    "RUN"
+                    ""))
+
+
+;; @ABCDEFGHI
+;; ###.#.#..# : do not jump
+;; #.#.#..##. : jump
+;; #..####... : jump
+
+;; (println (translate-output (run-program (parse-input large-input) (translate-script script-2))))
+;; Input instructions:
+
+;; Running...
+
+;; damage: 1141251258
+
