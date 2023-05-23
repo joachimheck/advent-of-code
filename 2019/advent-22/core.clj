@@ -81,3 +81,41 @@
 ;; (time (get-card-position (shuffle (parse-input large-input) (vec (range 10007))) 2019))
 ;; "Elapsed time: 378.193 msecs"
 ;; 6978
+
+
+
+;; Part 2
+;; Shuffle 119315717514047 cards 101741582076661 times. What card is at position 2020?
+;; Clearly we have to work backwards with card positions. That will handle the large number
+;; of cards. I'm not sure how to handle the large number of shuffles yet. Hopefully there
+;; will be some repetition or something.
+
+(defn before-deal-into-new-stack [position card-count]
+  (- card-count position 1))
+
+(defn before-cut [position card-count n]
+  (if (>= n 0)
+    (if (< position (- card-count n))
+      (+ position n)
+      (- position (- card-count n)))
+    (if (< position (abs n))
+      (+ position (- card-count (abs n)))
+      (- position (abs n)))))
+
+(defn compute-cycle [n m increment]
+  (first
+   (for [i (range m)
+         :when (= (mod (* i increment) m) n)]
+     i)))
+
+(defn before-deal-with-increment [position card-count n]
+  (let [
+        tuple (quot position n)
+        position-in-tuple (mod position n)
+        advancement (- n (rem card-count n))
+        cycle (compute-cycle position-in-tuple n advancement)]
+    ;; (list tuple position-in-tuple advancement cycle)
+    (+ (+ (* cycle n) tuple) (if (= 0 (mod position n)) 0 1))))
+
+;; I have the (hopefully correct) reverse functions. I still need to chain them together
+;; in the reverse order of the given instructions, and figure out how to loop them.
