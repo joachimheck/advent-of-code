@@ -161,11 +161,12 @@
   (let [reversed-instructions (reverse instructions)]
     (let [loop-size (loop [p position
                            i 0]
-                      (let [result (reverse-shuffle reversed-instructions p deck-size)]
+                      (let [result (reverse-shuffle instructions p deck-size)]
                         (if (= result position)
                           i
                           (recur result (inc i)))))
           remainder (rem times loop-size)]
+      (println "Found loop with size" loop-size "remainder" remainder)
       (loop [p position
              i 0]
         (if (= i remainder)
@@ -176,3 +177,63 @@
 ;; "Elapsed time: 6796.226601 msecs"
 ;; 8316
 ;; (time (reverse-shuffle-multiple (parse-input large-input) 2020 119315717514047 101741582076661))
+
+;; I think this code is correct and would eventually give the right answer, but it's hopelessly slow.
+
+;; Reddit informs me that I need to use a solution I would never have come up with in a million years.
+;; Describe the xth card in the deck as y = (ax + b) % deck-size
+;; deal-with-increment increment: a' = deck-size - a
+;; cut n: b' = b + n
+;; deal-into-new-stack: a' = -a, b' = y(deck-size - 1)
+
+(defn card-at [x a b deck-size]
+  (mod (+ b (* a x)) deck-size))
+
+(defn factors-deal-into-new-stack [a b deck-size]
+  [(- a) (card-at (dec deck-size) a b deck-size)])
+
+(defn factors-cut [n a b deck-size]
+  [a (card-at n a b deck-size)])
+
+;; n=1, a' = a
+;; 
+
+(defn factors-deal-with-increment [n a b deck-size]
+  ;; (dec (+ a (- deck-size n)))
+  ;; (mod (+ a n) deck-size) ? no.
+  [(loop [i 0
+          p 0]
+     (println [i p])
+     (if (< i deck-size)
+       `(if (= 1 p)
+       i
+       (recur (inc i) (mod (dec (+ p n)) deck-size))))) b])
+
+(defn apply-factors [[a b] deck-size]
+  (for [i (range deck-size)]
+      (card-at i a b deck-size)))
+
+(deftest test-factors
+  (is (= [9 8 7 6 5 4 3 2 1 0] (apply-factors (factors-deal-into-new-stack 1 0 10) 10)))
+  (is (= [3 4 5 6 7 8 9 0 1 2] (apply-factors (factors-cut 3 1 0 10) 10)))
+  (is (= [6 7 8 9 0 1 2 3 4 5] (apply-factors (factors-cut -4 1 0 10) 10)))
+  (is (= [0 7 4 1 8 5 2 9 6 3] (apply-factors (factors-deal-with-increment 3 1 0 10) 10))))
+
+(defn shuffle-factors [instructions deck-size]
+  (let [[a b] (reduce (fn [[a b] [instruction n]]
+                        (cond (= instruction "deal into new stack")
+                              (factors-deal-into-new-stack a b deck-size)
+                              (= instruction "cut")
+                              (factors-cut n a b deck-size)
+                              (= instruction "deal with increment")
+                              (factors-deal-with-increment n a b deck-size)))
+                      [1 0]
+                      instructions)]
+    ;; (println "a" a "b" b)
+    (apply-factors [a b] deck-size)))
+
+(deftest test-shuffle-factors
+  (is (= [0 3 6 9 2 5 8 1 4 7] (shuffle-factors (parse-input small-input) 10)))
+  (is (= [3 0 7 4 1 8 5 2 9 6] (shuffle-factors (parse-input small-input-2) 10)))
+  (is (= [6 3 0 7 4 1 8 5 2 9] (shuffle-factors (parse-input small-input-3) 10)))
+  (is (= [9 2 5 8 1 4 7 0 3 6] (shuffle-factors (parse-input small-input-4) 10))))
