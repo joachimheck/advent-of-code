@@ -108,64 +108,71 @@
          :when (= (mod (* i increment) m) n)]
      i)))
 
-;; All the digits in a cycle have the same modulus: (mod d increment) = C.
-
-;; TODO
-;; What digits are in that cycle, and where is the digit at p in the cycle?
-
-;; digits: 0 3 6 9 2 5 8 1 4 7
-;; posns:  0 1 2 3 4 5 6 7 8 9
-;; mod7:   0 1 2 3 4 5 6 0 1 2
-
-;; rem:    3
-;; mod for cycle 0 = 0
-;; mod for cycle 1 = n-rem = 7-3 = 4
-;; mod for cycle 2 = n-2*rem = 7-6 = 1
-;; mod for cycle 3 = n-3*rem mod n = 7-9 mod 7 = -2 mod 7 = 5
-;; mod for cycle 4 = n-4*rem mod n = 2
-;; mod for cycle 5 = 6
-;; mod for cycle 6 = 3
-
-;; mod7:   0 0 4 1 1 5 2 2 6 3
-
 (defn mod-for-cycle [cycle card-count increment]
   (mod (- increment (* cycle (rem card-count increment))) increment))
 
-(defn cards-in-cycle [cycle card-count increment]
+(defn cycle-for-position [p card-count increment]
+  (first
+   (for [c (range increment)
+         :when (= (mod p increment) (mod-for-cycle c card-count increment))]
+     c)))
+
+(defn card-count-in-cycle [cycle card-count increment]
   (+ 1 (quot (dec (- card-count (mod-for-cycle cycle card-count increment))) increment)))
 
-;; What's the inverse of mod-for-cycle?
-(defn cycle-for-mod [m card-count increment]
-  ;; mod-for-cycle: 0 4 1 5 2 6 3 0 4 1
-  ;; cycle-for-mod: 0 0 4 1 1 5 2 2 6 3
+(defn first-card-in-cycle [cycle card-count increment]
+  (apply + (for [c (range cycle)] (card-count-in-cycle c card-count increment))))
 
-  ;; (mod (- increment (* cycle (rem card-count increment))) increment) = m
-  ;; (- increment (* cycle (rem card-count increment))) = (+ (* n increment) m) ; for any n
-  ;; (- increment (* cycle (rem card-count increment))) = (+ (* 0 increment) m)
-  ;; (- increment (* cycle (rem card-count increment))) = m
-  ;; (- (* cycle (rem card-count increment))) = (- m increment)
-  ;; (* cycle (rem card-count increment)) = (- increment m)
-  ;; cycle = (/ (- increment m) (rem card-count increment))
-  (mod (- increment (* m (rem card-count increment))) increment)
-)
+;; (defn cards-in-cycle [cycle card-count increment]
+;;   (let [start (apply + (for [c (range cycle)] (card-count-in-cycle c card-count increment)))]
+;;     (range start
+;;            (+ start (card-count-in-cycle cycle card-count increment)))))
 
+;; (defn cards-in-cycle [cycle card-count increment]
+;;   (let [cycle-size (+ 1 (quot (dec (- card-count (mod-for-cycle cycle card-count increment))) increment))
+;;         start (apply + (for [c (range cycle)] cycle-size))]
+;;     (range start (+ start cycle-size))))
 
+(defn position-in-cycle [p cycle card-count increment]
+  (/ (- p (mod-for-cycle cycle card-count increment)) increment))
 
-(defn before-deal-with-increment [position card-count n]
-  (let [
-        (mod position n)
-
-        tuple (quot position n)
-        position-in-tuple (mod position n)
-        advancement (- n (rem card-count n))
-        ;; cycle (compute-cycle position-in-tuple n advancement)
-        cycle
-        ]
-
-    ;; (list tuple position-in-tuple advancement cycle)
-    (println "position" position "tuple" tuple "position-in-tuple" position-in-tuple "cycle" cycle "mod" (mod position n)
-             "p mod n" (mod position n) "rem" (rem card-count n))
-    (+ (* cycle (quot card-count n)) tuple)))
+(defn before-deal-with-increment [p card-count increment]
+  (let [cycle (cycle-for-position p card-count increment)
+        p-c (position-in-cycle p cycle card-count increment)]
+    (+ (first-card-in-cycle cycle card-count increment) p-c)))
 
 ;; I have the (hopefully correct) reverse functions. I still need to chain them together
 ;; in the reverse order of the given instructions, and figure out how to loop them.
+(defn reverse-shuffle [instructions position deck-size]
+  (reduce (fn [p [instruction n]]
+            (cond (= instruction "deal into new stack")
+                  (before-deal-into-new-stack p deck-size)
+                  (= instruction "cut")
+                  (before-cut p deck-size n)
+                  (= instruction "deal with increment")
+                  (before-deal-with-increment p deck-size n)))
+          position
+          (reverse instructions)))
+
+;; ---> answer <---
+;; 71098221879215
+
+(defn reverse-shuffle-multiple [instructions position deck-size times]
+  (let [reversed-instructions (reverse instructions)]
+    (let [loop-size (loop [p position
+                           i 0]
+                      (let [result (reverse-shuffle reversed-instructions p deck-size)]
+                        (if (= result position)
+                          i
+                          (recur result (inc i)))))
+          remainder (rem times loop-size)]
+      (loop [p position
+             i 0]
+        (if (= i remainder)
+          p
+          (recur (reverse-shuffle reversed-instructions p deck-size) (inc i)))))))
+
+;; (time (reverse-shuffle-multiple (parse-input large-input) 6978 10007 50000))
+;; "Elapsed time: 6796.226601 msecs"
+;; 8316
+;; (time (reverse-shuffle-multiple (parse-input large-input) 2020 119315717514047 101741582076661))
