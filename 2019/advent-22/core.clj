@@ -190,37 +190,39 @@
   (mod (+ b (* a x)) deck-size))
 
 (defn factors-deal-into-new-stack [a b deck-size]
+  ;; (println "factors-deal-into-new-stack" a b deck-size)
   [(- a) (card-at (dec deck-size) a b deck-size)])
 
 (defn factors-cut [n a b deck-size]
   [a (card-at n a b deck-size)])
 
-;; n=1, a' = a
-;; 
-
+;; [0 3 6 9 2 5 8 1 4 7]
+;; [0 7 4 1 8 5 2 9 6 3]
 (defn factors-deal-with-increment [n a b deck-size]
-  ;; (dec (+ a (- deck-size n)))
-  ;; (mod (+ a n) deck-size) ? no.
   [(loop [i 0
-          p 0]
-     (println [i p])
+          p 0
+          c b]
+     ;; (println [i p c])
      (if (< i deck-size)
-       `(if (= 1 p)
-       i
-       (recur (inc i) (mod (dec (+ p n)) deck-size))))) b])
+       (if (= 1 p)
+         (- c b)
+         (let [new-p (mod (+ p n) deck-size)]
+           (recur (inc i) new-p (card-at (inc i) a b deck-size)))))) b])
 
 (defn apply-factors [[a b] deck-size]
   (for [i (range deck-size)]
-      (card-at i a b deck-size)))
+    (card-at i a b deck-size)))
 
 (deftest test-factors
   (is (= [9 8 7 6 5 4 3 2 1 0] (apply-factors (factors-deal-into-new-stack 1 0 10) 10)))
   (is (= [3 4 5 6 7 8 9 0 1 2] (apply-factors (factors-cut 3 1 0 10) 10)))
   (is (= [6 7 8 9 0 1 2 3 4 5] (apply-factors (factors-cut -4 1 0 10) 10)))
-  (is (= [0 7 4 1 8 5 2 9 6 3] (apply-factors (factors-deal-with-increment 3 1 0 10) 10))))
+  (is (= [0 7 4 1 8 5 2 9 6 3] (apply-factors (factors-deal-with-increment 3 1 0 10) 10)))
+  (is (= [6 9 2 5 8 1 4 7 0 3] (apply-factors (factors-deal-with-increment 7 1 6 10) 10))))
 
 (defn shuffle-factors [instructions deck-size]
   (let [[a b] (reduce (fn [[a b] [instruction n]]
+                        ;; (println "reduce-fn" a b instruction n)
                         (cond (= instruction "deal into new stack")
                               (factors-deal-into-new-stack a b deck-size)
                               (= instruction "cut")
