@@ -196,22 +196,35 @@
 (defn factors-cut [n a b deck-size]
   [a (card-at n a b deck-size)])
 
-;; [0 3 6 9 2 5 8 1 4 7]
-;; [0 7 4 1 8 5 2 9 6 3]
 (defn factors-deal-with-increment [n a b deck-size]
-  [(loop [i 0
-          p 0
-          c b]
-     ;; (println [i p c])
-     (if (< i deck-size)
-       (if (= 1 p)
-         (- c b)
-         (let [new-p (mod (+ p n) deck-size)]
-           (recur (inc i) new-p (card-at (inc i) a b deck-size)))))) b])
+  [
+   ;; (inc (quot deck-size n))
+   ;; find the position of the card with (mod card deck-size) = 1
+   ;; 
+   (first
+    (for [i (range deck-size)
+          :let [p (mod (* i n) deck-size)]
+          :when (= p 1)]
+      (do
+        ;; (println "p" p "card" (card-at i a b deck-size))
+        (- (card-at i a b deck-size) b))))
+   b])
+
+;; 11 cards increment 2
+;; (quot 11 2) = 5, (rem 11 2) = 1
+;; C(1) = 6, the first card in cycle 1
+;; (- 2 (- 5 1)) = (- 2 4) = -2
+
+;; 11 cards increment 5
+;; (quot 11 5) = 2 (rem 11 5) = 1
+;; C(1) = 9, the first card in cycle 4
+;; (- increment (- quotient remainder))?
+;; starting position of cycle 1 is (mod (+ (- deck-size remainder) increment) deck-size)
 
 (defn apply-factors [[a b] deck-size]
-  (for [i (range deck-size)]
-    (card-at i a b deck-size)))
+  (vec
+   (for [i (range deck-size)]
+     (card-at i a b deck-size))))
 
 (deftest test-factors
   (is (= [9 8 7 6 5 4 3 2 1 0] (apply-factors (factors-deal-into-new-stack 1 0 10) 10)))
@@ -239,3 +252,73 @@
   (is (= [3 0 7 4 1 8 5 2 9 6] (shuffle-factors (parse-input small-input-2) 10)))
   (is (= [6 3 0 7 4 1 8 5 2 9] (shuffle-factors (parse-input small-input-3) 10)))
   (is (= [9 2 5 8 1 4 7 0 3 6] (shuffle-factors (parse-input small-input-4) 10))))
+
+(defn factors-before-deal-into-new-stack [a b deck-size]
+  [(- a) (card-at (dec deck-size) a b deck-size)])
+
+(defn factors-before-cut [n a b deck-size]
+  ;; [a (card-at n a b deck-size)]
+  [a (card-at (mod (- deck-size n) deck-size) a b deck-size)])
+
+(defn factors-before-deal-with-increment [n a b deck-size]
+  [
+   ;; (first
+   ;;  (for [i (range deck-size)
+   ;;        :let [p (mod (* i n) deck-size)]
+   ;;        :when (= p 1)]
+   ;;    (- (card-at i a b deck-size) b)))
+
+   ;; (first (for [x (range 1 deck-size)
+   ;;              r (range 1 deck-size)
+   ;;              :when (= (* n x) (+ 1 (* deck-size r)))]
+   ;;          x))
+   (let [candidates (filter #(true? (last %))
+                            (for [x (range 1 deck-size)
+                                  r (range 1 deck-size)
+                                  :when (= (* n x) (+ 1 (* deck-size r)))]
+                              (list x r (= (* n x) (+ 1 (* deck-size r))))))
+         ]
+     (println "candidates" candidates)
+     (first candidates))
+
+   b])
+
+
+(deftest test-factors-before
+  (is (= [0 1 2 3 4 5 6 7 8 9] (apply-factors (factors-before-deal-into-new-stack -1 9 10) 10)))
+  (is (= [0 1 2 3 4 5 6 7 8 9] (apply-factors (factors-before-cut 3 1 3 10) 10)))
+  (is (= [0 1 2 3 4 5 6 7 8 9] (apply-factors (factors-before-cut -4 1 6 10) 10)))
+  (is (= [0 1 2 3 4 5 6 7 8 9] (apply-factors (factors-before-deal-with-increment 3 7 0 10) 10)))
+  (is (= [0 1 2 3 4 5 6 7 8 9] (apply-factors (factors-before-deal-with-increment 7 3 6 10) 10)))
+)
+
+;; n=5: (mod (* 5 9) 11) = 1
+;; (45 - 44 = 1)
+;; (- (* 5 9) (* 4 11)) = 1
+;; (* 5 9) = (+ 1 (* 4 11))
+;; 9 = (/ (+ 1 (* 4 11)) 5) ; fine, but where does the 4 come from?
+
+;; If 5x mod 11 = 1, then 5x - 1 = 11r for some r. What's the lowest r?
+;; http://www-math.ucdenver.edu/~wcherowi/courses/m5410/exeucalg.html
+;; If 5x mod 11 = 1, then pX + 11s = 1
+
+;; 45 mod 11 = 1
+;; There exists some integer r such that 45 = 11r + 1
+;; r = (45 - 1)/11 = 4
+;; 5x mod 11 = 1
+;; There exists some integers x,r (both < 11) such that 5x = 11r + 1
+
+
+
+;; TODO: This doesn't work but my brain is too fried to figure out why:
+
+;; (deal-with-increment [0 1 2 3 4 5 6 7 8 9 10] 5)
+;; [0 9 7 5 3 1 10 8 6 4 2]
+;; advent-22.core> (apply-factors [9 0] 11)
+;; [0 9 7 5 3 1 10 8 6 4 2]
+;; advent-22.core> (factors-deal-with-increment 5 1 0 11)
+;; [9 0]
+;; advent-22.core> (factors-before-deal-with-increment 5 9 0 11)
+;; candidates ((9 4 true))
+;; [(9 4 true) 0]
+;; advent-22.core> 
