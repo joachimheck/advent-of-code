@@ -207,7 +207,7 @@
           :when (= p 1)]
       (do
         ;; (println "p" p "card" (card-at i a b deck-size))
-        (- (card-at i a b deck-size) b))))
+        (mod (- (card-at i a b deck-size) b) deck-size))))
    b])
 
 ;; 11 cards increment 2
@@ -233,25 +233,26 @@
   (is (= [0 7 4 1 8 5 2 9 6 3] (apply-factors (factors-deal-with-increment 3 1 0 10) 10)))
   (is (= [6 9 2 5 8 1 4 7 0 3] (apply-factors (factors-deal-with-increment 7 1 6 10) 10))))
 
-(defn shuffle-factors [instructions deck-size]
+(defn shuffle-factors [instructions initial-a initial-b deck-size]
   (let [[a b] (reduce (fn [[a b] [instruction n]]
-                        ;; (println "reduce-fn" a b instruction n)
+                        ;; (println "reduce-fn" instruction n "|" a b (apply-factors [a b] deck-size))
                         (cond (= instruction "deal into new stack")
                               (factors-deal-into-new-stack a b deck-size)
                               (= instruction "cut")
                               (factors-cut n a b deck-size)
                               (= instruction "deal with increment")
                               (factors-deal-with-increment n a b deck-size)))
-                      [1 0]
+                      [initial-a initial-b]
                       instructions)]
     ;; (println "a" a "b" b)
-    (apply-factors [a b] deck-size)))
+    ;; (apply-factors [a b] deck-size)
+    [a b]))
 
 (deftest test-shuffle-factors
-  (is (= [0 3 6 9 2 5 8 1 4 7] (shuffle-factors (parse-input small-input) 10)))
-  (is (= [3 0 7 4 1 8 5 2 9 6] (shuffle-factors (parse-input small-input-2) 10)))
-  (is (= [6 3 0 7 4 1 8 5 2 9] (shuffle-factors (parse-input small-input-3) 10)))
-  (is (= [9 2 5 8 1 4 7 0 3 6] (shuffle-factors (parse-input small-input-4) 10))))
+  (is (= [0 3 6 9 2 5 8 1 4 7] (shuffle-factors (parse-input small-input) 1 0 10)))
+  (is (= [3 0 7 4 1 8 5 2 9 6] (shuffle-factors (parse-input small-input-2) 1 0 10)))
+  (is (= [6 3 0 7 4 1 8 5 2 9] (shuffle-factors (parse-input small-input-3) 1 0 10)))
+  (is (= [9 2 5 8 1 4 7 0 3 6] (shuffle-factors (parse-input small-input-4) 1 0 10))))
 
 (defn factors-before-deal-into-new-stack [a b deck-size]
   [(- a) (card-at (dec deck-size) a b deck-size)])
@@ -272,15 +273,16 @@
    ;;              r (range 1 deck-size)
    ;;              :when (= (* n x) (+ 1 (* deck-size r)))]
    ;;          x))
-   (let [candidates (filter #(true? (last %))
-                            (for [x (range 1 deck-size)
-                                  r (range 1 deck-size)
-                                  :when (= (* n x) (+ 1 (* deck-size r)))]
-                              (list x r (= (* n x) (+ 1 (* deck-size r))))))
-         ]
-     (println "candidates" candidates)
-     (first candidates))
 
+   ;; (let [candidates (filter #(true? (last %))
+   ;;                          (for [x (range 1 deck-size)
+   ;;                                r (range 1 deck-size)
+   ;;                                :when (= (* n x) (+ 1 (* deck-size r)))]
+   ;;                            (list x r (= (* n x) (+ 1 (* deck-size r))))))
+   ;;       ]
+   ;;   (println "candidates" candidates)
+   ;;   (first candidates))
+   (- (card-at n a b deck-size) b)
    b])
 
 
@@ -289,36 +291,60 @@
   (is (= [0 1 2 3 4 5 6 7 8 9] (apply-factors (factors-before-cut 3 1 3 10) 10)))
   (is (= [0 1 2 3 4 5 6 7 8 9] (apply-factors (factors-before-cut -4 1 6 10) 10)))
   (is (= [0 1 2 3 4 5 6 7 8 9] (apply-factors (factors-before-deal-with-increment 3 7 0 10) 10)))
-  (is (= [0 1 2 3 4 5 6 7 8 9] (apply-factors (factors-before-deal-with-increment 7 3 6 10) 10)))
-)
+  (is (= [6 7 8 9 0 1 2 3 4 5] (apply-factors (factors-before-deal-with-increment 7 3 6 10) 10))))
 
-;; n=5: (mod (* 5 9) 11) = 1
-;; (45 - 44 = 1)
-;; (- (* 5 9) (* 4 11)) = 1
-;; (* 5 9) = (+ 1 (* 4 11))
-;; 9 = (/ (+ 1 (* 4 11)) 5) ; fine, but where does the 4 come from?
+(defn factors-shuffle-multiple [instructions deck-size]
+  (loop [a 1
+         b 0
+         factors []]
+    (let [i (count factors)]
+      ;; (if (= 0 (mod i 100)) (println i))
+     (cond (> i deck-size)
+           :no-repeats
+           (>= (.indexOf factors [a b]) 0)
+           (println "Found repeat:" [a b] (.indexOf factors [a b]) i)
+           :else
+           (let [[new-a new-b] (shuffle-factors instructions a b deck-size)]
+             (recur new-a new-b (conj factors [a b])))))))
 
-;; If 5x mod 11 = 1, then 5x - 1 = 11r for some r. What's the lowest r?
-;; http://www-math.ucdenver.edu/~wcherowi/courses/m5410/exeucalg.html
-;; If 5x mod 11 = 1, then pX + 11s = 1
-
-;; 45 mod 11 = 1
-;; There exists some integer r such that 45 = 11r + 1
-;; r = (45 - 1)/11 = 4
-;; 5x mod 11 = 1
-;; There exists some integers x,r (both < 11) such that 5x = 11r + 1
-
+;; (time (factors-shuffle-multiple (parse-input large-input) 119315717514047))
 
 
-;; TODO: This doesn't work but my brain is too fried to figure out why:
+;; (let [deck-size 10
+;;       instructions (parse-input small-input-3)
+;;       f (fn [[a b]] (shuffle-factors instructions a b deck-size))]
+;;   (take 10 (iterate f [1 0])))
 
-;; (deal-with-increment [0 1 2 3 4 5 6 7 8 9 10] 5)
-;; [0 9 7 5 3 1 10 8 6 4 2]
-;; advent-22.core> (apply-factors [9 0] 11)
-;; [0 9 7 5 3 1 10 8 6 4 2]
-;; advent-22.core> (factors-deal-with-increment 5 1 0 11)
-;; [9 0]
-;; advent-22.core> (factors-before-deal-with-increment 5 9 0 11)
-;; candidates ((9 4 true))
-;; [(9 4 true) 0]
-;; advent-22.core> 
+;; (let [deck-size 10007
+;;                       instructions (parse-input large-input)
+;;                       f (fn [[a b]] (shuffle-factors instructions a b deck-size))]
+;;                   (take 10 (iterate f [1 0])))
+;; ([1 0] [3541 204] [9917 2064] [1534 3718] [8100 6437] [2038 7682] [1511 3140] [6713 1167] [4108 9667] [6257 7111])
+
+;; (mod (* 3541 3541) 10007) = 9917
+;; (mod (* 3541 3541 3541) 10007) = 1534
+
+;; (+ 204 (mod (* 204 3541) 10007)) = 2064
+;; (+ 204 (mod (* 2064 3541) 10007)) = 3718
+
+;; b(0): (get (shuffle-factors instructions 1 0 deck-size) 1)
+;; b(1): (+ base-b (mod (* b(0) base-a) deck-size))
+;; b(2): (+ base-b (mod (* b(1) base-a) deck-size))
+;; b(n): (+ base-b (mod (* (b (- n 1)) base-a) deck-size))
+;; b(n)? (mod (+ base-b (* (b (- n 1)) base-a)) deck-size)
+
+(defn compute-b [n base-a base-b deck-size]
+  (cond
+    (= n 0) 0
+    (= n 1) base-b
+    :else
+    (mod (+ base-b (* (compute-b (dec n) base-a base-b deck-size) base-a)) deck-size)))
+
+(defn factors-iteration [i a b deck-size instructions]
+  (let [[base-a base-b] (shuffle-factors instructions a b deck-size)]
+    [(mod (long (Math/pow base-a i)) deck-size)
+     (compute-b i base-a base-b deck-size)]))
+
+;; (for [i (range 11)]
+;;                   (factors-iteration i 1 0 11 (parse-input small-input-4)))
+;; ([1 0] [7 1] [5 8] [2 2] [3 4] [10 7] [4 6] [6 10] [9 5] [8 3] [1 0])
