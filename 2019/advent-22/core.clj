@@ -188,7 +188,7 @@
 ;; deal-into-new-stack: a' = -a, b' = y(deck-size - 1)
 
 (defn card-at [x a b deck-size]
-  (mod (+ b (* a x)) deck-size))
+  (long (mod (+ b (* (bigint a) (bigint x))) deck-size)))
 
 (defn factors-deal-into-new-stack [a b deck-size]
   ;; (println "factors-deal-into-new-stack" a b deck-size)
@@ -198,18 +198,28 @@
   [a (card-at n a b deck-size)])
 
 (defn factors-deal-with-increment [n a b deck-size]
-  [
-   ;; (inc (quot deck-size n))
-   ;; find the position of the card with (mod card deck-size) = 1
-   ;; 
-   (first
-    (for [i (range deck-size)
-          :let [p (mod (* i n) deck-size)]
-          :when (= p 1)]
-      (do
-        ;; (println "p" p "card" (card-at i a b deck-size))
-        (mod (- (card-at i a b deck-size) b) deck-size))))
-   b])
+  (let [m-inverse (mod-pow-squares n (- deck-size 2) deck-size)]
+    (println "m-inverse" m-inverse)
+   [
+    ;; (inc (quot deck-size n))
+    ;; find the position of the card with (mod card deck-size) = 1
+    ;; 
+    ;; (first
+    ;;  (for [i (range deck-size)
+    ;;        :let [p (mod (* i n) deck-size)]
+    ;;        :when (= p 1)]
+    ;;    (do
+    ;;      ;; (println "p" p "card" (card-at i a b deck-size))
+    ;;      (mod (- (card-at i a b deck-size) b) deck-size))))
+    ;;
+    ;; If the ith card goes to position 1, (* n i) = 1  (mod deck-size)
+    ;; so i = 1/n  (mod deck-size)
+    ;; i = the modular inverse of n, = (math/expt n (- deck-size 2))
+
+    (mod (- (card-at m-inverse a b deck-size) b) deck-size)
+
+   
+    b]))
 
 ;; 11 cards increment 2
 ;; (quot 11 2) = 5, (rem 11 2) = 1
@@ -236,7 +246,8 @@
 
 (defn shuffle-factors [instructions initial-a initial-b deck-size]
   (let [[a b] (reduce (fn [[a b] [instruction n]]
-                        ;; (println "reduce-fn" instruction n "|" a b (apply-factors [a b] deck-size))
+                        ;; (println "reduce-fn" instruction n "|" a b)
+                        ;; (println (apply-factors [a b] deck-size))
                         (cond (= instruction "deal into new stack")
                               (factors-deal-into-new-stack a b deck-size)
                               (= instruction "cut")
@@ -262,29 +273,29 @@
   ;; [a (card-at n a b deck-size)]
   [a (card-at (mod (- deck-size n) deck-size) a b deck-size)])
 
-(defn factors-before-deal-with-increment [n a b deck-size]
-  [
-   ;; (first
-   ;;  (for [i (range deck-size)
-   ;;        :let [p (mod (* i n) deck-size)]
-   ;;        :when (= p 1)]
-   ;;    (- (card-at i a b deck-size) b)))
+;; TODO: only works with primes - rewrite tests?
+(defn factors-deal-with-increment [n a b deck-size]
+  (let [m-inverse (mod-pow-squares n (- deck-size 2) deck-size)]
+    ;; (println "m-inverse" m-inverse)
+   [
+    ;; (inc (quot deck-size n))
+    ;; find the position of the card with (mod card deck-size) = 1
+    ;; 
+    ;; (first
+    ;;  (for [i (range deck-size)
+    ;;        :let [p (mod (* i n) deck-size)]
+    ;;        :when (= p 1)]
+    ;;    (do
+    ;;      ;; (println "p" p "card" (card-at i a b deck-size))
+    ;;      (mod (- (card-at i a b deck-size) b) deck-size))))
+    ;;
+    ;; If the ith card goes to position 1, (* n i) = 1  (mod deck-size)
+    ;; so i = 1/n  (mod deck-size)
+    ;; i = the modular inverse of n, = (math/expt n (- deck-size 2))
 
-   ;; (first (for [x (range 1 deck-size)
-   ;;              r (range 1 deck-size)
-   ;;              :when (= (* n x) (+ 1 (* deck-size r)))]
-   ;;          x))
-
-   ;; (let [candidates (filter #(true? (last %))
-   ;;                          (for [x (range 1 deck-size)
-   ;;                                r (range 1 deck-size)
-   ;;                                :when (= (* n x) (+ 1 (* deck-size r)))]
-   ;;                            (list x r (= (* n x) (+ 1 (* deck-size r))))))
-   ;;       ]
-   ;;   (println "candidates" candidates)
-   ;;   (first candidates))
-   (- (card-at n a b deck-size) b)
-   b])
+    ;; (mod (- (card-at m-inverse a b deck-size) b) deck-size)
+    (long (mod (* (bigint a) (bigint m-inverse)) deck-size))
+    b]))
 
 
 (deftest test-factors-before
@@ -367,15 +378,15 @@
 
 (defn mod-pow-squares [b e m]
   (cond (< e 0)
-        ;; (/ 1 (mod-pow-squares b (- e) m))
-        (mod-divide 1 (mod-pow-squares b (- e) m) m)
+        (/ 1 (mod-pow-squares b (- e) m))
+        ;; (mod-divide 1 (mod-pow-squares b (- e) m) m)
         (= e 0)
         1
         :else
         (let [t (bigint (mod-pow-squares b (math/floor (/ e 2)) m))]
           (if (even? e)
-            (mod (* t t) m)
-            (mod (* t t b) m)))))
+            (long (mod (* t t) m))
+            (long (mod (* t t b) m))))))
 
 (defn mod-divide [a b m]
   (mod (* a (mod-pow-squares b (- m 2) m)) m))
@@ -407,3 +418,13 @@
 ;;                       m))
 ;;        m))
 ;; wrong answer.
+
+
+
+;; Ok, even just trying to figure out how to implement the various step-by-step instructions I found online
+;; took me a couple of days, with a lot of frustration. And I still had to go back and rewrite my
+;; factors-deal-with-increment function, which I had never figured out how to get the loop out of. This
+;; problem was, unfortunately, impossible.
+
+;; (f-inverse -101741582076661 2020 75713548004544 92481105708589 119315717514047)
+;; 24460989449140
