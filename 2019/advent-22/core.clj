@@ -7,6 +7,7 @@
 (require '[clojure.test :refer :all])
 (require '[clojure.instant :as instant])
 (require '[clojure.walk :as walk])
+(require '[clojure.math.numeric-tower :as math])
 
 (def small-input "small-input.txt")
 (def small-input-2 "small-input-2.txt")
@@ -333,6 +334,16 @@
 ;; b(n): (+ base-b (mod (* (b (- n 1)) base-a) deck-size))
 ;; b(n)? (mod (+ base-b (* (b (- n 1)) base-a)) deck-size)
 
+(defn mod-pow [b e m]
+  ;; c = (mod (math/expt b e) m)
+  (loop [c 1
+         e' 0]
+    (let [new-c (mod (* b c) m)
+          new-e' (inc e')]
+      (if (< new-e' e)
+        (recur new-c new-e')
+        new-c))))
+
 (defn compute-b [n base-a base-b deck-size]
   (cond
     (= n 0) 0
@@ -342,9 +353,57 @@
 
 (defn factors-iteration [i a b deck-size instructions]
   (let [[base-a base-b] (shuffle-factors instructions a b deck-size)]
-    [(mod (long (Math/pow base-a i)) deck-size)
+    [(mod-pow base-a i deck-size)
      (compute-b i base-a base-b deck-size)]))
 
 ;; (for [i (range 11)]
 ;;                   (factors-iteration i 1 0 11 (parse-input small-input-4)))
 ;; ([1 0] [7 1] [5 8] [2 2] [3 4] [10 7] [4 6] [6 10] [9 5] [8 3] [1 0])
+(defn f [k x a b m]
+  (mod (+ (* (math/expt a k) x)
+          (/ (* b (- 1 (math/expt a k)))
+             (- 1 a)))
+       m))
+
+(defn mod-pow-squares [b e m]
+  (cond (< e 0)
+        ;; (/ 1 (mod-pow-squares b (- e) m))
+        (mod-divide 1 (mod-pow-squares b (- e) m) m)
+        (= e 0)
+        1
+        :else
+        (let [t (bigint (mod-pow-squares b (math/floor (/ e 2)) m))]
+          (if (even? e)
+            (mod (* t t) m)
+            (mod (* t t b) m)))))
+
+(defn mod-divide [a b m]
+  (mod (* a (mod-pow-squares b (- m 2) m)) m))
+
+(defn f-inverse [k x a b m]
+  ;; (math/expt a k)
+  (let [A (mod-pow-squares a k m)
+        B (mod-divide (* b (- 1 A))
+                      (- 1 a)
+                      m)]
+    (long (mod (/ (- x B) A) m))))
+
+;; 8848004368695
+;; ---> answer <---
+;; 26974200162543317
+;;
+;; also wrong:
+;; 119315717514039
+
+
+;; (let [a 3541
+;;       b 204
+;;       n 101741582076661
+;;       m 119315717514047
+;;       x 2020]
+;;   (mod (+ (* (mod-pow-squares a n m) x)
+;;           (mod-divide (* b (- 1 (mod-pow-squares a n m)))
+;;                       (- 1 a)
+;;                       m))
+;;        m))
+;; wrong answer.
