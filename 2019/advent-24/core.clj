@@ -24,29 +24,37 @@
 ;; Part 1
 ;; What is the biodiversity rating for the first layout that appears twice?
 
+(defn compute-biodiversity [grid]
+  (reduce (fn [acc c]
+            (+ (* 2 acc) (if (= c \#) 1 0)))
+          0
+          (reverse (flatten grid))))
+
 (defn parse-input [f]
-  (mapv vec (read-lines f)))
+  (compute-biodiversity (mapv vec (read-lines f))))
 
 (defn neighbors [[x y]]
-  (list [x (dec y)] [(inc x) y] [x (inc y)] [(dec x) y]))
+  (filter (fn [[x y]] (and (<= 0 x 4) (<= 0 y 4)))
+          (list [x (dec y)] [(inc x) y] [x (inc y)] [(dec x) y])))
 
 (defn get-space [grid [x y]]
-  (get-in grid [y x]))
+  (bit-test grid (+ (* 5 y) x)))
+
+(def coordinates (reverse (for [j (range 5) i (range 5)] [i j])))
 
 (defn process-grid [grid]
-  (vec
-   (for [j (range 5)]
-     (vec
-      (for [i (range 5)]
-        (let [current (get-space grid [i j])
-              neighbor-bugs (count (filter #{\#} (map #(get-space grid %) (neighbors [i j]))))]
-          ;; (println "current" current "neighbor-bugs" neighbor-bugs)
-          (cond (and (= current \#) (not= 1 neighbor-bugs))
-                \.
-                (and (= current \.) (<= 1 neighbor-bugs 2))
-                \#
-                :else
-                current)))))))
+  (reduce (fn [acc [x y]]
+            (let [current (get-space grid [x y])
+                  neighbor-bugs (count (filter true? (map #(get-space grid %) (neighbors [x y]))))
+                  new-state (cond (and current (not= 1 neighbor-bugs))
+                                  0
+                                  (and (not current) (<= 1 neighbor-bugs 2))
+                                  1
+                                  :else
+                                  (if current 1 0))]
+              (+ (* 2 acc) new-state)))
+          0
+          coordinates))
 
 (defn draw-grid [grid]
   (str/join
@@ -54,23 +62,16 @@
    (for [j (range 5)]
      (str/join
       (for [i (range 5)]
-        (get-space grid [i j]))))))
-
-(defn compute-biodiversity [grid]
-  (reduce (fn [acc c]
-            (+ (* 2 acc) (if (= c \#) 1 0)))
-          0
-          (reverse (flatten grid))))
+        (if (get-space grid [i j]) \# \.))))))
 
 (defn process-until-repeat [grid]
   (loop [grid grid
          previous #{}]
-    (let [biodiversity (compute-biodiversity grid)]
-      (if (some #{biodiversity} previous)
+    (if (some #{grid} previous)
         (do
           (println (draw-grid grid))
-          biodiversity)
-        (recur (process-grid grid) (conj previous biodiversity))))))
+          grid)
+        (recur (process-grid grid) (conj previous grid)))))
 
 ;; (time (process-until-repeat (parse-input small-input)))
 ;; .....
@@ -92,3 +93,75 @@
 
 
 ;; Part 2
+;; We're in Plutonian Recursive Space. How many bugs are present after 200 minutes?
+
+(defn neighbors-r [[x y z]]
+  ;; (if (nil? z) (println "neighbors-r" x y z))
+  (let [id (+ (* 5 y) x)
+        basic-neighbors (list [x (dec y) z] [(inc x) y z] [x (inc y) z] [(dec x) y z])
+        without-center (remove #{[2 2 z]} basic-neighbors)
+        recursive-neighbors (concat without-center
+                                    (cond (= 7 id) (list [0 0 (inc z)] [1 0 (inc z)] [2 0 (inc z)] [3 0 (inc z)] [4 0 (inc z)])
+                                          (= 11 id) (list [0 0 (inc z)] [0 1 (inc z)] [0 2 (inc z)] [0 3 (inc z)] [0 4 (inc z)])
+                                          (= 13 id) (list [4 0 (inc z)] [4 1 (inc z)] [4 2 (inc z)] [4 3 (inc z)] [4 4 (inc z)])
+                                          (= 17 id) (list [0 4 (inc z)] [1 4 (inc z)] [2 4 (inc z)] [3 4 (inc z)] [4 4 (inc z)])
+                                          (= 0 id) (list [2 1 (dec z)] [1 2 (dec z)])
+                                          (= 4 id) (list [2 1 (dec z)] [3 2 (dec z)])
+                                          (= 20 id) (list [1 3 (dec z)] [2 3 (dec z)])
+                                          (= 24 id) (list [3 2 (dec z)] [2 3 (dec z)])
+                                          (= 0 y) (list [2 1 (dec z)])
+                                          (= 4 y) (list [2 3 (dec z)])
+                                          (= 0 x) (list [1 2 (dec z)])
+                                          (= 4 x) (list [3 2 (dec z)])))]
+    (filter (fn [[x y z]] (and (<= 0 x 4) (<= 0 y 4)))
+            recursive-neighbors)))
+
+(deftest test-neighbors-r
+  (is (= #{[3 2 0] [4 3 0] [3 4 0] [2 3 0]} (set (neighbors-r [3 3 0]))))
+  (is (= #{[1 0 0] [2 1 0] [1 2 0] [0 1 0]} (set (neighbors-r [1 1 0]))))
+  (is (= #{[2 0 0] [3 1 0] [4 0 0] [2 1 -1]} (set (neighbors-r [3 0 0]))))
+  (is (= #{[3 0 0] [4 1 0] [2 1 -1] [3 2 -1]} (set (neighbors-r [4 0 0]))))
+  (is (= #{[3 1 0] [4 2 0] [3 3 0] [4 0 1] [4 1 1] [4 2 1] [4 3 1] [4 4 1]} (set (neighbors-r [3 2 0])))))
+
+(defn get-space-r [grids [x y l]]
+  (bit-test (get grids l 0) (+ (* 5 y) x)))
+
+(defn process-grid-r [grids level]
+  (reduce (fn [acc [x y]]
+            (let [current (get-space (get grids level 0) [x y])
+                  neighbor-bugs (count (filter true? (map #(get-space-r grids %) (neighbors-r [x y level]))))
+                  new-state (cond (and current (not= 1 neighbor-bugs))
+                                  0
+                                  (and (not current) (<= 1 neighbor-bugs 2))
+                                  1
+                                  :else
+                                  (if current 1 0))]
+              (+ (* 2 acc) new-state)))
+          0
+          coordinates))
+
+(defn process-grids [grids]
+  ;; (println "process-grids" (keys grids))
+  (let [min-level (dec (apply min (keys grids)))
+        max-level (inc (apply max (keys grids)))
+        processed (reduce (fn [acc l] (assoc acc l (process-grid-r grids l)))
+                          {}
+                          (range min-level (inc max-level)))]
+    (as-> processed gs
+      (if (= 0 (get gs min-level)) (dissoc gs min-level) gs)
+      (if (= 0 (get gs max-level)) (dissoc gs max-level) gs))))
+
+(defn count-bugs [grids]
+  (apply +
+         (map (fn [grid]
+                (count (filter true?
+                               (for [i (range 25)]
+                                 (bit-test grid i)))))
+              (vals grids))))
+
+(defn process-r [grid n]
+  (loop [grids {0 grid}
+         step 0]
+    (if (= step n)
+      (count-bugs grids)
+      (recur (process-grids grids) (inc step)))))
