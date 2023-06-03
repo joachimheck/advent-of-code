@@ -7,7 +7,7 @@
 (require '[clojure.test :refer :all])
 (require '[clojure.instant :as instant])
 (require '[clojure.walk :as walk])
-(require '[clojure.math.numeric-tower :as math])
+(require '[clojure.math.numeric-tower :as math :exclude [abs]])
 
 (def small-input "small-input.txt")
 (def small-input-2 "small-input-2.txt")
@@ -107,7 +107,7 @@
                                           (= 17 id) (list [0 4 (inc z)] [1 4 (inc z)] [2 4 (inc z)] [3 4 (inc z)] [4 4 (inc z)])
                                           (= 0 id) (list [2 1 (dec z)] [1 2 (dec z)])
                                           (= 4 id) (list [2 1 (dec z)] [3 2 (dec z)])
-                                          (= 20 id) (list [1 3 (dec z)] [2 3 (dec z)])
+                                          (= 20 id) (list [1 2 (dec z)] [2 3 (dec z)])
                                           (= 24 id) (list [3 2 (dec z)] [2 3 (dec z)])
                                           (= 0 y) (list [2 1 (dec z)])
                                           (= 4 y) (list [2 3 (dec z)])
@@ -130,7 +130,9 @@
   (reduce (fn [acc [x y]]
             (let [current (get-space (get grids level 0) [x y])
                   neighbor-bugs (count (filter true? (map #(get-space-r grids %) (neighbors-r [x y level]))))
-                  new-state (cond (and current (not= 1 neighbor-bugs))
+                  new-state (cond (= [x y] [2 2])
+                                  0
+                                  (and current (not= 1 neighbor-bugs))
                                   0
                                   (and (not current) (<= 1 neighbor-bugs 2))
                                   1
@@ -159,9 +161,26 @@
                                  (bit-test grid i)))))
               (vals grids))))
 
+(defn draw-grids [grids]
+  (let [min-level (apply min (keys grids))
+        max-level (apply max (keys grids))]
+    (doseq [l (range min-level (inc max-level))]
+      (printf "Depth %d:\n" l (get grids l))
+      (println (draw-grid (get grids l 0)))
+      (newline))
+    (println "Bug count:" (count-bugs grids))))
+
 (defn process-r [grid n]
   (loop [grids {0 grid}
          step 0]
     (if (= step n)
+      ;; (draw-grids grids)
       (count-bugs grids)
       (recur (process-grids grids) (inc step)))))
+
+;; (time (process-r (parse-input small-input) 10))
+;; "Elapsed time: 17.3706 msecs"
+;; 99
+;; (time (process-r (parse-input large-input) 200))
+;; "Elapsed time: 3462.9504 msecs"
+;; 2029
