@@ -25,12 +25,6 @@
 (defn parse-input [f]
   (parse-line (first (read-lines f))))
 
-(defn pad-array [array]
-  (let [remainder (rem (count array) 4)]
-    (if (= remainder 0)
-      array
-      (apply conj array (vec (repeat (- 4 remainder) 0))))))
-
 (defn digits [n]
   (if (< n 10)
     [n]
@@ -65,10 +59,13 @@
 
 (defn get-address [n p-mode relative-base]
   (cond (= p-mode POSITION) n
+        (= p-mode IMMEDIATE) n
         (= p-mode RELATIVE) (+ relative-base n)
         :else "Unknown p-mode"))
 
 (defn op-add [a b c p-modes {:keys [ip memory relative-base] :as state}]
+  ;; (if (= (get-address c (get p-modes 2 0) relative-base) 4810)
+  ;;   (println "op-add into 4810:" ip a b c p-modes))
   (assoc state
          :ip (+ ip 4)
          :memory (assoc memory (get-address c (get p-modes 2 0) relative-base)
@@ -76,6 +73,8 @@
                            (get-value b memory (get p-modes 1 0) relative-base)))))
 
 (defn op-mul [a b c p-modes {:keys [ip memory relative-base] :as state}]
+  ;; (if (= (get-address c (get p-modes 2 0) relative-base) 4810)
+  ;;   (println "op-mul into 4810:" ip a b c p-modes))
   (assoc state
          :ip (+ ip 4)
          :memory (assoc memory
@@ -84,6 +83,8 @@
                            (get-value b memory (get p-modes 1 0) relative-base)))))
 
 (defn op-in [a b c p-modes {:keys [ip memory inputs relative-base] :as state}]
+  ;; (if (= (get-address a (get p-modes 0 0) relative-base) 4810)
+  ;;   (println "op-in into 4810:" ip a b c p-modes))
   (assoc state
          :ip (+ ip 2)
          :memory (assoc memory (get-address a (get p-modes 0 0) relative-base) (* 1 (first inputs)))
@@ -102,11 +103,13 @@
 
 (defn op-jf [a b c p-modes {:keys [ip memory relative-base] :as state}]
   (assoc state
-         :ip (if (= 0 (get-value a memory (get p-modes 0 0) relative-base))
-               (get-value b memory (get p-modes 1 0) relative-base)
-               (+ ip 3))))
+           :ip (if (= 0 (get-value a memory (get p-modes 0 0) relative-base))
+                 (get-value b memory (get p-modes 1 0) relative-base)
+                 (+ ip 3))))
 
 (defn op-lt [a b c p-modes {:keys [ip memory relative-base] :as state}]
+  ;; (if (= (get-address c (get p-modes 2 0) relative-base) 4810)
+  ;;   (println "op-lt into 4810:" ip a b c p-modes))
   (assoc state
          :ip (+ ip 4)
          :memory (assoc memory (get-address c (get p-modes 2 0) relative-base)
@@ -116,6 +119,8 @@
                           0))))
 
 (defn op-eq [a b c p-modes {:keys [ip memory relative-base] :as state}]
+  ;; (if (= (get-address c (get p-modes 2 0) relative-base) 4810)
+  ;;   (println "op-eq into 4810:" ip a b c p-modes))
   (assoc state
          :ip (+ ip 4)
          :memory (assoc memory (get-address c (get p-modes 2 0) relative-base)
@@ -148,24 +153,104 @@
   (if (nil? (get ops-by-code opcode)) (println "no op for opcode" opcode))
   ((get ops-by-code opcode) a b c p-modes state))
 
-(defn run-program [program]
-  (loop [state {:ip 0 :memory program :inputs [] :outputs [] :relative-base 0}]
+(def initial-inputs (mapv int (str/join (str \newline)
+                                        ["south" "west" "take fuel cell"
+                                         "west" "take easter egg"
+                                         "east" "east" "north" "north" "north" "east" "east" "take cake"
+                                         "west" "west" "south" "south" "east" "take ornament"
+                                         "east" "take hologram"
+                                         "east" "take dark matter"
+                                         "north" "north" "east" "take klein bottle"
+                                         "north" "take hypercube"
+                                         "north" "drop cake" "drop fuel cell" "drop hypercube" "drop ornament"
+                                         "inv" ""])))
+
+(def arg-descriptions {
+                       "op-add" [:value :value :address]
+                       "op-mul" [:value :value :address]
+                       "op-in" [:address]
+                       "op-out" [:value]
+                       "op-jt" [:value :value]
+                       "op-jf" [:value :value]
+                       "op-lt" [:value :value :address]
+                       "op-eq" [:value :value :address]
+                       "op-rb" [:value]
+                       "op-ex" []
+                       })
+
+(defn format-command [ip operation a b c memory relative-base]
+  (let [{:keys [opcode p-modes]} (parse-operation operation)
+        op-name (second (re-find #"/(.+)@" (demunge (str (get ops-by-code opcode)))))
+        description (get arg-descriptions op-name)
+        arg-count (count description)]
+    (format "%d: %6s %s  [%5d %s]  rb: %s p-modes: %s @4810: %d"
+            ip
+            op-name
+            (str/join " " (map-indexed (fn [i x] (cond
+                                                   (= (get description i) :value)
+                                                   (format "%4d" (get-value x memory (get p-modes i 0) relative-base))
+                                                   (= (get description i) :address)
+                                                   (format "%4d" (get-address x (get p-modes i 0) relative-base))
+                                                   :else "    "))
+                                       [a b c]))
+            operation
+            (str/join " " (concat (for [i (range (count description))] (format "%4d" (get [a b c] i)))
+                                       (for [i (range (- 3 (count description)))] "    ")))
+            (format "%5d" relative-base)
+            p-modes
+            (get memory 4810))))
+
+(defn run-program [program initial-inputs debug-lines]
+  (loop [state {:ip 0 :memory program :inputs initial-inputs :outputs [] :relative-base 0} commands []]
     ;; (println "memory" (sort (:memory state)))
     ;; (println "loop ip" (:ip state) "rb" (:relative-base state) "outputs" (:outputs state))
     ;; (println "loop" "memory" memory "inputs" inputs "outputs" outputs)
-    (let [{:keys [ip memory]} state
+    (let [{:keys [ip memory relative-base]} state
           [operation a b c] (for [i (range 4)] (get memory (+ ip i) 0))
           {:keys [opcode p-modes]} (parse-operation operation)
-          ;; {:keys [ip outputs] :as new-state} (do-op opcode a b c p-modes state)
+          new-commands (conj commands (format-command ip operation a b c memory relative-base))
           ]
-      (if (and (= op-in (get ops-by-code opcode)) (empty? (:inputs state)))
-        (do (print (str/join (map char (:outputs state))))
-            (flush)
-            (let [user-input (read-line)
-                  _ (println "> " user-input)
-                  state-with-input (-> state
-                                       (assoc :inputs (conj (mapv int user-input) 10))
-                                       (assoc :outputs []))]
-              (recur (do-op opcode a b c p-modes state-with-input))))
-        (recur (do-op opcode a b c p-modes state))))))
+      (if (or (= opcode 0) (= ip -1))
+        (do
+          ;; (println "error, last" debug-lines "commands:")
+          ;; (doseq [l (take-last debug-lines commands)]
+          ;;   (println l))
+          (println (str/join (map char (:outputs state)))))
+        (if (and (= op-in (get ops-by-code opcode)) (empty? (:inputs state)))
+          (do (print (str/join (map char (:outputs state))))
+              (flush)
+              (let [user-input (read-line)
+                    _ (println ">" user-input)
+                    state-with-input (-> state
+                                         (assoc :inputs (conj (mapv int user-input) 10))
+                                         (assoc :outputs []))]
+                (recur (do-op opcode a b c p-modes state-with-input) new-commands)))
+          (recur (do-op opcode a b c p-modes state) new-commands))))))
 
+(def day-9 "day-9.txt")
+
+
+;; ...
+
+;; Items in your inventory:
+;; - easter egg
+;; - hologram
+;; - dark matter
+;; - klein bottle
+
+;; Command?
+;; > west
+
+
+
+;; == Pressure-Sensitive Floor ==
+;; Analyzing...
+
+;; Doors here lead:
+;; - east
+
+;; A loud, robotic voice says "Analysis complete! You may proceed." and you enter the cockpit.
+;; Santa notices your small droid, looks puzzled for a moment, realizes what has happened, and radios your ship directly.
+;; "Oh, hello! You should be able to get in by typing 1090617344 on the keypad at the main airlock."
+
+;; nil
