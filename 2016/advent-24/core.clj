@@ -35,20 +35,59 @@
               [[i j] (get (nth lines j) i)]))))
 
 (defn neighbors [[x y] maze]
-  (remove (fn [pos] (= \# (get (:grid maze) pos)))
+  (filter (fn [pos] (= \. (get (:grid maze) pos)))
           (list [(inc x) y] [x (inc y)] [(dec x) y] [x (dec y)])))
 
-(defn shortest-path [maze]
-  (let [start-pos (get (:locations maze) 0)
-        target-points (set (vals (dissoc (:locations maze) 0)))]
-    (loop [paths (list [start-pos])
-           shortest nil]
-      (if (empty? paths)
-        {:shortest shortest
-         :length (count shortest)}
-        (let [current (first paths)
-              next-points (remove (set current) (neighbors (last current) maze))]
-          (if (set/subset? target-points (set current))
-            (recur (rest paths) (if (or (nil? shortest) (< (count current) (count shortest))) current shortest))
-            (let [new-paths (doall (filter #(or (nil? shortest) (< (count %) (count shortest))) (doall (map #(conj current %) next-points))))]
-              (recur (doall (concat (rest paths) new-paths)) shortest))))))))
+(defn pairs [coll]
+  (if (empty? coll)
+    '()
+    (concat (map #(list (first coll) %) (rest coll))
+          (pairs (rest coll)))))
+
+(defn shortest-path [a b maze]
+  (let [start-pos (get (:locations maze) a)
+        goal #{(get (:locations maze) b)}]
+    ;; (println "Finding path from" start-pos "to" goal)
+    (loop [open-set #{start-pos}
+           visited #{}
+           distance 0]
+      ;; (println "open-set size" (count open-set) "visited size" (count visited) "distance" distance)
+      (if (empty? open-set)
+        :no-path
+        (if (some goal open-set)
+          distance
+          (recur (set (remove visited (mapcat #(neighbors % maze) open-set)))
+                 (apply conj visited open-set)
+                 (inc distance)))))))
+
+(defn pair-paths [maze]
+  (into {}
+        (for [[a b] (pairs (keys (:locations maze)))]
+          [#{a b} (shortest-path a b maze)])))
+
+(defn permutations [coll]
+  (if (= (count coll) 1)
+    coll
+    (mapcat (fn [f]
+              (map #(flatten (list f %)) (permutations (remove #{f} coll))))
+            coll)))
+
+(defn route-distance [route paths]
+  (apply +
+         (for [[a b] (partition 2 1 route)]
+           (get paths #{a b}))))
+
+(defn shortest-route [maze]
+  (let [paths (pair-paths maze)
+        possible-routes (filter #(= 0 (first %)) (permutations (keys (:locations maze))))]
+    (first
+     (sort-by second
+              (for [route possible-routes]
+                (list route (route-distance route paths)))))))
+
+;; (time (shortest-route (parse-input small-input)))
+;; "Elapsed time: 3.1842 msecs"
+;; ((0 4 1 2 3) 14)
+;; (time (shortest-route (parse-input large-input)))
+;; "Elapsed time: 914.0636 msecs"
+;; ((0 4 5 6 2 1 3 7) 442)
