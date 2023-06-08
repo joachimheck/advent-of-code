@@ -88,6 +88,28 @@
 ;; (time (shortest-route (parse-input small-input)))
 ;; "Elapsed time: 3.1842 msecs"
 ;; ((0 4 1 2 3) 14)
+
 ;; (time (shortest-route (parse-input large-input)))
 ;; "Elapsed time: 914.0636 msecs"
 ;; ((0 4 5 6 2 1 3 7) 442)
+
+
+
+;; Part 2
+;; How many steps to also return to zero?
+
+(defn shortest-return-route [maze]
+  (let [paths (pair-paths maze)
+        possible-routes (map #(conj (vec %) 0) (filter #(= 0 (first %)) (permutations (keys (:locations maze)))))]
+    (first
+     (sort-by second
+              (for [route possible-routes]
+                (list route (route-distance route paths)))))))
+
+;; (time (shortest-return-route (parse-input small-input)))
+;; "Elapsed time: 13.7404 msecs"
+;; ([0 1 2 3 4 0] 20)
+
+;; (time (shortest-return-route (parse-input large-input)))
+;; "Elapsed time: 1021.532 msecs"
+;; ([0 2 1 3 7 6 5 4 0] 660)
