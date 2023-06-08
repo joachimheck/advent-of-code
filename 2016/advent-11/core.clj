@@ -1,23 +1,37 @@
-(ns day-11.core
-  (:require [clojure.pprint :as pp]
-            [clojure.repl :refer :all]
-            [clojure.string :as str]
-            [clojure.set :as set]))
+(ns advent-11.core)
+
+(require '[clojure.pprint :as pp])
+(require '[clojure.repl :refer :all])
+(require '[clojure.string :as str])
+(require '[clojure.set :as set])
+(require '[clojure.test :refer :all])
+(require '[clojure.instant :as instant])
+(require '[clojure.walk :as walk])
+(require '[clojure.math.numeric-tower :as math :exclude [abs]])
+
+(def small-input "small-input.txt")
+(def large-input "large-input.txt")
+
+(defn read-lines [f]
+  (with-open [rdr (clojure.java.io/reader f)]
+    (doall(line-seq rdr))))
+
+;; Day 11: Radioisotope Thermoelectric Generators
 
 ;; Part 1
 ;; Move microchips to the fourth floor.
 
 (def test-input
-  {4 '()
-   3 '("LG")
-   2 '("HG")
-   1 '("E" "HM" "LM")})
+  {4 #{}
+   3 #{"LG"}
+   2 #{"HG"}
+   1 #{"E" "HM" "LM"}})
 
 (def real-input
-  {4 '()
-   3 '("CoM" "CmM" "RuM" "PuM")
-   2 '("CoG" "CmG" "RuG" "PuG")
-   1 '("E" "PmG" "PmM")})
+  {4 #{}
+   3 #{"CoM" "CmM" "RuM" "PuM"}
+   2 #{"CoG" "CmG" "RuG" "PuG"}
+   1 #{"E" "PmG" "PmM"}})
 
 (defn print-state [state]
   (println "")
@@ -84,8 +98,8 @@
 
 (defn move [state items start-floor end-floor]
   (-> state
-      (update start-floor (fn [floor] (remove (set (concat items '("E"))) floor)))
-      (update end-floor (fn [floor] (concat '("E") (sort (concat items floor)))))))
+      (update start-floor (fn [floor] (set (remove (set (concat items '("E"))) floor))))
+      (update end-floor (fn [floor] (set (concat '("E") (sort (concat items floor))))))))
 
 (defn valid? [state]
   (reduce #(and %1 %2)
@@ -109,7 +123,7 @@
      new-state)))
 
 (defn finished? [state]
-  (every? #(= '() %) (for [i (range 1 4)] (get state i))))
+  (every? empty? (for [i (range 1 4)] (get state i))))
 
 (defn find-path [[end-node nodes]]
  (loop [path [end-node]]
@@ -119,7 +133,9 @@
      (recur (conj path (first (filter #(= (:state %) (:parent (last path))) nodes)))))))
 
 (defn score [{state :state dist :dist}]
-  (- dist (reduce (fn [acc [k v]] (+ acc (* k (count v)))) 0 state)))
+  (- dist (reduce (fn [acc [k v]] (+ acc (* k (count v)))) 0 state))
+  ;; (+ dist (reduce (fn [acc [k v]] (+ acc (* 10 (inc k) (count v)))) 0 state))
+  )
 
 (defn min-scoring-node [nodes]
   (reduce
@@ -152,7 +168,8 @@
   (assoc {} :state state :parent (:state parent) :dist (inc (:dist parent)) :key (state-key state)))
 
 (defn search-with-a* [start-state]
-  (loop [unvisited (list {:state start-state :parent nil :dist 0}) visited '()]
+  (loop [unvisited (list {:state start-state :parent nil :dist 0})
+         visited '()]
     (if (empty? unvisited)
       (list :gave-up (count visited))
       (let [node (min-scoring-node unvisited)
@@ -168,14 +185,14 @@
 
 (defn next-nodes [node known-nodes]
   (let [state (:state node)
-        state-key (state-key state)
         raw-nexts (map #(->node % node) (next-states state))
         known-keys (set (map :key known-nodes))
         unvisited-next-nodes (remove (fn [node] (known-keys (:key node))) raw-nexts)]
     unvisited-next-nodes))
 
 (defn search-with-a*-2 [start-state]
-  (loop [unvisited (list {:state start-state :parent nil :dist 0 :key (state-key start-state)}) visited '()]
+  (loop [unvisited (list {:state start-state :parent nil :dist 0 :key (state-key start-state)})
+         visited '()]
     (if (empty? unvisited)
       (list :gave-up (count visited))
       (let [node (min-scoring-node unvisited)
@@ -219,16 +236,104 @@
 
 ;; Part 2
 ;; More items
-(def real-input-2
-  {4 '()
-   3 '("CoM" "CmM" "RuM" "PuM")
-   2 '("CoG" "CmG" "RuG" "PuG")
-   1 '("E" "PmG" "PmM" "EG" "EM" "DG" "DM")})
-
 (def test-input-2
-  {4 '()
-   3 '("LG")
-   2 '("HG")
-   1 '("E" "HM" "LM" "XM" "XG")})
+  {4 #{}
+   3 #{"LG"}
+   2 #{"HG"}
+   1 #{"E" "HM" "LM" "XM" "XG"}})
 
-(time (shortest-path-length search-with-a*-2 real-input-2))
+(def real-input-2
+  {4 #{}
+   3 #{"CoM" "CmM" "RuM" "PuM"}
+   2 #{"CoG" "CmG" "RuG" "PuG"}
+   1 #{"E" "PmG" "PmM" "EG" "EM" "DG" "DM"}})
+
+;; (time (shortest-path-length search-with-a*-2 real-input-2))
+
+;; The previous solution isn't fast enough, and it seems kind of hokey now that I come back to it,
+;; so I think I'll try to start partly from scratch and re-use my (real) A* code from other problems.
+(defn compute-goal [state]
+  {4 (set (apply concat (vals state)))
+   3 #{}
+   2 #{}
+   1 #{}})
+
+(defn reconstruct-path [froms start goal]
+  (loop [path (list goal)]
+    (let [head (first path)]
+      (if (nil? head)
+        {:error :could-not-reconstruct-path
+         :froms froms
+         :path path}
+        (if (= head start)
+          {:steps (dec (count path))
+           :path path}
+          (let [prev (get froms head)]
+            (recur (conj path prev))))))))
+
+(defn uniquify [coll]
+  (map first (vals (group-by state-key coll))))
+
+(defn h-score-diff [state goal]
+  (let [score-fn (fn [s] (reduce (fn [acc [k v]] (+ acc (* k (count v)))) 0 s))]
+    (- (score-fn goal) (score-fn state))))
+
+(defn h-count [state goal]
+  (count (vals (dissoc state 4))))
+
+(defn process-node [state open-set f-scores g-scores froms seen-keys goal h-fn]
+  ;; (println "process-node" "state" state "open-set" open-set)
+  (loop [neighbors (next-states state)
+         open-set (disj open-set state)
+         f-scores f-scores
+         g-scores g-scores
+         froms froms
+         seen-keys seen-keys]
+    ;; (println "loop" "seen-keys" seen-keys)
+    (if (empty? neighbors)
+      [open-set f-scores g-scores froms seen-keys]
+      (let [neighbor (first neighbors)
+            tentative-g-score (inc (get g-scores state))]
+        (if (and (not (contains? seen-keys (state-key neighbor)))
+                 (< tentative-g-score (get g-scores neighbor Integer/MAX_VALUE)))
+          (let [new-f-score (+ tentative-g-score (h-fn neighbor goal))]
+            (recur (rest neighbors)
+                   (conj open-set neighbor)
+                   (assoc f-scores neighbor new-f-score)
+                   (assoc g-scores neighbor tentative-g-score)
+                   (assoc froms neighbor state)
+                   (conj seen-keys (state-key neighbor))))
+          (recur (rest neighbors) open-set f-scores g-scores froms seen-keys))))))
+
+(defn search-with-real-a* [start h-fn]
+  (let [goal (compute-goal start)]
+   (loop [open-set #{start}
+          f-scores {start (h-fn start goal)}
+          g-scores {start 0}
+          froms {}
+          seen-keys #{(state-key start)}
+          steps 0]
+     ;; (println "loop" "open-set" open-set)
+     (cond (empty? open-set)
+           :error-no-open-nodes
+           (> steps 100000)
+           :error-max-iterations
+           :else
+           (let [current (first (sort-by #(get f-scores %) open-set))]
+             (if (= goal current)
+               (reconstruct-path froms start current)
+               (let [[open-set f-scores g-scores froms seen-keys] (process-node current open-set f-scores g-scores froms seen-keys goal h-fn)]
+                 (recur open-set f-scores g-scores froms seen-keys (inc steps)))))))))
+
+
+;; (time (:steps (search-with-real-a* test-input h-count)))
+;; "Elapsed time: 44.456799 msecs"
+;; 11
+
+;; (time (:steps (search-with-real-a* real-input h-count)))
+;; "Elapsed time: 12577.974501 msecs"
+;; 33
+
+;; (time (:steps (search-with-real-a* real-input-2 h-count)))
+;; "Elapsed time: 763945.0256 msecs"
+;; nil
