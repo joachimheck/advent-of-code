@@ -149,20 +149,32 @@
     (let [[_ atom type] (re-matches #"(.+)([G|M])" item)]
       [atom type])))
 
+;; (defn state-key [state]
+;;   (->> state
+;;        (mapcat (fn [[floor items]]
+;;                  (map (fn [item] [floor (split-item item)]) items)))
+;;        (reduce
+;;         (fn [[atom-numbers item-floors] [floor [atom type]]]
+;;           (let [next-num (if (vals atom-numbers) (inc (apply max (vals atom-numbers))) 0)
+;;                 atom-num (if (get atom-numbers atom) (get atom-numbers atom) next-num)
+;;                 floors (if (get item-floors atom-num) (get item-floors atom-num) {})]
+;;             (list
+;;              (assoc atom-numbers atom atom-num)
+;;              (update item-floors atom-num #(assoc % type floor)))))
+;;         ({} {}))
+;;        second))
+
 (defn state-key [state]
-  (->> state
-       (mapcat (fn [[floor items]]
-                 (map (fn [item] [floor (split-item item)]) items)))
-       (reduce
-        (fn [[atom-numbers item-floors] [floor [atom type]]]
-          (let [next-num (if (vals atom-numbers) (inc (apply max (vals atom-numbers))) 0)
-                atom-num (if (get atom-numbers atom) (get atom-numbers atom) next-num)
-                floors (if (get item-floors atom-num) (get item-floors atom-num) {})]
-            (list
-             (assoc atom-numbers atom atom-num)
-             (update item-floors atom-num #(assoc % type floor)))))
-        ({} {}))
-       second))
+  (+
+   (apply + (for [i (range 4)]
+              (* (math/expt 10 i) (count (remove #{"E"} (get state (inc i)))))))
+   (* 10000 (first (for [[k v] state
+                         :when (contains? v "E")]
+                     k)))))
+
+(deftest test-state-key
+  (is (= (state-key {4 #{"HM"}, 3 #{"HG" "E" "LM" "LG"}, 2 #{}, 1 #{}}) (state-key {4 #{"LM"}, 3 #{"HG" "E" "LG" "HM"}, 2 #{}, 1 #{}}))))
+
 
 (defn ->node [state parent]
   (assoc {} :state state :parent (:state parent) :dist (inc (:dist parent)) :key (state-key state)))
@@ -246,7 +258,7 @@
   {4 #{}
    3 #{"CoM" "CmM" "RuM" "PuM"}
    2 #{"CoG" "CmG" "RuG" "PuG"}
-   1 #{"E" "PmG" "PmM" "EG" "EM" "DG" "DM"}})
+   1 #{"E" "PmG" "PmM" "ElG" "ElM" "DiG" "DiM"}})
 
 ;; (time (shortest-path-length search-with-a*-2 real-input-2))
 
@@ -283,7 +295,10 @@
 
 (defn process-node [state open-set f-scores g-scores froms seen-keys goal h-fn]
   ;; (println "process-node" "state" state "open-set" open-set)
-  (loop [neighbors (next-states state)
+  ;; (println "neighbors" (next-states state))
+  (loop [
+         neighbors (map first (vals (group-by state-key (next-states state))))
+         ;; neighbors (next-states state)
          open-set (disj open-set state)
          f-scores f-scores
          g-scores g-scores
@@ -293,16 +308,19 @@
     (if (empty? neighbors)
       [open-set f-scores g-scores froms seen-keys]
       (let [neighbor (first neighbors)
+            neighbor-key (state-key neighbor)
             tentative-g-score (inc (get g-scores state))]
-        (if (and (not (contains? seen-keys (state-key neighbor)))
-                 (< tentative-g-score (get g-scores neighbor Integer/MAX_VALUE)))
+        (if (and ;; (< tentative-g-score (get seen-keys neighbor-key Integer/MAX_VALUE))
+             (< tentative-g-score (get g-scores neighbor Integer/MAX_VALUE)))
           (let [new-f-score (+ tentative-g-score (h-fn neighbor goal))]
             (recur (rest neighbors)
                    (conj open-set neighbor)
                    (assoc f-scores neighbor new-f-score)
                    (assoc g-scores neighbor tentative-g-score)
                    (assoc froms neighbor state)
-                   (conj seen-keys (state-key neighbor))))
+                   (assoc seen-keys neighbor-key tentative-g-score)
+                   ;; seen-keys
+                   ))
           (recur (rest neighbors) open-set f-scores g-scores froms seen-keys))))))
 
 (defn search-with-real-a* [start h-fn]
@@ -311,18 +329,19 @@
           f-scores {start (h-fn start goal)}
           g-scores {start 0}
           froms {}
-          seen-keys #{(state-key start)}
+          seen-keys {(state-key start) 0}
           steps 0]
      ;; (println "loop" "open-set" open-set)
      (cond (empty? open-set)
-           :error-no-open-nodes
-           (> steps 100000)
-           :error-max-iterations
+           {:error :no-open-nodes}
+           ;; (> steps 100000)
+           ;; {:error :max-iterations}
            :else
            (let [current (first (sort-by #(get f-scores %) open-set))]
              (if (= goal current)
                (reconstruct-path froms start current)
                (let [[open-set f-scores g-scores froms seen-keys] (process-node current open-set f-scores g-scores froms seen-keys goal h-fn)]
+                 ;; (println "new open-set" open-set)
                  (recur open-set f-scores g-scores froms seen-keys (inc steps)))))))))
 
 
@@ -337,3 +356,49 @@
 ;; (time (:steps (search-with-real-a* real-input-2 h-count)))
 ;; "Elapsed time: 763945.0256 msecs"
 ;; nil
+
+(defn state-key-2 [state]
+  (let [items-and-floors (for [[k v] state
+                               x v]
+                           (list x k))
+        state-map (reduce (fn [acc [item floor]]
+                            (let [[atom type] (split-item item)]
+                              (assoc-in acc [atom type] floor)))
+                          {}
+                          items-and-floors)]
+    (sort (map (fn [[k v]]
+                 (if (= k "E")
+                   [(get v "E")]
+                   [(get v "G")
+                    (get v "M")]))
+               state-map))))
+
+(defn search-with-bfs [start]
+  (let [goal (compute-goal start)]
+   (loop [open-set (list start)
+          steps 0
+          visited-keys #{}]
+     ;; (println "steps" steps "open set size" (count open-set))
+     (if (> (count (filter #(= % goal) open-set)) 0)
+       steps
+       (let [new-states (mapcat (fn [s]
+                                  (map (fn [ns] [(state-key-2 ns) ns]) (next-states s)))
+                                open-set)
+             grouped (into {} new-states)]
+         (recur (map second (remove (fn [[k v]] (contains? visited-keys k)) grouped))
+                (inc steps)
+                (apply conj visited-keys (map first grouped))))))))
+
+;; After all that, all I needed was to get my state-key right and do a breadth-first search.
+
+;; (time (search-with-bfs test-input))
+;; "Elapsed time: 21.07 msecs"
+;; 11
+
+;; (time (search-with-bfs real-input))
+;; "Elapsed time: 1506.3912 msecs"
+;; 33
+
+;; (time (search-with-bfs real-input-2))
+;; "Elapsed time: 10191.2221 msecs"
+;; 57
