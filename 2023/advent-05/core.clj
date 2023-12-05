@@ -79,34 +79,36 @@
     {:seeds seeds
      :maps maps}))
 
+(defn has-overlap? [[a b] [c d]]
+  (or (<= c a d) (<= a c b)))
+
 (defn get-overlap [r1 r2]
   (let [[[a b] [c d]] (sort (list r1 r2))]
-    (cond (= [a b] [c d]) (list [a b])
-          (< b c) (list [a b] [c d])
-          (= b c) (list [a (dec b)] [b b] [(inc c) d])
-          (< c b d) (list [a (dec c)] [c b] [(inc b) d])
+    (cond (= r1 r2) (list r1)
+          (and (< a c) (< d b)) (list [a (dec c)] [c d] [(inc d) b])
+          (= a c) (list [a (min b d)] [(inc (min b d)) (max b d)])
           (= b d) (list [a (dec c)] [c d])
-          (> b d) (list [a (dec c)] [c d] [(inc d) b]))))
+          (= b c) (list [a (dec b)] [b b] [(inc b) d])
+          (< c b) (list [a (dec c)] [c b] [(inc b) d]))))
 
 (deftest test-get-overlap
   (is (= '([1 5]) (get-overlap [1 5] [1 5])))
-  (is (= '([1 5] [6 10]) (get-overlap [1 5] [6 10])))
   (is (= '([1 4] [5 5] [6 10]) (get-overlap [1 5] [5 10])))
   (is (= '([1 3] [4 5] [6 10]) (get-overlap [1 5] [4 10])))
   (is (= '([1 2] [3 5]) (get-overlap [1 5] [3 5])))
-  (is (= '([1 4] [5 8] [9 10]) (get-overlap [1 10] [5 8]))))
+  (is (= '([1 4] [5 8] [9 10]) (get-overlap [1 10] [5 8])))
+  (is (= '([6 8] [9 10]) (get-overlap [6 10] [6 8]))))
+
+(defn any-overlap? [r rs]
+  (some true? (map (partial has-overlap? r) rs)))
 
 (defn get-overlaps [ranges]
   (reduce (fn [acc [a b]]
-            ;; (println "acc:" (seq acc))
-            ;; (println "new acc:" (map #(get-overlap [a b] %) acc))
-            (mapcat #(get-overlap [a b] %) acc))
+            (if (any-overlap? [a b] acc)
+              (mapcat #(if (has-overlap? [a b] %) (get-overlap [a b] %) (list %)) acc)
+              (conj acc [a b])))
           [(first (sort ranges))]
           (rest (sort ranges))))
-
-;; TODO: doesn't work right.
-;; (sort (get-overlaps '([1 5] [4 8] [6 10])))
-
 
 (defn collapse-maps [maps]
   )
