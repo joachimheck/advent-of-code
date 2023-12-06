@@ -62,20 +62,26 @@
 ;; Part 2
 ;; What is the lowest location number that corresponds to any of the initial seed numbers?
 (defn convert-map-element [[d s r]]
-  {[s (dec (+ s r))] (- d s)})
+  (let [in-range [s (dec (+ s r))]
+        diff (- d s)]
+   {
+    :input in-range
+    :output (mapv #(+ diff %) in-range)
+    :diff diff
+    }))
 
 (defn convert-map [n-map]
-  (into {} (mapv convert-map-element n-map)))
+  (mapv convert-map-element n-map))
 
 (defn parse-input-2 [input]
   (let [parts (->> (read-lines input)
                    (filter #(not= "" %))
                    (partition-by #(re-matches #".+map:" %)))
         seeds (map parse-long (re-seq #"\d+" (first (first parts))))
-        maps (map (fn [[a b]]
-                    (list (rest (re-matches #"(.+)-to-(.+) map:" (first a)))
-                          (convert-map (map #(map parse-long (str/split % #" ")) b))))
-                  (partition 2 (rest parts)))]
+        maps (mapv (fn [[a b]]
+                     (list (rest (re-matches #"(.+)-to-(.+) map:" (first a)))
+                           (convert-map (map #(map parse-long (str/split % #" ")) b))))
+                   (partition 2 (rest parts)))]
     {:seeds seeds
      :maps maps}))
 
@@ -90,6 +96,15 @@
           (= b d) (list [a (dec c)] [c d])
           (= b c) (list [a (dec b)] [b b] [(inc b) d])
           (< c b) (list [a (dec c)] [c b] [(inc b) d]))))
+
+(defn partition-overlaps [r1 r2]
+  (reduce (fn [acc r]
+            (cond (and (has-overlap? r r1) (has-overlap? r r2)) (update acc :both conj r)
+                  (has-overlap? r r1) (update acc :a conj r)
+                  (has-overlap? r r2) (update acc :b conj r)
+                  :else acc))
+          {:a '() :b '() :both '()}
+          (get-overlap r1 r2)))
 
 (deftest test-get-overlap
   (is (= '([1 5]) (get-overlap [1 5] [1 5])))
@@ -110,5 +125,41 @@
           [(first (sort ranges))]
           (rest (sort ranges))))
 
-(defn collapse-maps [maps]
-  )
+;; seed-soil ranges: [50 97] -> [52 99], [98 99] -> [50 51] 
+;; soil-fertilzer ranges: [0 14] -> [39 53], [15 51] -> [0 36], [52 53] -> [37 38]
+;; seed-fertilizer ranges: [0 14] -> [39 53], [15 49] -> [0 34], [50 51] -> [37 38], [52 97] -> [54 99], [98 99] -> [35 36]
+
+;; if an output range of map1 overlaps with an input range of map2, combine those ranges
+
+(defn find-diff [r map1 map2]
+  (let [in-diff (or (:diff (first (filter #(has-overlap? r (:input %)) map1))) 0)
+        out-diff (or (:diff (first (filter #(has-overlap? (map (partial + in-diff) r) (:input %)) map2))) 0)]
+    (+ in-diff out-diff)))
+
+(defn build-map [r diff]
+  {:input r :output (mapv #(+ diff %) r) :diff diff})
+
+(defn collapse-maps [input]
+  (let [state (parse-input-2 input)
+        map1 (second (get (:maps state) 0))
+        map2 (second (get (:maps state) 1))
+        {overlap true no-overlap false} (group-by #(any-overlap? % (map :input map2)) (map :output map1))]
+    (for [r-out overlap
+          r-in (map :input map2)
+          :let [partitions (partition-overlaps r-out r-in)]
+          both-p (:both partitions)]
+      (let [in (first (filter #(has-overlap? both-p (:output %)) map1))
+            out (first (filter #(has-overlap? both-p (:input %)) map2))
+            diff-total (+ (:diff in) (:diff out))
+            new-out (mapv #(+ diff-total %) both-p)]
+        {:input both-p :output new-out :diff diff-total}
+))))
+
+
+
+;; (let [state (parse-input-2 small-input)
+;;                       map1 (second (get (:maps state) 0))
+;;                       map2 (second (get (:maps state) 1))
+;;                       overlaps (get-overlaps (concat (map :output map1) (map :input map2)))]
+;;                   (map #(build-map % (find-diff % map1 map2))
+;;                        ))
