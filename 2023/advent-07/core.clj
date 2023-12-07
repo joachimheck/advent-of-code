@@ -121,7 +121,7 @@
         type2 (hand-type-with-joker h2)]
     (if (not= type1 type2)
       (- (type1 type-scores) (type2 type-scores))
-      (let [diff (drop-while zero? (map (fn [c1 c2] (- (get card-scores c1) (get card-scores c2))) h1 h2))]
+      (let [diff (drop-while zero? (map (fn [c1 c2] (- (get card-scores-2 c1) (get card-scores-2 c2))) h1 h2))]
         (if (empty? diff)
           0
           (first diff))))))
@@ -129,11 +129,13 @@
 (defn total-winnings-2 [input]
   (let [hand-map (parse-input input)
         hands (sort-by identity compare-hands-2 (keys hand-map))
-        indexed (map-indexed #(list (inc %1) %2) hands)
-        _ (println "top ten" (drop 990 indexed))]
+        indexed (map-indexed #(list (inc %1) %2) hands)]
     (reduce (fn [acc [i h]] (+ acc (* i (get hand-map h))))
             0
             indexed)))
 
-;; ---> answer <---
-;; 255086951
+;; (total-winnings-2 small-input)
+;; 5905
+
+;; (total-winnings-2 large-input)
+;; 254837398
