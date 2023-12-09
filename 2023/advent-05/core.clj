@@ -199,3 +199,31 @@
 ;;                       map1 (second (get (:maps state) 0))
 ;;                       map2 (second (get (:maps state) 1))]
 ;;                   (a-not-b map1 map2))
+
+(defn seed-ranges [seeds]
+  (map (fn [[a b]] [a (dec (+ a b))])
+       (partition 2 seeds)))
+
+(defn reduce-maps [maps]
+  (reduce (fn [[[from _] a] [[_ to] b]]
+            [[from to] (a-not-b a b)])
+          maps))
+
+(defn map-value [v maps]
+  (let [{:keys [diff]} (first (filter (fn [{[lo hi] :input}] (<= lo v hi)) maps))]
+    (+ v diff)))
+
+(defn find-lowest-location [input]
+  (let [state (parse-input-2 input)
+        starts (seed-ranges (:seeds state))
+        [mega-name mega-map] (reduce-maps (:maps state))
+        overlaps (partition-overlaps starts (map :input mega-map))
+        boths (map first (:both overlaps))
+        low-pair (first (sort-by second (map #(list % (map-value % mega-map)) boths)))]
+    (second low-pair)))
+
+;; (find-lowest-location small-input)
+;; 46
+
+;; (find-lowest-location large-input)
+;; 72263011
