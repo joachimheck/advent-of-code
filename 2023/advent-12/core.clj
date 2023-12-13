@@ -49,13 +49,15 @@
         pos-map (into {} (map (fn [[n [p _]]] [n p]) (map-indexed list (filter #(= \? (second %)) (map-indexed list springs)))))
         positions (count pos-map)
         position-sets (spring-permutations to-allocate (range 0 positions))
-        guesses (populate-springs springs position-sets pos-map)
-        arrangements (filter #(is-valid? % sizes) guesses)]
-    (count arrangements)))
+        guesses (populate-springs springs position-sets pos-map)]
+    (filter #(is-valid? % sizes) guesses)))
+
+(defn count-arrangements [springs sizes]
+  (count (arrangements springs sizes)))
 
 (defn sum-arrangement-counts [input]
   (let [state (parse-input input)]
-    (apply + (map #(apply arrangements %) state))))
+    (apply + (map #(apply count-arrangements %) state))))
 
 ;; (time (sum-arrangement-counts small-input))
 ;; "Elapsed time: 10.177 msecs"
@@ -68,3 +70,27 @@
 
 
 ;; Part 2
+;; Same thing but much bigger input.
+(defn parse-input-2 [input]
+  (->> (read-lines input)
+       (map #(str/split % #" "))
+       (map (fn [[a b]] [(str/join "?" (repeat 5 a))
+                         (load-string (str/join ["[" (str/join "," (repeat 5 b)) "]"]))]))))
+
+(defn arrange-recursively [springs sizes]
+  (str/split springs #"\.")
+  (loop [open-set [[springs sizes ""]]
+         results []]
+    (let [[springs-left sizes-left reconstructed :as current] (first open-set)]
+      (cond (empty? springs-left) (recur (rest open-set) (conj results reconstructed))
+            (str/starts-with? springs-left ".")
+            (let [[_ dots more] (re-matches #"^(\.+).*" "...abc")]
+              (recur (conj open-set [more
+                                     sizes-left
+                                     (str reconstructed dots)])))
+            :else
+            ;; TODO
+))))
+
+;; This idea might work in principle but I guess it will have to realize each of the
+;; possible arrangements, so it might run out of memory (or just still be slow).
