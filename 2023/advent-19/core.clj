@@ -22,8 +22,8 @@
     [name
      (map (fn [r] (let [[_ category op value destination :as match] (re-matches #"([a-z])([><])(\d+):(\w+)" r)]
                     (if match
-                      (fn [part] (if ((load-string op) (get part category) (parse-long value)) destination))
-                      (fn [part] r))))
+                      {:category category :op op :value (parse-long value) :destination destination}
+                      {:destination r})))
           rules)]))
 
 (defn parse-part [s]
@@ -33,13 +33,17 @@
   (let [[s-workflows _ s-parts] (partition-by #{""} (read-lines input))]
     {:workflows (into {} (map parse-workflow s-workflows)) :parts (map parse-part s-parts)}))
 
+(defn apply-rule [rule part]
+  (let [{:keys [category op value destination]} rule]
+    (if op
+      (if (= op ">")
+        (if (> (get part category) value) destination)
+        (if (< (get part category) value) destination))
+      destination)))
+
 (defn sort-part [part workflows]
   (loop [workflow "in"]
-    (let [destination (first (remove nil? (map #(% part) (get workflows workflow))))
-          ;; _ (println "workflow" workflow
-          ;;            "workflows" (get workflows workflow)
-          ;;            "destinations" (map #(% part) (get workflows workflow)))
-          ]
+    (let [destination (first (remove nil? (map #(apply-rule % part) (get workflows workflow))))]
       (case destination
         nil :failure-no-destination
         "A" :accepted
@@ -61,3 +65,31 @@
 
 ;; (sort-parts large-input)
 ;; 487623
+
+
+
+;; Part 2
+;; How many combinations of ratings will be accepted by the workflows?
+(defn build-range [op value]
+  (if (= op "<")
+    [1 value]
+    [(inc value) 4001]))
+
+(defn opposite [[lo hi]]
+  (if (= lo 1)
+    [(inc hi) 4001]
+    [1 (dec lo)]))
+
+(defn build-tree [workflows start]
+  (if (#{start} ["A" "R"])
+    (list start)
+    (conj (map (fn [{:keys [category op value destination]}]
+                 (let [range (if op (build-range op value) [1 4001])]
+                   [range
+                   (build-tree workflows destination)]))
+               (get workflows start))
+          start)))
+
+;; TODO: reduce each workflow to build up the decision tree of ranges.
+;; (let [workflows (:workflows (parse-input small-input))]
+;;                   (build-tree workflows "in"))
