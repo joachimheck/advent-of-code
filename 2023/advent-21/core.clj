@@ -81,3 +81,16 @@
 ;; (time (how-many-plots large-input 64))
 ;; "Elapsed time: 607.8964 msecs"
 ;; 3751
+
+
+
+;; Part 2
+;; With infinitely repeating gardens, how many plots can be reached in a large number of steps?
+(defn mark-tiles [{:keys [width height grid start] :as pattern} points]
+  (assoc pattern :grid
+         (reduce (fn [acc p] (assoc acc p \O))
+                 grid
+                 points)))
+
+;; TODO: maybe look for repetition in the increase from one step count to the next?
+
