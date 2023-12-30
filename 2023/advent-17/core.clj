@@ -80,10 +80,7 @@
   (filter (fn [[x y]] (and (< -1 x width) (< -1 y height))) points))
 
 (defn find-neighbors [{:keys [point prevs] :as p} came-from width height]
-  ;; (println "find-neighbors" p came-from)
   (let [[x y] point
-        ;; _ (if (or (nil? x) (nil? y)) (println "nil x or y" p))
-        ;; _ (println "find-neighbors point" point "new prevs" prevs)
         dir (if (first prevs)
               (direction (first prevs) point)
               :right)
@@ -91,20 +88,7 @@
         inaccessible #{(move x y (opposite dir) 1)
                        (if (or (apply = (map first prevs)) (apply = (map second prevs)))
                          (move x y dir 1))}]
-    ;; (println "adjacent" (adjacent point) "dir" dir "inaccessible" inaccessible)
-    ;; (println "find-neighbors new prevs" (take 3 (conj prevs point)))
-    ;; (println "find-neighbors neighbors" (in-bounds (remove inaccessible (adjacent point)) width height))
     (map (fn [p] {:point p :prevs (take 3 prevs)}) (in-bounds (remove inaccessible (adjacent point)) width height))))
-
-
-  ;; (let [dir (if (get came-from p)
-  ;;             (direction (get came-from p) p)
-  ;;             :right)
-  ;;       three-back (get came-from (get came-from (get came-from p)))
-  ;;       inaccessible #{(move x y (opposite dir) 1)
-  ;;                      (if (= three-back (move x y (opposite dir) 3))
-  ;;                        (move x y dir 1))}]
-  ;;   (remove inaccessible (adjacent p)))
 
 (defn manhattan-distance [[x y :as p] [goalx goaly]]
   (+ (abs (- x goalx)) (abs (- y goaly))))
@@ -115,26 +99,22 @@
        (sort-by first)
        (sort-by second)
        (first)
-       (last))
-  ;;(first (first (sort-by second (sort-by first (map #(list % (get f-scores % Integer/MAX_VALUE)) points)))))
-  )
+       (last)))
 
-(defn find-optimal-path [{:keys [width height grid]} h-fn]
-  (let [start {:point [0 0] :prevs (list nil nil nil)}
+(defn find-optimal-path [{:keys [width height grid]} h-fn n-fn prev-count]
+  (let [start {:point [0 0] :prevs (repeat prev-count nil)}
         goal [(dec width) (dec height)]]
     (loop [open-set #{start}
            came-from {}
            g-scores {start 0}
            f-scores {start (h-fn (:point start) goal)}
            i 0]
-      ;; (println "open-set" open-set)
       (if (empty? open-set)
         :failure-no-path
         (let [current (point-with-lowest-f-score open-set f-scores)]
           (if (= (:point current) goal)
             (reconstruct-path came-from current)
-            (let [neighbors (find-neighbors current came-from width height)
-                  ;; _ (println "neighbors of" current neighbors)
+            (let [neighbors (n-fn current came-from width height)
                   [new-open-set new-came-from new-g-scores new-f-scores]
                   (reduce (fn [[open-set came-from g-scores f-scores :as acc] n]
                             (let [tentative-g-score (+ (get g-scores current) (get grid (:point n)))]
@@ -154,13 +134,12 @@
 
 (defn min-path-heat-loss [input]
   (let [{:keys [width height grid] :as pattern} (parse-input input)
-        path (find-optimal-path pattern manhattan-distance)]
-    ;; (println "path" path)
+        path (find-optimal-path pattern manhattan-distance find-neighbors 2)]
     (apply + (map #(get grid %) path))))
 
-(defn draw-path [input]
+(defn draw-path [input n-fn prev-count]
   (let [{:keys [width height grid] :as pattern} (parse-input input)
-        path (find-optimal-path pattern manhattan-distance)
+        path (find-optimal-path pattern manhattan-distance n-fn prev-count)
         grid-with-path (reduce (fn [acc [[x y] [prev-x prev-y]]]
                                  (assoc acc [x y] (case (direction [prev-x prev-y] [x y])
                                                     :right \>
@@ -178,3 +157,36 @@
 ;; (time (min-path-heat-loss large-input))
 ;; "Elapsed time: 1.47727566268E7 msecs"
 ;; 928
+
+
+
+;; Part 2
+;; Ultra Crucibles!
+(defn turns [dir]
+  (let [dirs [:right :down :left :up]
+        index (.indexOf dirs dir)
+        dirs+ (vec (concat [:up] dirs [:right]))]
+    [(get dirs+ index) (get dirs+ (+ 2 index))]))
+
+(defn find-neighbors-ultra [{:keys [point prevs] :as p} came-from width height]
+  (let [[x y] point
+        dir (if (first prevs)
+              (direction (first prevs) point)
+              :right)
+        prev-10 (conj prevs point)
+        prev-5 (take 5 prev-10)
+        inaccessible (set (concat (list (move x y (opposite dir) 1))
+                                  (if (or (apply = (map first prev-10)) (apply = (map second prev-10)))
+                                    (list (move x y dir 1)))
+                                  (if (not (or (apply = (map first prev-5)) (apply = (map second prev-5))))
+                                    (map #(move x y % 1) (turns dir)))))]
+    ;; (println "inaccessible" point inaccessible prev-10)
+    (map (fn [p] {:point p :prevs (take 10 prev-10)}) (in-bounds (remove inaccessible (adjacent point)) width height))))
+
+(defn min-path-heat-loss-ultra [input]
+  (let [{:keys [width height grid] :as pattern} (parse-input input)
+        path (find-optimal-path pattern manhattan-distance find-neighbors-ultra 9)]
+    ;; (println "path" path)
+    (if (= path :failure-no-path)
+      path
+      (apply + (map #(get grid %) path)))))
