@@ -102,7 +102,7 @@
        (last)))
 
 (defn find-optimal-path [{:keys [width height grid]} h-fn n-fn prev-count]
-  (let [start {:point [0 0] :prevs (repeat prev-count nil)}
+  (let [start {:point [0 0] :prevs (repeat prev-count nil) :prev-point nil :moves-since-last-turn nil}
         goal [(dec width) (dec height)]]
     (loop [open-set #{start}
            came-from {}
@@ -190,3 +190,76 @@
     (if (= path :failure-no-path)
       path
       (apply + (map #(get grid %) path)))))
+
+(def ^:dynamic min-count nil)
+(def ^:dynamic max-count nil)
+
+(defn find-neighbors-counts [{:keys [point moves-since-last-turn] :as p} came-from width height]
+  (let [
+        ;; min-count 4
+        ;; max-count 10
+        ;; min-count 0
+        ;; max-count 3
+
+        ;; TODO: if this is 0, this works for the test input but fails for the other two.
+        ;; If it is 1, this works for the small input but fails for the other two.
+        init-value 0
+
+        [x y] point
+        dir (if (get came-from p)
+              (direction (:point (get came-from p)) point)
+              :right)
+        inaccessible (set (concat (list (move x y (opposite dir) 1))
+                                  (if (and moves-since-last-turn (>= moves-since-last-turn max-count))
+                                    (list (move x y dir 1)))
+                                  (if (and moves-since-last-turn (< moves-since-last-turn min-count))
+                                    (map #(move x y % 1) (turns dir)))))]
+    ;; (println "point" point "moves" moves-since-last-turn "dir" dir "inaccessible" inaccessible)
+    (map (fn [new-p] {:point new-p :moves-since-last-turn (if (= dir (direction point new-p)) (inc (or moves-since-last-turn init-value)) 1)})
+         (in-bounds (remove inaccessible (adjacent point)) width height))))
+
+(defn find-optimal-path-2 [{:keys [width height grid]} h-fn n-fn min-count max-count]
+  (let [start {:point [0 0] :moves-since-last-turn nil}
+        goal [(dec width) (dec height)]]
+    (loop [open-set #{start}
+           came-from {}
+           g-scores {start 0}
+           f-scores {start (h-fn (:point start) goal)}
+           i 0]
+      (if (empty? open-set)
+        :failure-no-path
+        (let [current (point-with-lowest-f-score open-set f-scores)]
+          (if (= (:point current) goal)
+            (if (< (:moves-since-last-turn current) min-count)
+              (recur (set (remove #{current} open-set)) came-from g-scores f-scores (inc i))
+              (reconstruct-path came-from current))
+            (let [neighbors (n-fn current came-from width height)
+                   [new-open-set new-came-from new-g-scores new-f-scores]
+                   (reduce (fn [[open-set came-from g-scores f-scores :as acc] n]
+                             (let [tentative-g-score (+ (get g-scores current) (get grid (:point n)))]
+                               (if (< tentative-g-score (get g-scores n Integer/MAX_VALUE))
+                                 [(conj open-set n)
+                                  (assoc came-from n current)
+                                  (assoc g-scores n tentative-g-score)
+                                  (assoc f-scores n (+ tentative-g-score (h-fn (:point n) goal)))]
+                                 acc)))
+                           [open-set came-from g-scores f-scores]
+                           neighbors)]
+               (recur (set (remove #{current} new-open-set))
+                      new-came-from
+                      new-g-scores
+                      new-f-scores
+                      (inc i)))))))))
+
+(defn min-path-heat-loss-counts [input min-count-local max-count-local]
+  (binding [min-count min-count-local
+            max-count max-count-local]
+   (let [{:keys [width height grid] :as pattern} (parse-input input)
+         path (find-optimal-path-2 pattern manhattan-distance find-neighbors-counts min-count max-count)]
+     ;; (println "path" path)
+     (if (= path :failure-no-path)
+       path
+       (apply + (map #(get grid %) path))))))
+
+;; ---> answer <---
+;; 1133
