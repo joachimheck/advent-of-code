@@ -134,29 +134,31 @@
     (partition 2 1 (map (fn [x] (filter #(= (first (first %)) x) vertical)) x-values))))
 
 (defn get-y-ranges [segments]
-  (println "get-y-ranges" segments)
+  ;; (println "get-y-ranges" segments)
   (map (fn [[[_ a] [_ b]]] (vec (sort [a b]))) segments))
 
 (defn connect-ranges [left-ranges right-ranges]
   (println "connect-ranges" left-ranges right-ranges)
   (if (empty? left-ranges)
     ;;{:overlap right-ranges}
-    right-ranges
+    {:inside '() :outside '() :overlap [right-ranges]}
     (let [inside (for [[r-min r-max :as r] right-ranges
                        [l-min l-max :as l] left-ranges
-                       :when (< l-min r-min r-max l-max)]
+                       :when (<= l-min r-min r-max l-max)]
                    [l r])
+          
           outside (for [[r-min r-max :as r] right-ranges
                         [l-min l-max :as l] left-ranges
-                        :when (< r-min l-min l-max r-max)]
+                        :when (<= r-min l-min l-max r-max)]
                     [l r])
           overlap (for [[r-min r-max :as r] right-ranges
                         [l-min l-max :as l] left-ranges
                         :when (or (= r-min l-max) (= r-max l-min))]
                     [l r])]
-      ;; {:inside inside :outside outside :overlap overlap}
-      (println "inside" inside "overlap" overlap)
-      (vec (apply concat inside) (apply concat overlap)))))
+      {:inside inside :outside outside :overlap overlap}
+      ;; (println "inside" inside "overlap" overlap "result" (vec (concat (apply concat inside) (apply concat overlap))))
+      ;; (vec (concat (apply concat inside) (apply concat overlap)))
+      )))
 
 ;; (apply connect-ranges (map get-y-ranges (first (find-segment-joins (get-perimeter (parse-input-2 small-input))))))
 
@@ -193,3 +195,32 @@
 ;;                                                :inside (map split-inside-ranges (:inside connected-ranges))})}))
 ;;                           {:left-y-ranges [] :history []}
 ;;                           x-values))
+
+(defn get-area [input]
+  (let [segments (get-perimeter (parse-input-2 input))
+        points (set (mapcat identity segments))
+        x-values (sort (distinct (map first points)))
+        vertical (filter (fn [[[a _] [b _]]] (= a b)) segments)
+        grouped-segments (group-by (fn [[[a _] _]] a) vertical)]
+    (reduce (fn [acc x]
+              (let [right-segments (get grouped-segments x)
+                    connected-ranges (connect-ranges (:left-y-ranges acc) (get-y-ranges right-segments))
+                    _ (println "acc" acc)
+                    _ (println "connected-ranges" connected-ranges)
+                    combined (map combine-connected-ranges (:overlap connected-ranges))
+                    split (map split-inside-ranges (:inside connected-ranges))
+                    new-left-y-ranges [(vec (concat (apply concat split) (apply concat combined)))]
+                    _ (println "new-left-y-ranges" new-left-y-ranges)]
+                {:left-y-ranges new-left-y-ranges
+                 :history (conj (vec (:history acc)) 
+                                {:x x
+                                 :y-ranges (get-y-ranges right-segments)
+                                 :connected-ranges connected-ranges
+                                 :combined combined
+                                 :inside (map split-inside-ranges (:inside connected-ranges))
+                                 })}))
+            {:left-y-ranges (get-y-ranges (get grouped-segments 0)) :history []}
+            (rest x-values))))
+
+;; This is sort of working but I need to keep track of when I'm entering and leaving the polygon.
+;; (map split-inside-ranges (:inside (connect-ranges [[0 1186328]] '([0 56407]))))
