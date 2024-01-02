@@ -9,6 +9,8 @@
 (def small-input "small-input.txt")
 (def large-input "large-input.txt")
 (def test-input "test-input.txt")
+(def test-input-2 "test-input-2.txt")
+(def test-input-3 "test-input-3.txt")
 
 (defn- read-lines [f]
   (with-open [rdr (clojure.java.io/reader f)]
@@ -90,8 +92,8 @@
                          (move x y dir 1))}]
     (map (fn [p] {:point p :prevs (take 3 prevs)}) (in-bounds (remove inaccessible (adjacent point)) width height))))
 
-(defn manhattan-distance [[x y :as p] [goalx goaly]]
-  (+ (abs (- x goalx)) (abs (- y goaly))))
+(defn manhattan-distance [[x y :as p] [goal-x goal-y]]
+  (+ (abs (- x goal-x)) (abs (- y goal-y))))
 
 (defn point-with-lowest-f-score [points f-scores]
   (->> points
@@ -195,31 +197,39 @@
 (def ^:dynamic max-count nil)
 
 (defn find-neighbors-counts [{:keys [point moves-since-last-turn] :as p} came-from width height]
-  (let [
-        ;; min-count 4
-        ;; max-count 10
-        ;; min-count 0
-        ;; max-count 3
-
-        ;; TODO: if this is 0, this works for the test input but fails for the other two.
-        ;; If it is 1, this works for the small input but fails for the other two.
-        init-value 0
-
+  (let [init-value 0
         [x y] point
         dir (if (get came-from p)
               (direction (:point (get came-from p)) point)
               :right)
-        inaccessible (set (concat (list (move x y (opposite dir) 1))
+        [left right] (map #(move x y % 1) (turns dir))
+        forward (move x y dir 1)
+        backward (move x y (opposite dir) 1)
+        goal [(dec width) (dec height)]
+        inaccessible (set (concat [backward]
                                   (if (and moves-since-last-turn (>= moves-since-last-turn max-count))
-                                    (list (move x y dir 1)))
+                                    [forward])
                                   (if (and moves-since-last-turn (< moves-since-last-turn min-count))
-                                    (map #(move x y % 1) (turns dir)))))]
+                                    [left right])
+                                  ;; Can't turn into the goal block.
+                                  (if (> min-count 0) (filter #{goal} [left right]))
+                                  ;; Need time to stop on the goal block.
+                                  (if (and moves-since-last-turn
+                                           (< moves-since-last-turn (dec min-count))
+                                           (= forward goal))
+                                    [forward])
+                                  ))]
     ;; (println "point" point "moves" moves-since-last-turn "dir" dir "inaccessible" inaccessible)
-    (map (fn [new-p] {:point new-p :moves-since-last-turn (if (= dir (direction point new-p)) (inc (or moves-since-last-turn init-value)) 1)})
+    (map (fn [new-p]
+           (let [new-dir (direction point new-p)]
+             {:point new-p
+              :moves-since-last-turn (if (= dir new-dir) (inc (or moves-since-last-turn init-value)) 1)
+              :dir new-dir
+              }))
          (in-bounds (remove inaccessible (adjacent point)) width height))))
 
 (defn find-optimal-path-2 [{:keys [width height grid]} h-fn n-fn min-count max-count]
-  (let [start {:point [0 0] :moves-since-last-turn nil}
+  (let [start {:point [0 0] :moves-since-last-turn nil :dir :right}
         goal [(dec width) (dec height)]]
     (loop [open-set #{start}
            came-from {}
@@ -230,36 +240,71 @@
         :failure-no-path
         (let [current (point-with-lowest-f-score open-set f-scores)]
           (if (= (:point current) goal)
-            (if (< (:moves-since-last-turn current) min-count)
-              (recur (set (remove #{current} open-set)) came-from g-scores f-scores (inc i))
-              (reconstruct-path came-from current))
+            (reconstruct-path came-from current)
             (let [neighbors (n-fn current came-from width height)
-                   [new-open-set new-came-from new-g-scores new-f-scores]
-                   (reduce (fn [[open-set came-from g-scores f-scores :as acc] n]
-                             (let [tentative-g-score (+ (get g-scores current) (get grid (:point n)))]
-                               (if (< tentative-g-score (get g-scores n Integer/MAX_VALUE))
-                                 [(conj open-set n)
-                                  (assoc came-from n current)
-                                  (assoc g-scores n tentative-g-score)
-                                  (assoc f-scores n (+ tentative-g-score (h-fn (:point n) goal)))]
-                                 acc)))
-                           [open-set came-from g-scores f-scores]
-                           neighbors)]
-               (recur (set (remove #{current} new-open-set))
-                      new-came-from
-                      new-g-scores
-                      new-f-scores
-                      (inc i)))))))))
+                  ;; _ (println "current" current "neighbors" neighbors)
+                  [new-open-set new-came-from new-g-scores new-f-scores]
+                  (reduce (fn [[open-set came-from g-scores f-scores :as acc] n]
+                            (let [tentative-g-score (+ (get g-scores current) (get grid (:point n)))]
+                              (if (< tentative-g-score (get g-scores n Integer/MAX_VALUE))
+                                [(conj open-set n)
+                                 (assoc came-from n current)
+                                 (assoc g-scores n tentative-g-score)
+                                 (assoc f-scores n (+ tentative-g-score (h-fn (:point n) goal)))]
+                                acc)))
+                          [open-set came-from g-scores f-scores]
+                          neighbors)]
+              ;; (if (some #{(dec width)} (:point current))
+              ;;   (println "current" current "neighbors" neighbors))
+              (recur (set (remove #{current} new-open-set))
+                     new-came-from
+                     new-g-scores
+                     new-f-scores
+                     (inc i)))))))))
 
 (defn min-path-heat-loss-counts [input min-count-local max-count-local]
   (binding [min-count min-count-local
             max-count max-count-local]
    (let [{:keys [width height grid] :as pattern} (parse-input input)
+         ;; manhattan-distance
          path (find-optimal-path-2 pattern manhattan-distance find-neighbors-counts min-count max-count)]
      ;; (println "path" path)
      (if (= path :failure-no-path)
        path
        (apply + (map #(get grid %) path))))))
 
+(defn draw-path-2 [input min-count-local max-count-local]
+  (binding [min-count min-count-local
+            max-count max-count-local]
+    (let [{:keys [width height grid] :as pattern} (parse-input input)
+          path (find-optimal-path-2 pattern manhattan-distance find-neighbors-counts min-count max-count)
+          grid-with-path (reduce (fn [acc [[x y] [prev-x prev-y]]]
+                                   (assoc acc [x y] (case (direction [prev-x prev-y] [x y])
+                                                      :right \>
+                                                      :down \v
+                                                      :left \<
+                                                      :up \^)))
+                                 grid
+                                 (map list path (concat [[0 0]] path)))]
+      (println (pattern-to-string (assoc pattern :grid grid-with-path)))
+      (apply + (map #(get grid %) path)))))
+
+;; 928
 ;; ---> answer <---
 ;; 1133
+
+(deftest test-min-path-heat-loss-counts
+  (is (= 102 (min-path-heat-loss-counts small-input 0 3)))
+  (is (= 94 (min-path-heat-loss-counts small-input 4 10)))
+  (is (= 71 (min-path-heat-loss-counts test-input 4 10)))
+  (is (= 18 (min-path-heat-loss-counts test-input-2 4 10)))
+  (is (= 47 (min-path-heat-loss-counts test-input-3 4 10))))
+
+;; (time (min-path-heat-loss-counts small-input 4 10))
+;; "Elapsed time: 293.3527 msecs"
+;; 94
+
+;; Forgot to time this! I started at maybe around 9 AM and it finished before 9 PM,
+;; So let's just call it 12 hours.
+;; (min-path-heat-loss-counts large-input 4 10)
+;; 1104
