@@ -160,14 +160,6 @@
       ;; (vec (concat (apply concat inside) (apply concat overlap)))
       )))
 
-;; (apply connect-ranges (map get-y-ranges (first (find-segment-joins (get-perimeter (parse-input-2 small-input))))))
-
-;; [0 10] [10 15] => [0 15]
-;; [0 10] [5 10] => [5 10]
-;; [0 10] [-5 0] => [-5 10]
-;; [0 10] [0 5] => [0 5]
-
-
 (defn combine-connected-ranges [[[a b] [c d]]]
   (cond (= b c) [a d]
         (= b d) [c d]
@@ -177,50 +169,118 @@
 (defn split-inside-ranges [[[a b] [c d]]]
   (list [a c] [c d] [d b]))
 
+;; (apply connect-ranges (map get-y-ranges (first (find-segment-joins (get-perimeter (parse-input-2 small-input))))))
+
+;; [0 10] [10 15] => [0 15]
+;; [0 10] [5 10] => [5 10]
+;; [0 10] [-5 0] => [-5 10]
+;; [0 10] [0 5] => [0 5]
+
+;; Generate input for https://www.desmos.com/calculator grapher.
+;; (let [points (reductions (fn [p {:keys [direction distance]}]
+;;                            (move-2 p direction distance))
+;;                          [0 0]
+;;                          (parse-input-2 small-input))]
+;;   (->> points
+;;        (map (fn [[x y]] (format "(%d,%d)" x y)))
+;;        (str/join ",")
+;;        (format "polygon(%s)")))
 
 
-;; (let [segments (get-perimeter (parse-input-2 small-input))
-;;                       points (set (mapcat identity segments))
-;;                       x-values (sort (distinct (map first points)))
-;;                       vertical (filter (fn [[[a _] [b _]]] (= a b)) segments)
-;;                       grouped-segments (group-by (fn [[[a _] _]] a) vertical)]
-;;                   (reduce (fn [acc x]
-;;                             (let [right-segments (get grouped-segments x)
-;;                                   connected-ranges (connect-ranges (:left-y-ranges acc) (get-y-ranges right-segments))
-;;                                   _ (println "connected-ranges" connected-ranges)]
-;;                               {:left-y-ranges connected-ranges
-;;                                :history (conj (:history acc) 
-;;                                               {:x x
-;;                                                :connected (map combine-connected-ranges (:overlap connected-ranges))
-;;                                                :inside (map split-inside-ranges (:inside connected-ranges))})}))
-;;                           {:left-y-ranges [] :history []}
-;;                           x-values))
+(defn find-subranges [left-ranges right-ranges]
+  (->> (concat left-ranges right-ranges)
+       (flatten)
+       (distinct)
+       (sort)
+       (partition 2 1)
+       (map vec)))
+
+(defn range-inside? [[lo1 hi1 :as r1] [lo2 hi2 :as r2]]
+  (<= lo2 lo1 hi1 hi2))
+
+(defn range-inside-any? [r1 ranges]
+  (boolean
+   (seq
+    (for [r2 ranges
+          :when (range-inside? r1 r2)]
+      r1))))
+
+;; for each sub-range r
+;; inside right, inside left: turn region off
+;; inside right, not inside left: turn region on
+;; not inside right, inside left: turn region on
+;; not inside right, not inside left: turn region off
+
+(defn xor [a b]
+  (or (and a (not b))
+      (and b (not a))))
+
+(defn combine-adjacent-ranges [ranges]
+  (reduce (fn [acc [c d]]
+            (let [[a b] (last acc)]
+              (if (= b c)
+                (conj (vec (butlast acc)) [a d])
+                (conj acc [c d]))))
+          [(first ranges)]
+          (rest ranges)))
+
+(defn area-for-ranges [x-diff ranges]
+  (->> ranges
+       (map (fn [[lo hi]] (- (inc hi) lo)))
+       (map #(* x-diff %))
+       (apply +)))
 
 (defn get-area [input]
-  (let [segments (get-perimeter (parse-input-2 input))
+  (let [
+        ;; segments (get-perimeter (parse-input-2 input))
+        segments (get-perimeter (parse-input input))
         points (set (mapcat identity segments))
         x-values (sort (distinct (map first points)))
         vertical (filter (fn [[[a _] [b _]]] (= a b)) segments)
-        grouped-segments (group-by (fn [[[a _] _]] a) vertical)]
+        grouped-segments (group-by (fn [[[a _] _]] a) vertical)
+        initial-left-y-ranges (sort (get-y-ranges (get grouped-segments 0)))]
     (reduce (fn [acc x]
-              (let [right-segments (get grouped-segments x)
-                    connected-ranges (connect-ranges (:left-y-ranges acc) (get-y-ranges right-segments))
-                    _ (println "acc" acc)
-                    _ (println "connected-ranges" connected-ranges)
-                    combined (map combine-connected-ranges (:overlap connected-ranges))
-                    split (map split-inside-ranges (:inside connected-ranges))
-                    new-left-y-ranges [(vec (concat (apply concat split) (apply concat combined)))]
-                    _ (println "new-left-y-ranges" new-left-y-ranges)]
-                {:left-y-ranges new-left-y-ranges
+              (let [left-ranges (:left-y-ranges acc)
+                    right-ranges (get-y-ranges (get grouped-segments x))
+                    sub-ranges (find-subranges left-ranges right-ranges)
+                    {on-regions true off-regions false} (group-by (fn [r]
+                                                                    (xor (range-inside-any? r right-ranges)
+                                                                         (range-inside-any? r left-ranges)))
+                                                                  sub-ranges)
+                    x-diff (inc (- x (:prev-x acc)))
+                    left-combined (combine-adjacent-ranges left-ranges)
+                    area (area-for-ranges x-diff left-combined)
+                    _ (println "x" x "prev-x" (:prev-x acc) [(:prev-x acc) x] "x-diff" x-diff
+                               "left-ranges" left-ranges "combined" left-combined "area" area)
+                    ]
+                {:left-y-ranges on-regions
+                 :prev-left-x x
+                 :prev-x (inc x)
+                 :area (+ (:area acc) area)
                  :history (conj (vec (:history acc)) 
                                 {:x x
-                                 :y-ranges (get-y-ranges right-segments)
-                                 :connected-ranges connected-ranges
-                                 :combined combined
-                                 :inside (map split-inside-ranges (:inside connected-ranges))
+                                 :left-ranges left-ranges
+                                 :right-ranges right-ranges
+                                 :sub-ranges sub-ranges
+                                 :on-regions on-regions
+                                 :off-regions off-regions
+                                 :area area
                                  })}))
-            {:left-y-ranges (get-y-ranges (get grouped-segments 0)) :history []}
+            {:left-y-ranges initial-left-y-ranges :prev-left-x 0 :prev-x 1 :area (area-for-ranges 1 initial-left-y-ranges) :history []}
             (rest x-values))))
 
-;; This is sort of working but I need to keep track of when I'm entering and leaving the polygon.
-;; (map split-inside-ranges (:inside (connect-ranges [[0 1186328]] '([0 56407]))))
+;; 1: [0 0]
+;; 2: [1 1]
+;; 4: [2 4]
+;; 6: [5 6]
+
+;; 0: [0 0]
+;; 1: [1 1]
+;; 2: [2 2]
+;; 4: [3 4]
+;; 6: [5 6]
+
+
+;; I'm seconds away from finishing this but my brain is tired.
+;; I just have to get through an off-by-one error.
+;; (:area (get-area small-input))
