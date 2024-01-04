@@ -177,14 +177,15 @@
 ;; [0 10] [0 5] => [0 5]
 
 ;; Generate input for https://www.desmos.com/calculator grapher.
-;; (let [points (reductions (fn [p {:keys [direction distance]}]
-;;                            (move-2 p direction distance))
-;;                          [0 0]
-;;                          (parse-input-2 small-input))]
-;;   (->> points
-;;        (map (fn [[x y]] (format "(%d,%d)" x y)))
-;;        (str/join ",")
-;;        (format "polygon(%s)")))
+(defn generate-desmos-input []
+  (let [points (reductions (fn [p {:keys [direction distance]}]
+                             (move-2 p direction distance))
+                           [0 0]
+                           (parse-input-2 small-input))]
+    (->> points
+         (map (fn [[x y]] (format "(%d,%d)" x y)))
+         (str/join ",")
+         (format "polygon(%s)"))))
 
 
 (defn find-subranges [left-ranges right-ranges]
@@ -215,27 +216,50 @@
   (or (and a (not b))
       (and b (not a))))
 
-(defn combine-adjacent-ranges [ranges]
-  (reduce (fn [acc [c d]]
-            (let [[a b] (last acc)]
-              (if (= b c)
-                (conj (vec (butlast acc)) [a d])
-                (conj acc [c d]))))
-          [(first ranges)]
-          (rest ranges)))
+(defn overlap? [[lo1 hi1] [lo2 hi2]]
+  (or (<= lo1 lo2 hi1)
+      (<= lo2 lo1 hi2)
+      (<= lo1 hi2 hi1)
+      (<= lo2 hi1 hi2)))
+
+(defn merge-ranges [[lo1 hi1] [lo2 hi2]]
+  [(min lo1 lo2) (max hi1 hi2)])
+
+(defn combine-overlapping-ranges [ranges]
+  (let [ranges (sort (distinct ranges))]
+    (reduce (fn [acc r]
+              ;; (println "fn" acc r (butlast acc))
+              (vec (if (overlap? (last acc) r)
+                     (conj (vec (butlast acc)) (merge-ranges (last acc) r))
+                     (conj acc r))))
+            [(first ranges)]
+            (rest ranges))))
 
 (defn area-for-ranges [x-diff ranges]
+  ;; (println "area-for-ranges" x-diff ranges)
   (->> ranges
        (map (fn [[lo hi]] (- (inc hi) lo)))
        (map #(* x-diff %))
        (apply +)))
 
+(defn split-xs [xs]
+  (reduce (fn [acc x]
+            (if (or (empty? acc)
+                    (= x (inc (last acc))))
+              (conj acc x)
+              (conj (conj acc (inc (last acc))) x)))
+          []
+          (vec xs)))
+
 (defn get-area [input]
   (let [
-        ;; segments (get-perimeter (parse-input-2 input))
-        segments (get-perimeter (parse-input input))
+        segments (get-perimeter (parse-input-2 input))
+        ;; segments (get-perimeter (parse-input input))
         points (set (mapcat identity segments))
         x-values (sort (distinct (map first points)))
+        splits (split-xs (rest x-values))
+        ;; splits (conj splits (last splits))
+        _ (println "xs" splits)
         vertical (filter (fn [[[a _] [b _]]] (= a b)) segments)
         grouped-segments (group-by (fn [[[a _] _]] a) vertical)
         initial-left-y-ranges (sort (get-y-ranges (get grouped-segments 0)))]
@@ -247,27 +271,24 @@
                                                                     (xor (range-inside-any? r right-ranges)
                                                                          (range-inside-any? r left-ranges)))
                                                                   sub-ranges)
-                    x-diff (inc (- x (:prev-x acc)))
-                    left-combined (combine-adjacent-ranges left-ranges)
-                    area (area-for-ranges x-diff left-combined)
-                    _ (println "x" x "prev-x" (:prev-x acc) [(:prev-x acc) x] "x-diff" x-diff
-                               "left-ranges" left-ranges "combined" left-combined "area" area)
+                    lo (max (dec (:prev-x acc)) 0)
+                    hi x
+                    x-diff (- hi lo 1)
+                    inflection-point (some #{(dec x)} x-values)
+                    combined (combine-overlapping-ranges (concat left-ranges (if inflection-point right-ranges '())))
+                    area (area-for-ranges x-diff combined)
+                    ;; _ (println [(:prev-x acc) (dec x)]
+                    ;;            "left-ranges" left-ranges "right-ranges" right-ranges "combined" combined "area" area "on-regions" on-regions)
+                    _ (printf "(* %s %s)\n"
+                              (if inflection-point "1" (format "(- %d %d 1)" hi lo))
+                              (format "(inc (- %d %d))" (second (first combined)) (first (first combined))))
                     ]
                 {:left-y-ranges on-regions
-                 :prev-left-x x
-                 :prev-x (inc x)
+                 :prev-x x
                  :area (+ (:area acc) area)
-                 :history (conj (vec (:history acc)) 
-                                {:x x
-                                 :left-ranges left-ranges
-                                 :right-ranges right-ranges
-                                 :sub-ranges sub-ranges
-                                 :on-regions on-regions
-                                 :off-regions off-regions
-                                 :area area
-                                 })}))
-            {:left-y-ranges initial-left-y-ranges :prev-left-x 0 :prev-x 1 :area (area-for-ranges 1 initial-left-y-ranges) :history []}
-            (rest x-values))))
+                 }))
+            {:left-y-ranges initial-left-y-ranges :prev-x 0 :area (area-for-ranges 1 initial-left-y-ranges)}
+            splits)))
 
 ;; 1: [0 0]
 ;; 2: [1 1]
@@ -283,4 +304,37 @@
 
 ;; I'm seconds away from finishing this but my brain is tired.
 ;; I just have to get through an off-by-one error.
+;; (:area (get-area small-input))
+
+;; 0123456
+;;
+;; 0011100
+;; 6800099
+;; #######
+;; #.....#
+;; ###...#
+;; ..#...#
+;; ..#...#
+;; ###.###
+;; #...#..
+;; ##..###
+;; .#....#
+;; .######
+
+(defn compute-area-manually []
+  (+ (* 1 (inc (- 500254 0)))
+     (* (- 5411 0 1) (inc (- 500254 0)))
+     (* 1 (inc (- 1186328 0)))
+     (* (- 461937 5411 1) (inc (- 1186328 0)))
+     (* 1 (inc (- 1186328 0)))
+     (* (- 497056 461937 1) (inc (- 1186328 56407)))
+     (* 1 (inc (- 1186328 56407)))
+     (* (- 609066 497056 1) (inc (- 356353 56407)))
+     (* 1 (inc (- 1186328 56407)))
+     (* (- 818608 609066 1) (inc (- 1186328 56407)))
+     (* 1 (inc (- 1186328 56407)))
+     (* (- 1186328 818608 1) (inc (- 1186328 919647)))
+     (* 1 (inc (- 1186328 919647)))))
+
+;; This output (and the acutal computation) should match the above exactly.
 ;; (:area (get-area small-input))
