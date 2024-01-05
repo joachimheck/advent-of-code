@@ -177,11 +177,11 @@
 ;; [0 10] [0 5] => [0 5]
 
 ;; Generate input for https://www.desmos.com/calculator grapher.
-(defn generate-desmos-input []
+(defn generate-desmos-input [input parser]
   (let [points (reductions (fn [p {:keys [direction distance]}]
                              (move-2 p direction distance))
                            [0 0]
-                           (parse-input-2 small-input))]
+                           (parser input))]
     (->> points
          (map (fn [[x y]] (format "(%d,%d)" x y)))
          (str/join ",")
@@ -251,60 +251,45 @@
           []
           (vec xs)))
 
-(defn get-area [input]
+(defn sum-ranges [ranges]
+  (reduce (fn [acc [l h]] (+ acc (- h l))) (count ranges) ranges))
+
+(defn get-area [input parser]
   (let [
-        segments (get-perimeter (parse-input-2 input))
-        ;; segments (get-perimeter (parse-input input))
+        segments (get-perimeter (parser input))
         points (set (mapcat identity segments))
         x-values (sort (distinct (map first points)))
         splits (split-xs (rest x-values))
-        ;; splits (conj splits (last splits))
-        _ (println "xs" splits)
+        ;; _ (println "xs" splits)
         vertical (filter (fn [[[a _] [b _]]] (= a b)) segments)
         grouped-segments (group-by (fn [[[a _] _]] a) vertical)
-        initial-left-y-ranges (sort (get-y-ranges (get grouped-segments 0)))]
+        initial-ranges (sort (get-y-ranges (get grouped-segments 0)))]
+    ;; (println "initial area" (sum-ranges initial-ranges))
+    ;; (println "              0: (* 1 500255)")
     (reduce (fn [acc x]
-              (let [left-ranges (:left-y-ranges acc)
+              (let [left-ranges (:on-regions acc)
                     right-ranges (get-y-ranges (get grouped-segments x))
                     sub-ranges (find-subranges left-ranges right-ranges)
-                    {on-regions true off-regions false} (group-by (fn [r]
-                                                                    (xor (range-inside-any? r right-ranges)
-                                                                         (range-inside-any? r left-ranges)))
-                                                                  sub-ranges)
-                    lo (max (dec (:prev-x acc)) 0)
-                    hi x
-                    x-diff (- hi lo 1)
-                    inflection-point (some #{(dec x)} x-values)
-                    combined (combine-overlapping-ranges (concat left-ranges (if inflection-point right-ranges '())))
-                    area (area-for-ranges x-diff combined)
-                    ;; _ (println [(:prev-x acc) (dec x)]
-                    ;;            "left-ranges" left-ranges "right-ranges" right-ranges "combined" combined "area" area "on-regions" on-regions)
-                    _ (printf "(* %s %s)\n"
-                              (if inflection-point "1" (format "(- %d %d 1)" hi lo))
-                              (format "(inc (- %d %d))" (second (first combined)) (first (first combined))))
+                    on-regions (filter (fn [r]
+                                         (xor (range-inside-any? r right-ranges)
+                                              (range-inside-any? r left-ranges)))
+                                       sub-ranges)
+                    on-regions (or on-regions '())
+                    lo (inc (:prev-x acc))
+                    hi (dec x)
+                    old-range-sum (sum-ranges (combine-overlapping-ranges left-ranges))
+                    new-range-sum (sum-ranges (combine-overlapping-ranges (concat left-ranges right-ranges)))
+                    ;; TODO: handle single line regions
+                    ;; _ (printf "%7d-%7d: (* %d %d)\n"
+                    ;;           lo hi (inc (- hi lo)) old-range-sum)
+                    ;; _ (printf "        %7d: (* 1 %d)\n" x new-range-sum)
                     ]
-                {:left-y-ranges on-regions
+                {:on-regions on-regions
                  :prev-x x
-                 :area (+ (:area acc) area)
+                 :area (+ (:area acc) (* (inc (- hi lo)) old-range-sum) new-range-sum)
                  }))
-            {:left-y-ranges initial-left-y-ranges :prev-x 0 :area (area-for-ranges 1 initial-left-y-ranges)}
-            splits)))
-
-;; 1: [0 0]
-;; 2: [1 1]
-;; 4: [2 4]
-;; 6: [5 6]
-
-;; 0: [0 0]
-;; 1: [1 1]
-;; 2: [2 2]
-;; 4: [3 4]
-;; 6: [5 6]
-
-
-;; I'm seconds away from finishing this but my brain is tired.
-;; I just have to get through an off-by-one error.
-;; (:area (get-area small-input))
+            {:on-regions initial-ranges :combined-ranges initial-ranges :prev-x 0 :area (sum-ranges initial-ranges)}
+            (rest x-values))))
 
 ;; 0123456
 ;;
@@ -336,5 +321,8 @@
      (* (- 1186328 818608 1) (inc (- 1186328 919647)))
      (* 1 (inc (- 1186328 919647)))))
 
-;; This output (and the acutal computation) should match the above exactly.
-;; (:area (get-area small-input))
+;; 78164239897507
+;; ---> answer <---
+
+;; TODO: this result is too large (for part 2, it's too small).
+;; (:area (get-area large-input parse-input))
