@@ -255,17 +255,15 @@
   (reduce (fn [acc [l h]] (+ acc (- h l))) (count ranges) ranges))
 
 (defn get-area [input parser]
-  (let [
-        segments (get-perimeter (parser input))
+  (let [segments (get-perimeter (parser input))
         points (set (mapcat identity segments))
         x-values (sort (distinct (map first points)))
         splits (split-xs (rest x-values))
-        ;; _ (println "xs" splits)
         vertical (filter (fn [[[a _] [b _]]] (= a b)) segments)
         grouped-segments (group-by (fn [[[a _] _]] a) vertical)
-        initial-ranges (sort (get-y-ranges (get grouped-segments 0)))]
-    ;; (println "initial area" (sum-ranges initial-ranges))
-    ;; (println "              0: (* 1 500255)")
+        initial-ranges (get-y-ranges (get grouped-segments (first x-values)))
+        ]
+    ;; (printf "        %7d: (* 1 %d) = %d\n" (first x-values) (sum-ranges initial-ranges) (sum-ranges initial-ranges))
     (reduce (fn [acc x]
               (let [left-ranges (:on-regions acc)
                     right-ranges (get-y-ranges (get grouped-segments x))
@@ -279,18 +277,17 @@
                     hi (dec x)
                     old-range-sum (sum-ranges (combine-overlapping-ranges left-ranges))
                     new-range-sum (sum-ranges (combine-overlapping-ranges (concat left-ranges right-ranges)))
+                    new-area (* (inc (- hi lo)) old-range-sum)
                     ;; TODO: handle single line regions
-                    ;; _ (printf "%7d-%7d: (* %d %d)\n"
-                    ;;           lo hi (inc (- hi lo)) old-range-sum)
-                    ;; _ (printf "        %7d: (* 1 %d)\n" x new-range-sum)
+                    ;; _ (printf "%7d-%7d: (* %d %d) = %d\n" lo hi (inc (- hi lo)) old-range-sum new-area)
+                    ;; _ (printf "        %7d: (* 1 %d) = %d\n" x new-range-sum new-range-sum)
                     ]
                 {:on-regions on-regions
                  :prev-x x
-                 :area (+ (:area acc) (* (inc (- hi lo)) old-range-sum) new-range-sum)
+                 :area (+ (:area acc) new-area new-range-sum)
                  }))
-            {:on-regions initial-ranges :combined-ranges initial-ranges :prev-x 0 :area (sum-ranges initial-ranges)}
+            {:on-regions initial-ranges :combined-ranges initial-ranges :prev-x (first x-values) :area (sum-ranges initial-ranges)}
             (rest x-values))))
-
 ;; 0123456
 ;;
 ;; 0011100
@@ -321,8 +318,16 @@
      (* (- 1186328 818608 1) (inc (- 1186328 919647)))
      (* 1 (inc (- 1186328 919647)))))
 
-;; 78164239897507
-;; ---> answer <---
+;; My last problem was assuming the minimum x value was zero.
 
-;; TODO: this result is too large (for part 2, it's too small).
-;; (:area (get-area large-input parse-input))
+;; (get-area small-input parse-input)
+;; {:on-regions (), :prev-x 6, :area 62}
+
+;; (get-area large-input parse-input)
+;; {:on-regions (), :prev-x 271, :area 39194}
+
+;; (get-area small-input parse-input-2)
+;; {:on-regions (), :prev-x 1186328, :area 952408144115}
+
+;; (get-area large-input parse-input-2)
+;; {:on-regions (), :prev-x 9490626, :area 78242031808225}
