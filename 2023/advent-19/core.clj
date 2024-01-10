@@ -104,36 +104,38 @@
                                           ">" {:min (inc value) :max range-max}
                                           nil {}))
                  minmax)]
-    (println "get-minmax" constraint result)
+    ;; (println "get-minmax" constraint result)
     result))
 
 ;; TODO: keep track of the values already excluded by previous rules.
 (defn count-matching [{:keys [category value] :as rule} constraints]
   (let [ranges (reduce (fn [acc {c-cat :category :as constraint}]                        
-                        ;; (println "category" category "c-cat" c-cat "constraint" constraint)
-                        (if c-cat
-                          (let [old (get acc c-cat)
-                                minmax (get-minmax constraint)
-                                new (get minmax c-cat)]
-                            (println "old" old "minmax" minmax)
-                            (assoc acc c-cat {:min (max (:min old) (:min new))
-                                              :max (min (:max old) (:max new))}))
-                          acc))
-                      (get-minmax rule)
-                      constraints)]
-    (println "count-matching" "rule" rule "constraints" constraints ranges ranges)
-    (apply min
+                         ;; (println "category" category "c-cat" c-cat "constraint" constraint)
+                         (if c-cat
+                           (let [old (get acc c-cat)
+                                 minmax (get-minmax constraint)
+                                 new (get minmax c-cat)]
+                             ;; (println "old" old "minmax" minmax)
+                             (assoc acc c-cat {:min (max (:min old) (:min new))
+                                               :max (min (:max old) (:max new))}))
+                           acc))
+                       (get-minmax rule)
+                       constraints)]
+    ;; (println "count-matching" "rule" rule "constraints" constraints "ranges" ranges "range-max" range-max)
+    (apply *
            (map (fn [[_ {:keys [min max]}]]
-                  (inc (- max min)))
+                  (clojure.core/max 0 (inc (- max min))))
                 ranges))))
 
 (deftest test-count-matching
   (binding [range-max 2]
-    (is (= 1 (count-matching {:category "s" :op ">" :value 1} [])))
-    (is (= 1 (count-matching {:category "s" :op ">" :value 1} [{:category "m", :op "<", :value 2}])))
+    (is (= 1 (count-matching {:category "x" :op ">" :value 1} (map (fn [c] {:category c :op ">" :value 1}) ["m" "a" "s"]))))
+    (is (= 8 (count-matching {:category "s" :op ">" :value 1} [])))
+    (is (= 4 (count-matching {:category "s" :op ">" :value 1} [{:category "m", :op "<", :value 2}])))
     (is (= 0 (count-matching {:category "s" :op ">" :value 1} [{:category "s", :op "<", :value 2}])))
     (is (= 0 (count-matching {:destination "R"} [{:category "s", :op ">", :value 1} {:category "s", :op "<", :value 2}]))))
-  )
+  (is (= 255936000000000 (count-matching {:category "x" :op ">" :value 1} [])))
+  (is (= 255872016000000 (count-matching {:category "x" :op ">" :value 1} [{:category "m" :op ">" :value 1}]))))
 
 (defn invert-constraint [constraint]
   ;; (println "invert-constraint" constraint)
@@ -157,12 +159,12 @@
              no-match-count (- range-max match-count)
              ;; _ (println "walk-tree" rule match-count no-match-count)
              ;; _ (println "inverse of" constraint "is" (invert-constraint constraint))
-             _ (if (= "A" (:destination rule)) (println "found path" constraints constraint match-count))
+             ;; _ (if (= "A" (:destination rule)) (println "found path" constraints constraint match-count))
              ]
          (+ (* match-count
                (case (:destination rule)
-                 "A" 1
-                 "R" 0
+                 "A" (bigint 1)
+                 "R" (bigint 0)
                  (walk-tree workflows (:destination rule) 0 (vec (remove empty? (conj constraints constraint))))))
             (* no-match-count (walk-tree workflows id (inc rule-num) (vec (remove empty? (conj constraints (invert-constraint constraint))))))))))))
 
@@ -183,3 +185,58 @@
 ;; (binding [range-max 2] (walk-tree (:workflows (parse-input test-input)) "in" 0)) ---> 3, should be 1
 
 ;; (binding [range-max 2] (walk-tree (:workflows (parse-input test-input)) "in" 0)) ---> 0, should be 1
+
+(defn format-constraint [rule]
+  (format "%s%s%d" (:category rule) (:op rule) (:value rule)))
+
+(defn build-constraints
+  ([workflows id rule-num] (build-constraints workflows id rule-num []))
+  ([workflows id rule-num constraints]
+   ;; (println "build-constraints" id rule-num constraints)
+   (let [workflow (get workflows id)
+         rules (drop rule-num workflow)]
+     (if (empty? rules)
+       ;; (list :no-rules id rule-num)
+       '()
+       (let [rule (first rules)
+             constraint (dissoc rule :destination)
+             match-count (count-matching rule constraints)
+             no-match-count (- range-max match-count)
+             ;; _ (println "build-constraints" rule match-count no-match-count)
+             ;; _ (println "inverse of" constraint "is" (invert-constraint constraint))
+             ;; _ (if (= "A" (:destination rule)) (println "found path" constraints constraint match-count))
+             pos-constraints (vec (remove empty? (conj constraints constraint)))
+             neg-constraints (vec (remove empty? (conj constraints (invert-constraint constraint))))
+             ]
+         (concat
+          (case (:destination rule)
+            "A" (list (list (format "%s=>%s" id (:destination rule)) pos-constraints))
+            "R" '() ;; (list (format "%s=>%s" id (:destination rule)) (map format-constraint pos-constraints))
+            (remove empty? (build-constraints workflows (:destination rule) 0 pos-constraints))
+            ;; (list ;; (format "%s=>%s" id (:destination rule))
+            ;;       ;; (map format-constraint pos-constraints)
+            ;;  (build-constraints workflows (:destination rule) 0 pos-constraints))
+            )
+          (remove empty? (build-constraints workflows id (inc rule-num) neg-constraints)))
+         )))))
+
+(defn count-combinations
+  ([input] (count-combinations input 4000))
+  ([input range-max-in]
+   (binding [range-max range-max-in]
+     (let [paths (build-constraints (:workflows (parse-input input)) "in" 0)
+           counts (doall
+                   (map (fn [[end constraints]]
+                          (list (map format-constraint constraints)
+                                (count-matching {} constraints)))
+                        paths))]
+       (apply + (map second counts))
+       ;; counts
+       ))))
+
+;; This is a bit more than half the correct value of 167409079868000.
+;; (count-combinations small-input)
+;; 85814301000000
+
+;; 59820152970570
+;; ---> answer <---
