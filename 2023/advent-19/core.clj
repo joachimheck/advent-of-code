@@ -142,7 +142,9 @@
   (if (:value constraint)
     (-> constraint
         (update :op {">" "<" "<" ">"})
-        (assoc :value (inc (- range-max (:value constraint)))))
+        (update :value #(if (= (:op constraint) ">")
+                          (inc %)
+                          (dec %))))
     {}))
 
 (defn walk-tree
@@ -183,11 +185,13 @@
 ;; qqz2 qqz3 m>1
 ;; qqz3 R
 ;; (binding [range-max 2] (walk-tree (:workflows (parse-input test-input)) "in" 0)) ---> 3, should be 1
-
 ;; (binding [range-max 2] (walk-tree (:workflows (parse-input test-input)) "in" 0)) ---> 0, should be 1
 
+
+
 (defn format-constraint [rule]
-  (format "%s%s%d" (:category rule) (:op rule) (:value rule)))
+  (if (and (:category rule) (:op rule) (:value rule))
+    (format "%s%s%d" (:category rule) (:op rule) (:value rule))))
 
 (defn build-constraints
   ([workflows id rule-num] (build-constraints workflows id rule-num []))
@@ -199,7 +203,7 @@
        ;; (list :no-rules id rule-num)
        '()
        (let [rule (first rules)
-             constraint (dissoc rule :destination)
+             constraint (assoc (dissoc rule :destination) :id id)
              match-count (count-matching rule constraints)
              no-match-count (- range-max match-count)
              ;; _ (println "build-constraints" rule match-count no-match-count)
@@ -207,32 +211,35 @@
              ;; _ (if (= "A" (:destination rule)) (println "found path" constraints constraint match-count))
              pos-constraints (vec (remove empty? (conj constraints constraint)))
              neg-constraints (vec (remove empty? (conj constraints (invert-constraint constraint))))
+             outside (case (:destination rule)
+                       "A" (list pos-constraints)
+                       "R" '()
+                       (remove empty? (build-constraints workflows (:destination rule) 0 pos-constraints)))
+             inside (remove empty? (build-constraints workflows id (inc rule-num) neg-constraints))
+             ;; _ (println "build-constraints" "id" id outside inside)
              ]
-         (concat
-          (case (:destination rule)
-            "A" (list (list (format "%s=>%s" id (:destination rule)) pos-constraints))
-            "R" '() ;; (list (format "%s=>%s" id (:destination rule)) (map format-constraint pos-constraints))
-            (remove empty? (build-constraints workflows (:destination rule) 0 pos-constraints))
-            ;; (list ;; (format "%s=>%s" id (:destination rule))
-            ;;       ;; (map format-constraint pos-constraints)
-            ;;  (build-constraints workflows (:destination rule) 0 pos-constraints))
-            )
-          (remove empty? (build-constraints workflows id (inc rule-num) neg-constraints)))
-         )))))
+         (concat outside inside))))))
 
 (defn count-combinations
   ([input] (count-combinations input 4000))
   ([input range-max-in]
    (binding [range-max range-max-in]
      (let [paths (build-constraints (:workflows (parse-input input)) "in" 0)
-           counts (doall
-                   (map (fn [[end constraints]]
-                          (list (map format-constraint constraints)
-                                (count-matching {} constraints)))
-                        paths))]
-       (apply + (map second counts))
-       ;; counts
-       ))))
+           ;; counts (doall
+           ;;         (map (fn [[end constraints]]
+           ;;                (list (map format-constraint constraints)
+           ;;                      (count-matching {} constraints)))
+           ;;              paths))
+           ;; ids (for [path paths] (dedupe (map :id path)))
+           path-counts (doall
+                        (map (fn [constraints]
+                               {:path (dedupe (map :id constraints))
+                                :constraints (remove nil? (map format-constraint constraints))
+                                :count (count-matching {} constraints)})
+                             paths))
+           ]
+       ;; (list path-counts (apply + (map :count path-counts)))
+       (apply + (map :count path-counts))))))
 
 ;; This is a bit more than half the correct value of 167409079868000.
 ;; (count-combinations small-input)
@@ -240,3 +247,35 @@
 
 ;; 59820152970570
 ;; ---> answer <---
+
+;; px qkq a<2006
+;; px A m>2090
+;; px rfg otherwise
+;; pv R a>1716
+;; pv A otherwise
+;; lnx A m>1548
+;; lnx A otherwise
+;; rfg gd s<537
+;; rfg R x>2440
+;; rfg A otherwise
+;; qs A s>3448
+;; qs lnx otherwise
+;; qkq A x<1416
+;; qkq crn otherwise
+;; crn A x>2662
+;; crn R otherwise
+;; in px s<1351
+;; in qqz otherwise
+;; qqz qs s>2770
+;; qqz hdj m<1801
+;; qqz R otherwise
+;; gd R a>3333
+;; gd R otherwise
+;; hdj A m>838
+;; hdj pv otherwise
+
+;; (count-combinations small-input)
+;; 167409079868000
+
+;; (count-combinations large-input)
+;; 113550238315130
