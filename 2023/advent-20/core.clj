@@ -107,10 +107,38 @@
 
 ;; Part 2
 ;; How many button presses until a single low pulse is sent to module "rx"?
-(defn process-until-rx [input]
+(defn format-node-state [modules nodes]
+  (str/join (for [n (reverse nodes)
+                  :let [module (get modules n)]]
+              ;; (format "%s %s" n (case (:state module) :on " on" :off "off"))
+              (format "%d" (case (:state module) :on 1 :off 0)))))
+
+(defn process-until-rx [input max-n]
   (loop [config (parse-input input)
          n 1]
-    (let [{:keys [modules sent-pulses rx-low-pulse-count]} (process config)]
-      (if (= 1 rx-low-pulse-count)
-        n
-        (recur modules (inc n))))))
+    (if (>= n max-n)
+      {:failure n}
+      (let [{:keys [modules sent-pulses rx-low-pulse-count]} (process config)
+            nodes ["kx" "sg" "tr" "br" "jq" "mm" "vh" "xx" "cz" "lc" "vn" "cc"]]
+        (if (< (- max-n n) 5)
+          (println "node state at step" n (format-node-state config nodes)))
+        (if (>= rx-low-pulse-count 1)
+          [n rx-low-pulse-count]
+          (recur modules (inc n)))))))
+
+;; Build a graph input appropriate for https://csacademy.com/app/graph_editor/
+;; Except the ::s have to be converted into newlines.
+(defn build-graph [input]
+  (->> (parse-input input)
+       (vals)
+       (map (fn [{:keys [name destinations]}]
+              (for [d destinations]
+                (format "%s %s" name d))))
+       (apply concat)
+       (str/join "::")))
+
+
+;; 4096 - maximum 12-digit binary number is 4095, then it looks like there's one more node.
+;; ---> answer <---
+;; Is there a bug? This looks like it's just counting, but it resets to zero at step 4052,
+;; not, as expected, at step 4096.
