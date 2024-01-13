@@ -1,0 +1,14 @@
+broadcaster -> aa, ba
+%aa -> ab, ax
+%ab -> ac, ax
+%ac -> ad, ax
+%ad -> ax
+&ax -> ay
+%ay -> ww
+%ba -> bb, bx
+%bb -> bc, bx
+%bc -> bd, bx
+%bd -> bx
+&bx -> by
+%by -> ww
+&ww -> rx

@@ -52,7 +52,7 @@
 
 (defn handle-pulse [{:keys [from to p-type] :as pulse} modules]
   (let [module (get modules to)
-        {:keys [name type destinations state memory] :as module}
+        {:keys [name type destinations state memory] :as new-module}
         (cond (= (:type module) :flip-flop) (if (= p-type :low) (update module :state #(if (= % :off) :on :off)) module)
               (= (:type module) :conjunction) (assoc-in module [:memory from] p-type)
               :else module)
@@ -65,7 +65,7 @@
                                          :conjunction {:from name :to destination :p-type
                                                        (if (every? #{:high} (vals memory)) :low :high)}))
                                      destinations))]
-    {:module module :new-pulses new-pulses}))
+    {:module new-module :new-pulses new-pulses}))
 
 (defn process [config]
   (loop [pulses [{:from "button" :p-type :low :to "broadcaster"}]
@@ -108,37 +108,70 @@
 ;; Part 2
 ;; How many button presses until a single low pulse is sent to module "rx"?
 (defn format-node-state [modules nodes]
-  (str/join (for [n (reverse nodes)
-                  :let [module (get modules n)]]
-              ;; (format "%s %s" n (case (:state module) :on " on" :off "off"))
-              (format "%d" (case (:state module) :on 1 :off 0)))))
+  (str/join " "
+            (for [s nodes]
+              (str/join
+               (for [n s
+                     :let [module (get modules n)]]
+                 (if (= (:type module) :flip-flop)
+                   (format "%d" (case (:state module) :on 1 :off 0))
+                   (format "|%d/%d|" (count (filter #{:high} (vals (:memory module)))) (count (:memory module)))))))))
 
-(defn process-until-rx [input max-n]
-  (loop [config (parse-input input)
-         n 1]
-    (if (>= n max-n)
-      {:failure n}
-      (let [{:keys [modules sent-pulses rx-low-pulse-count]} (process config)
-            nodes ["kx" "sg" "tr" "br" "jq" "mm" "vh" "xx" "cz" "lc" "vn" "cc"]]
-        (if (< (- max-n n) 5)
-          (println "node state at step" n (format-node-state config nodes)))
-        (if (>= rx-low-pulse-count 1)
-          [n rx-low-pulse-count]
-          (recur modules (inc n)))))))
+(defn process-until-rx
+  ([input max-n] (process-until-rx input max-n nil))
+  ([input max-n debug-step]
+   (println "arguments" [input max-n debug-step])
+   (loop [config (parse-input input)
+          n 1]
+     (if (>= n max-n)
+       {:failure n}
+       (let [{:keys [modules sent-pulses rx-low-pulse-count]} (process config)
+             nodes
+             (if (= input test-input)
+               [["aa" "ab" "ac" "ad" "ax" "ay"] ["ba" "bb" "bc" "bd" "bx" "by"] ["ww"]]
+               [["kx" "sg" "tr" "br" "jq" "mm" "vh" "xx" "cz" "lc" "vn" "cc" "vv" "zv"]
+                ["mg" "hl" "qb" "cd" "ps" "xc" "kz" "mc" "xv" "tx" "rv" "tp" "jc" "lk"]
+                ["nt" "cx" "qh" "ln" "mq" "hs" "sl" "zl" "nj" "pt" "gt" "hg" "xq" "sp"]
+                ["rc" "rm" "dm" "bl" "jt" "vp" "fd" "td" "hx" "gf" "dc" "nv" "dv" "xt"]
+                ["dg"]])]
+         (if (or (nil? debug-step) (< (- debug-step 5) n (+ debug-step 5)))
+              (printf "step %3d: %s\n" n (format-node-state modules nodes)))
+            (if (>= rx-low-pulse-count 1)
+              [:success n rx-low-pulse-count]
+              (recur modules (inc n))))))))
 
 ;; Build a graph input appropriate for https://csacademy.com/app/graph_editor/
 ;; Except the ::s have to be converted into newlines.
 (defn build-graph [input]
-  (->> (parse-input input)
-       (vals)
-       (map (fn [{:keys [name destinations]}]
-              (for [d destinations]
-                (format "%s %s" name d))))
-       (apply concat)
-       (str/join "::")))
+  (let [config (parse-input input)
+        type-string (fn [name]
+                      (case (:type (get config name))
+                        :flip-flop "%"
+                        :conjunction "&"
+                        ""))]
+    (->> config
+         (vals)
+         (map (fn [{:keys [name destinations]}]
+                (for [d destinations]
+                  (format "%s%s %s%s" (type-string name) name (type-string d) d))))
+         (apply concat)
+         (str/join "::"))))
 
 
+;; 4095
 ;; 4096 - maximum 12-digit binary number is 4095, then it looks like there's one more node.
+;; 228979973476800
 ;; ---> answer <---
+
 ;; Is there a bug? This looks like it's just counting, but it resets to zero at step 4052,
 ;; not, as expected, at step 4096.
+
+;; From the _directional_ (!) graph in graph-20.png:
+;; node vv triggers at 2r111111010010 = 4050
+;; node jc triggers at 2r111011101110 = 3822
+;; node xq triggers at 2r111101011000 = 3928
+;; node dv triggers at 2r111010110110 = 3766
+
+
+;; (apply * (map inc [4050 3822 3928 3766]))
+;; 229215609826339
