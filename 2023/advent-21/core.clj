@@ -93,4 +93,83 @@
                  points)))
 
 ;; TODO: maybe look for repetition in the increase from one step count to the next?
+(defn wrap [[x y] width height]
+  [(cond (< x 0) (- width x)
+         (>= x width) (- x width)
+         :else x)
+   (cond (< y 0) (- height y)
+         (>= y height) (- y height)
+         :else y)])
 
+(defn get-wrapped [grid [x y] width height]
+  (get grid [(mod x width) (mod y height)]))
+
+(defn adjacent-open-wrap [{:keys [width height grid]} p]
+  (->> p
+       (adjacent)
+       (map #(list % (get-wrapped grid % width height)))
+       (filter #(= \. (second %)))
+       (map first)))
+
+(defn find-tiles-by-steps-wrap [{:keys [width height grid start] :as pattern} steps]
+  (loop [open-set #{start}
+         i steps]
+    (if (<= i 0)
+      open-set
+      (recur (set (mapcat #(adjacent-open-wrap pattern %) open-set)) (dec i)))))
+
+(defn how-many-plots-wrap [input steps]
+  (count (find-tiles-by-steps-wrap (parse-input input) steps)))
+
+
+(def reachable-counts (atom {}))
+
+(defn count-reachable-memo [{:keys [width height grid] :as pattern} p steps]
+  (if (= steps 0)
+    1
+    (if-let [cached (get @reachable-counts [p steps])]
+      cached
+      (let [adjacent (adjacent-open-wrap pattern p)
+            reachable (apply + (conj (map #(count-reachable-memo pattern % (dec steps)) adjacent)
+                                     ;;(count adjacent)
+                                     ))]
+        (swap! reachable-counts assoc [p steps] reachable)
+        reachable))))
+
+(defn how-many-plots-memo [input steps]
+  (reset! reachable-counts {})
+  (let [{:keys [start] :as pattern} (parse-input input)]
+    (count-reachable-memo pattern start steps)))
+
+(defn pattern-to-string [{:keys [width height grid]}]
+  (str/join "\n"
+            (for [j (range height)]
+              (str/join
+               (for [i (range width)]
+                 (get grid [i j]))))))
+
+(defn count-flood-fill [{:keys [width height grid start] :as pattern} steps]
+  (loop [open-set #{start}
+         flag :even
+         steps-left steps
+         visited-odd #{}
+         visited-even #{}]
+    (let [new-steps-left (dec steps-left)
+          new-visited-even (if (= flag :even)
+                             (apply conj visited-even open-set)
+                             visited-even)
+          new-visited-odd (if (= flag :odd)
+                            (apply conj visited-odd open-set)
+                            visited-odd)
+          last-visited (if (= flag :even) visited-odd visited-even)]
+      (if (= steps-left 0)
+        (if (even? steps) (count new-visited-even) (count new-visited-odd))
+        (recur (set (remove last-visited (mapcat #(adjacent-open-wrap pattern %) open-set)))
+               (if (= flag :even) :odd :even)
+               (dec steps-left)
+               new-visited-odd
+               new-visited-even)))))
+
+;; This generates the right answer (as did my original code for part 1), but it is very slow.
+;; I don't see how to just count the available positions while also taking into account the
+;; fact that paths have to go around obstacles.
