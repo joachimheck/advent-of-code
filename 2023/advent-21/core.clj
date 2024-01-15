@@ -173,3 +173,41 @@
 ;; This generates the right answer (as did my original code for part 1), but it is very slow.
 ;; I don't see how to just count the available positions while also taking into account the
 ;; fact that paths have to go around obstacles.
+
+(defn find-cycle [open-set-counts count-sets n]
+  (if (> (count open-set-counts) n)
+    (let [last-n (take-last n open-set-counts)
+          multiples (set (for [i (range 1 8)]
+                           (map #(* i %) last-n)))]
+      (if-let [match (some multiples count-sets)]
+        {:repeat-detected [match last-n]}))))
+
+(defn count-multiple-flood-fill [{:keys [width height grid start] :as pattern} steps]
+  (let [n 5]
+    (loop [open-set #{start}
+           steps-left steps
+           visited #{}
+           open-set-counts []
+           count-sets []]
+      (if (= steps-left 0)
+        {:repeat-detected nil :open-set-counts open-set-counts}
+        (if-let [cycle (find-cycle open-set-counts count-sets n)]
+          cycle
+          (let [new-open-set (set (remove visited (mapcat #(adjacent-open-wrap pattern %) open-set)))
+                new-steps-left (dec steps-left)
+                new-visited open-set
+                ;; new-visited (apply conj visited open-set)
+                new-open-set-counts (conj open-set-counts (- (count open-set) (count visited)))]
+            (recur new-open-set
+                   new-steps-left
+                   new-visited
+                   new-open-set-counts
+                   (if (> (count new-open-set-counts) n)
+                     (conj count-sets (take-last n open-set-counts))
+                     count-sets))))))))
+
+;; 109245867
+;; ---> answer <---
+
+;; TODO: I've detected a pattern in the first derivative of the number of new plots accessed
+;; with every step, but I need to figure out how to use it to compute the full number of plots.
