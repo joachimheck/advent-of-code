@@ -182,32 +182,80 @@
       (if-let [match (some multiples count-sets)]
         {:repeat-detected [match last-n]}))))
 
-(defn count-multiple-flood-fill [{:keys [width height grid start] :as pattern} steps]
-  (let [n 5]
-    (loop [open-set #{start}
-           steps-left steps
-           visited #{}
-           open-set-counts []
-           count-sets []]
-      (if (= steps-left 0)
-        {:repeat-detected nil :open-set-counts open-set-counts}
-        (if-let [cycle (find-cycle open-set-counts count-sets n)]
-          cycle
-          (let [new-open-set (set (remove visited (mapcat #(adjacent-open-wrap pattern %) open-set)))
-                new-steps-left (dec steps-left)
-                new-visited open-set
-                ;; new-visited (apply conj visited open-set)
-                new-open-set-counts (conj open-set-counts (- (count open-set) (count visited)))]
-            (recur new-open-set
-                   new-steps-left
-                   new-visited
-                   new-open-set-counts
-                   (if (> (count new-open-set-counts) n)
-                     (conj count-sets (take-last n open-set-counts))
-                     count-sets))))))))
+(defn count-multiple-flood-fill [{:keys [width height grid start] :as pattern} max-steps cycle-size]
+  (loop [open-set #{start}
+         flag :even
+         steps 0
+         visited-odd #{}
+         visited-even #{}
+         counts []
+         d1s []
+         d2s []
+         d3s []
+         d2-cycles []]
+    (if (= steps (inc max-steps))
+      ;; {:result (map-indexed list (map list counts d1s d2s d3s d2-cycles))}
+      {:counts counts :d1s d1s :d2-cycles d2-cycles}
+      (let [new-steps (inc steps)
+            new-visited-even (if (= flag :even)
+                               (apply conj visited-even open-set)
+                               visited-even)
+            new-visited-odd (if (= flag :odd)
+                              (apply conj visited-odd open-set)
+                              visited-odd)
+            last-visited (if (= flag :even) visited-odd visited-even)
+            new-count (if (even? steps) (count new-visited-even) (count new-visited-odd))
+            new-d1 (- new-count (or (last counts) 0))
+            new-d2 (- new-d1 (or (last d1s) 0))
+            new-d3 (- new-d2 (or (last d2s) 0))
+            new-d2-cycle (- new-d1 (or (get d1s (- (count d1s) cycle-size)) 0))]
+        (recur (set (remove last-visited (mapcat #(adjacent-open-wrap pattern %) open-set)))
+               (if (= flag :even) :odd :even)
+               (inc steps)
+               new-visited-odd
+               new-visited-even
+               (conj counts new-count)
+               (conj d1s new-d1)
+               (conj d2s new-d2)
+               (conj d3s new-d3)
+               (conj d2-cycles new-d2-cycle))))))
+
+(defn format-for-desmos [points]
+  (str/join ","
+            (for [[x y] points]
+              (format "(%d,%d)" x y))))
 
 ;; 109245867
 ;; ---> answer <---
 
 ;; TODO: I've detected a pattern in the first derivative of the number of new plots accessed
 ;; with every step, but I need to figure out how to use it to compute the full number of plots.
+
+(defn compute-plots-cycles [input steps cycle-size min-step]
+  (let [pattern (parse-input input)
+        {:keys [counts d1s d2-cycles]} (count-multiple-flood-fill pattern (+ min-step (* 2 cycle-size)) cycle-size)
+        start-v (get d1s min-step)
+        start-step (min steps (+ cycle-size (first (drop-while #(> % min-step) (iterate #(- % cycle-size) steps)))))
+        start-count (count-flood-fill pattern start-step)
+        delta-vs (subvec d2-cycles start-step (+ start-step cycle-size))
+        delta-x-per-cycle (apply + (reductions + delta-vs))
+        cycles (quot (- steps start-step) cycle-size)]
+    (println "steps" steps "start-step" start-step "start-count" start-count "cycles" cycles "delta-vs" delta-vs)
+    (+ start-count
+       (loop [i 0
+              x start-count
+              v start-v]
+         (if (= i cycles)
+           x
+           (let [new-x (apply + (conj (reductions + v delta-vs) x))
+                 new-v (apply + (conj delta-vs v))
+                 _ (println "x" x "new-x" new-x "v" v "new-v" new-v)]
+             (recur (inc i) new-x new-v)))))))
+
+;; The code above doesn't work - neither does this code to try to move to the next step after step 56.
+;; (let [start-x 1988
+;;       start-v 74
+;;       delta-vs [16 14 18 16 16 14 18 16 9 11 14]
+;;       next-x 2072
+;;       end-x 2882]
+;;   (apply + (conj (reductions + 0 delta-vs) start-x)))
