@@ -231,26 +231,27 @@
 ;; TODO: I've detected a pattern in the first derivative of the number of new plots accessed
 ;; with every step, but I need to figure out how to use it to compute the full number of plots.
 
-(defn compute-plots-cycles [input steps cycle-size min-step]
-  (let [pattern (parse-input input)
-        {:keys [counts d1s d2-cycles]} (count-multiple-flood-fill pattern (+ min-step (* 2 cycle-size)) cycle-size)
-        start-v (get d1s min-step)
-        start-step (min steps (+ cycle-size (first (drop-while #(> % min-step) (iterate #(- % cycle-size) steps)))))
-        start-count (count-flood-fill pattern start-step)
-        delta-vs (subvec d2-cycles start-step (+ start-step cycle-size))
-        delta-x-per-cycle (apply + (reductions + delta-vs))
-        cycles (quot (- steps start-step) cycle-size)]
-    (println "steps" steps "start-step" start-step "start-count" start-count "cycles" cycles "delta-vs" delta-vs)
-    (+ start-count
-       (loop [i 0
-              x start-count
-              v start-v]
-         (if (= i cycles)
-           x
-           (let [new-x (apply + (conj (reductions + v delta-vs) x))
-                 new-v (apply + (conj delta-vs v))
-                 _ (println "x" x "new-x" new-x "v" v "new-v" new-v)]
-             (recur (inc i) new-x new-v)))))))
+;; (defn compute-plots-cycles [input steps cycle-size min-step]
+;;   (let [pattern (parse-input input)
+;;         {:keys [counts d1s d2-cycles]} (count-multiple-flood-fill pattern (+ min-step (* 2 cycle-size)) cycle-size)
+;;         start-v (get d1s min-step)
+;;         start-step (min steps (+ cycle-size (first (drop-while #(> % min-step) (iterate #(- % cycle-size) steps)))))
+;;         start-count (count-flood-fill pattern start-step)
+;;         delta-vs (subvec d2-cycles start-step (+ start-step cycle-size))
+;;         delta-x-per-cycle (apply + (reductions + delta-vs))
+;;         cycles (quot (- steps start-step) cycle-size)]
+;;     (println "steps" steps "start-step" start-step "start-count" start-count "cycles" cycles "delta-vs" delta-vs)
+;;     (+ start-count
+;;        (loop [i 0
+;;               x start-count
+;;               v start-v]
+;;          (if (= i cycles)
+;;            x
+;;            (let [new-x (apply + (conj (reductions + v delta-vs) x))
+;;                  new-v (apply + (conj delta-vs v))
+;;                  _ (println "x" x "new-x" new-x "v" v "new-v" new-v)
+;;                  _ (println "x-reductions" (reductions + v delta-vs))]
+;;              (recur (inc i) new-x new-v)))))))
 
 ;; The code above doesn't work - neither does this code to try to move to the next step after step 56.
 ;; (let [start-x 1988
@@ -259,3 +260,57 @@
 ;;       next-x 2072
 ;;       end-x 2882]
 ;;   (apply + (conj (reductions + 0 delta-vs) start-x)))
+
+(defn compute-cycle [start-x start-v as]
+  (loop [i 0 x start-x v start-v l-as as]
+    (if (= i (count as))
+      {:x x :v v}
+      (let [new-x (+ x v)
+            new-v (+ v (nth l-as i))]
+        (recur (inc i) new-x new-v l-as)))))
+
+(defn compute-plots-cycles [input steps cycle-size min-step]
+  (let [pattern (parse-input input)
+        start-step (first (filter #(>= % min-step) (iterate #(+ % cycle-size) (rem steps cycle-size))))
+        cycles (quot (- steps start-step) cycle-size)
+        {:keys [counts]} (count-multiple-flood-fill pattern (+ start-step 2 (* 2 cycle-size)) cycle-size)
+        xs (subvec counts start-step)
+        vs (map #(apply - (reverse %)) (partition 2 1 xs))
+        as (map #(apply - (reverse %)) (partition 2 1 vs))
+        js (apply map #(- %2 %1) (partition cycle-size as))
+        percent-chunk 100]
+    (println "Running" cycles "cycles:")
+    (if (> start-step steps)
+      (count-flood-fill pattern steps)
+      (loop [cycle 0
+               x (first xs)
+               v (first vs)
+               as (take cycle-size as)
+               percentage-boundaries (map list
+                                          (range 1 (+ 2 percent-chunk))
+                                          (take percent-chunk (rest (iterate #(+ (int (/ cycles percent-chunk)) %) 0))))]
+          (if (= cycle cycles)
+            x
+            (let [{new-x :x new-v :v} (compute-cycle x v as)
+                  new-as (map #(apply + %) (map list as js))
+                  [percent boundary] (first percentage-boundaries)
+                  new-pbs (if (and (seq percentage-boundaries) (>= cycle boundary))
+                            (do (printf "%2d%%: %d\n" percent cycle)
+                                (flush)
+                                (rest percentage-boundaries))
+                            percentage-boundaries)]
+              (recur (inc cycle) new-x new-v new-as new-pbs)))))))
+
+;; (time (compute-plots-cycles large-input 26501365 131 300))
+;; Running 202298 cycles:
+;;  1%: 2022
+;;  2%: 4044
+;;  3%: 6066
+;;  ...
+;; 97%: 196134
+;; 98%: 198156
+;; 99%: 200178
+;; 100%: 202200
+
+;; "Elapsed time: 262845.9651 msecs"
+;; 619407349431167
