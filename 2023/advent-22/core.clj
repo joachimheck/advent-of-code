@@ -24,7 +24,7 @@
        (map #(map parse-long %))
        (map (fn [[a b c d e f]] [{:x a :y b :z c} {:x d :y e :z f}]))
        (map (fn [v] (vec (sort-by :z v))))
-       (sort-by (fn [[p1 p2]] (:z p1)))))
+       (sort-by #(apply min (map :z %))(fn [[p1 p2]] (:z p1)))))
 
 (defn find-axis [[p1 p2]]
   (cond (not= (:x p1) (:x p2)) :x
@@ -68,7 +68,7 @@
            (some true? (map #(overlap? (move-down brick) %) (remove #{brick} bricks))))))
 
 (defn settle-bricks [bricks]
-  (loop [floating bricks
+  (loop [floating (vec (sort-by #(apply min (map :z %)) bricks))
          resting '()
          max-z 0]
     (if (empty? floating)
@@ -77,11 +77,11 @@
             d (- (apply min (map :z current)) max-z)]
         (cond
           (> d 1)
-          (recur (doall (vec (conj (remove #{current} floating) (move-down current (dec d))))) resting max-z)
+          (recur (doall (assoc floating 0 (move-down current (dec d)))) resting max-z)
           (can-fall? current resting)
-          (recur (doall (vec (conj (remove #{current} floating) (move-down current)))) resting max-z)
+          (recur (doall (assoc floating 0 (move-down current))) resting max-z)
           :else
-          (recur (vec (remove #{current} floating)) (doall (conj resting current)) (max max-z (apply max (map :z current)))))))))
+          (recur (vec (rest floating)) (doall (conj resting current)) (max max-z (apply max (map :z current)))))))))
 
 (defn can-disintegrate? [brick bricks]
   (let [others (remove #{brick} bricks)]
@@ -94,10 +94,49 @@
              (for [brick settled]
                (can-disintegrate? brick settled))))))
 
-;; advent-22.core> (time (count-disintegratable-bricks large-input))
+;; (time (count-disintegratable-bricks large-input))
 ;; "Elapsed time: 1930960.1694 msecs"
 
+;; 493
 ;; ---> answer <---
+;; 522
 ;; 549
 
 ;; TODO: only look at the bricks directly above the potentially disintegrated brick.
+(defn get-cubes [[{x1 :x y1 :y z1 :z :as p1} {x2 :x y2 :y z2 :z :as p2} :as brick]]
+  (let [next-cube (cond (not= x1 x2) #(update % :x inc)
+                        (not= y1 y2) #(update % :y inc)
+                        (not= z1 z2) #(update % :z inc))
+        start-cube (first (sort-by #(+ (:x %) (:y %) (:z %)) brick))
+        length (inc (apply + (map #(int (Math/abs (- (% p1) (% p2)))) [:x :y :z])))]
+    (take length (iterate next-cube start-cube))))
+
+(defn is-supported? [brick bricks]
+  (or (some #{1} (map :z brick))
+      (let [cubes (get-cubes (move-down brick))
+            min-z (apply min (map :z brick))
+            cubes-below (map #(update % :z dec) (filter #(= min-z (:z %)) cubes))
+            all-cubes (mapcat get-cubes bricks)]
+        (set/subset? (set cubes-below) (set all-cubes)))))
+
+(defn settle-bricks-2 [bricks]
+  (let [x-max (apply max (map #(apply max (map :x %)) bricks))
+        y-max (apply max (map #(apply max (map :y %)) bricks))]
+    (loop [floating bricks
+           bottom-surface (for [x (range (inc x-max)) y (range (inc y-max))] {:x x :y y :z 0})
+           bottom-bricks (into {} (for [cube bottom-surface] [cube :floor]))
+           settled '()]
+      (if (empty? floating)
+        settled
+        (let [brick (first floating)
+              min-z (apply min (map :z brick))
+              max-z (apply max (map :z brick))
+              footprint (filter #(= min-z (:z %)) (get-cubes brick))
+              matching-bottom (filter #(some (fn [{:keys [x y]}] (and (= x (:x %)) (= y (:y %)))) footprint) bottom-surface)
+              new-brick (move-down brick (dec (- min-z (apply max (map :z matching-bottom)))))
+              new-bottom (map (fn [b-c] (if (some #{b-c} matching-bottom) (assoc b-c :z max-z) b-c)) bottom-surface)]
+          (recur (remove #{brick} floating)
+                 new-bottom
+                 bottom-bricks
+                 (conj settled new-brick)))))))
+
