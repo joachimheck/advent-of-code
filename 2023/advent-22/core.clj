@@ -24,7 +24,7 @@
        (map #(map parse-long %))
        (map (fn [[a b c d e f]] [{:x a :y b :z c} {:x d :y e :z f}]))
        (map (fn [v] (vec (sort-by :z v))))
-       (sort-by #(apply min (map :z %))(fn [[p1 p2]] (:z p1)))))
+       (sort-by (fn [[p1 p2]] (:z p1)))))
 
 (defn find-axis [[p1 p2]]
   (cond (not= (:x p1) (:x p2)) :x
@@ -67,7 +67,7 @@
   (not (or (some #{1} (map :z brick))
            (some true? (map #(overlap? (move-down brick) %) (remove #{brick} bricks))))))
 
-(defn settle-bricks [bricks]
+(defn settle-bricks-1 [bricks]
   (loop [floating (vec (sort-by #(apply min (map :z %)) bricks))
          resting '()
          max-z 0]
@@ -87,8 +87,8 @@
   (let [others (remove #{brick} bricks)]
     (every? false? (map #(can-fall? % others) others))))
 
-(defn count-disintegratable-bricks [input]
-  (let [settled (settle-bricks (parse-input input))]
+(defn count-disintegratable-bricks-1 [input]
+  (let [settled (settle-bricks-1 (parse-input input))]
     (count
      (filter true?
              (for [brick settled]
@@ -119,24 +119,52 @@
             all-cubes (mapcat get-cubes bricks)]
         (set/subset? (set cubes-below) (set all-cubes)))))
 
-(defn settle-bricks-2 [bricks]
+(defn move-to [[p1 p2 :as brick] z]
+  [(assoc p1 :z z) (assoc p2 :z (+ z (- (:z p2) (:z p1))))])
+
+(defn settle-bricks [bricks]
   (let [x-max (apply max (map #(apply max (map :x %)) bricks))
         y-max (apply max (map #(apply max (map :y %)) bricks))]
     (loop [floating bricks
-           bottom-surface (for [x (range (inc x-max)) y (range (inc y-max))] {:x x :y y :z 0})
-           bottom-bricks (into {} (for [cube bottom-surface] [cube :floor]))
-           settled '()]
+           bottom-surface (into {} (for [x (range (inc x-max)) y (range (inc y-max))] [[x y] 0]))
+           bottom-bricks (into {} (for [x (range (inc x-max)) y (range (inc y-max))] [[x y] :floor]))
+           settled '()
+           resting-on {}]
       (if (empty? floating)
-        settled
+        {:settled settled :resting-on resting-on}
         (let [brick (first floating)
               min-z (apply min (map :z brick))
-              max-z (apply max (map :z brick))
-              footprint (filter #(= min-z (:z %)) (get-cubes brick))
-              matching-bottom (filter #(some (fn [{:keys [x y]}] (and (= x (:x %)) (= y (:y %)))) footprint) bottom-surface)
-              new-brick (move-down brick (dec (- min-z (apply max (map :z matching-bottom)))))
-              new-bottom (map (fn [b-c] (if (some #{b-c} matching-bottom) (assoc b-c :z max-z) b-c)) bottom-surface)]
+              footprint (map (fn [cube] [(:x cube) (:y cube)]) (filter #(= min-z (:z %)) (get-cubes brick)))
+              matching-bottom (select-keys bottom-surface footprint)
+              max-bottom-height (apply max (vals matching-bottom))
+              new-brick (move-to brick (inc max-bottom-height))
+              max-z (apply max (map :z new-brick))
+              new-cubes (get-cubes new-brick)
+              new-bottom-surface (reduce (fn [acc {:keys [x y z]}] (assoc acc [x y] max-z)) bottom-surface new-cubes)
+              new-bottom-bricks (reduce (fn [acc {:keys [x y z]}] (assoc acc [x y] new-brick)) bottom-bricks new-cubes)
+              new-resting-on (assoc resting-on new-brick (set (for [p (keys matching-bottom)
+                                                                    :when (= max-bottom-height (get matching-bottom p))]
+                                                                (get bottom-bricks p))))]
           (recur (remove #{brick} floating)
-                 new-bottom
-                 bottom-bricks
-                 (conj settled new-brick)))))))
+                 new-bottom-surface
+                 new-bottom-bricks
+                 (conj settled new-brick)
+                 new-resting-on))))))
 
+(defn count-disintegratable-bricks [input]
+  (let [bricks (parse-input input)
+        {:keys [settled resting-on]} (settle-bricks bricks)
+        total (count resting-on)
+        single-supports (set (map second (filter (fn [[k v]]
+                                                   (and (= (count v) 1)
+                                                        (not= v #{:floor})))
+                                                 resting-on)))]
+    (- total (count single-supports))))
+
+;; (time (count-disintegratable-bricks small-input))
+;; "Elapsed time: 7.9574 msecs"
+;; 5
+
+;; (time (count-disintegratable-bricks large-input))
+;; "Elapsed time: 442.9719 msecs"
+;; 519
