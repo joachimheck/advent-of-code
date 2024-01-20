@@ -107,38 +107,39 @@
   (let [next-cube (cond (not= x1 x2) #(update % :x inc)
                         (not= y1 y2) #(update % :y inc)
                         (not= z1 z2) #(update % :z inc))
-        start-cube (first (sort-by #(+ (:x %) (:y %) (:z %)) brick))
+        start-cube (first (sort-by #(+ (:x %) (:y %) (:z %)) (take 2 brick)))
         length (inc (apply + (map #(int (Math/abs (- (% p1) (% p2)))) [:x :y :z])))]
     (take length (iterate next-cube start-cube))))
 
 (defn is-supported? [brick bricks]
   (or (some #{1} (map :z brick))
       (let [cubes (get-cubes (move-down brick))
-            min-z (apply min (map :z brick))
+            min-z (apply min (map :z (take 2 brick)))
             cubes-below (map #(update % :z dec) (filter #(= min-z (:z %)) cubes))
             all-cubes (mapcat get-cubes bricks)]
         (set/subset? (set cubes-below) (set all-cubes)))))
 
-(defn move-to [[p1 p2 :as brick] z]
-  [(assoc p1 :z z) (assoc p2 :z (+ z (- (:z p2) (:z p1))))])
+(defn move-to [[p1 p2 label :as brick] z]
+  (let [base-brick [(assoc p1 :z z) (assoc p2 :z (+ z (- (:z p2) (:z p1))))]]
+    (if label (conj base-brick label) base-brick)))
 
 (defn settle-bricks [bricks]
-  (let [x-max (apply max (map #(apply max (map :x %)) bricks))
-        y-max (apply max (map #(apply max (map :y %)) bricks))]
+  (let [x-max (apply max (map #(apply max (map :x (take 2 %))) bricks))
+        y-max (apply max (map #(apply max (map :y (take 2 %))) bricks))]
     (loop [floating bricks
            bottom-surface (into {} (for [x (range (inc x-max)) y (range (inc y-max))] [[x y] 0]))
            bottom-bricks (into {} (for [x (range (inc x-max)) y (range (inc y-max))] [[x y] :floor]))
            settled '()
            resting-on {}]
       (if (empty? floating)
-        {:settled settled :resting-on resting-on}
+        resting-on
         (let [brick (first floating)
-              min-z (apply min (map :z brick))
+              min-z (apply min (map :z (take 2 brick)))
               footprint (map (fn [cube] [(:x cube) (:y cube)]) (filter #(= min-z (:z %)) (get-cubes brick)))
               matching-bottom (select-keys bottom-surface footprint)
               max-bottom-height (apply max (vals matching-bottom))
               new-brick (move-to brick (inc max-bottom-height))
-              max-z (apply max (map :z new-brick))
+              max-z (apply max (map :z (take 2 new-brick)))
               new-cubes (get-cubes new-brick)
               new-bottom-surface (reduce (fn [acc {:keys [x y z]}] (assoc acc [x y] max-z)) bottom-surface new-cubes)
               new-bottom-bricks (reduce (fn [acc {:keys [x y z]}] (assoc acc [x y] new-brick)) bottom-bricks new-cubes)
@@ -153,12 +154,12 @@
 
 (defn count-disintegratable-bricks [input]
   (let [bricks (parse-input input)
-        {:keys [settled resting-on]} (settle-bricks bricks)
+        resting-on (settle-bricks bricks)
         total (count resting-on)
-        single-supports (set (map second (filter (fn [[k v]]
-                                                   (and (= (count v) 1)
-                                                        (not= v #{:floor})))
-                                                 resting-on)))]
+        single-supports (set (for [[brick supports] resting-on
+                                   :when (and (= (count supports) 1) (not= supports #{:floor}))]
+                               (first supports)))
+        ]
     (- total (count single-supports))))
 
 ;; (time (count-disintegratable-bricks small-input))
@@ -168,3 +169,70 @@
 ;; (time (count-disintegratable-bricks large-input))
 ;; "Elapsed time: 442.9719 msecs"
 ;; 519
+
+
+
+;; Part 2
+;; What is the sum of the numbers of bricks that would fall if each brick were disintegrated?
+(defn label-bricks [bricks]
+  (map (fn [brick]
+         (case brick
+           [{:x 1, :y 0, :z 1} {:x 1, :y 2, :z 1}] [{:x 1, :y 0, :z 1} {:x 1, :y 2, :z 1} \A]
+           [{:x 0, :y 0, :z 2} {:x 2, :y 0, :z 2}] [{:x 0, :y 0, :z 2} {:x 2, :y 0, :z 2} \B]
+           [{:x 0, :y 2, :z 3} {:x 2, :y 2, :z 3}] [{:x 0, :y 2, :z 3} {:x 2, :y 2, :z 3} \C]
+           [{:x 0, :y 0, :z 4} {:x 0, :y 2, :z 4}] [{:x 0, :y 0, :z 4} {:x 0, :y 2, :z 4} \D]
+           [{:x 2, :y 0, :z 5} {:x 2, :y 2, :z 5}] [{:x 2, :y 0, :z 5} {:x 2, :y 2, :z 5} \E]
+           [{:x 0, :y 1, :z 6} {:x 2, :y 1, :z 6}] [{:x 0, :y 1, :z 6} {:x 2, :y 1, :z 6} \F]
+           [{:x 1, :y 1, :z 8} {:x 1, :y 1, :z 9}] [{:x 1, :y 1, :z 8} {:x 1, :y 1, :z 9} \G]))
+       bricks))
+
+;; (defn compute-chain-reaction-fall-total [input]
+;;   (let [bricks (parse-input input)
+;;         bricks (if (= input small-input) (label-bricks bricks) bricks)
+;;         resting-on (settle-bricks bricks)
+;;         ;;brick (first (filter #(= \A (last %)) (keys resting-on)))
+;;         ]
+;;     (apply +
+;;            (for [brick (keys resting-on)]
+;;              (loop [open-set #{brick}
+;;                     fallen #{}]
+;;                ;; (println "open-set" open-set "fallen" fallen)
+;;                ;; do I need to conj fallen into open-set here? -------------------------------v
+;;                (if (empty? open-set)
+;;                  (dec (count fallen))
+;;                  (let [new-unsupported (set (map first (filter (fn [[b s]] (set/subset? s (apply conj fallen open-set))) resting-on)))]
+;;                    (recur new-unsupported (apply conj fallen open-set)))))))))
+
+;; 101588
+;; ---> ANSWER <---
+
+(defn compute-chain-reaction-fall-total [input]
+  (let [bricks (parse-input input)
+        bricks (if (= input small-input) (label-bricks bricks) bricks)
+        resting-on (settle-bricks bricks)]
+    (apply +
+           (for [
+                 brick (keys resting-on)
+                 ;; brick (filter #(= \A (last %)) (keys resting-on))
+                 ]
+             (loop [open-set #{brick}
+                    resting-on resting-on
+                    fallen #{}]
+               ;; (println "open-set" open-set)
+               ;; (println "resting-on" resting-on)
+               ;; (println "fallen" fallen)
+               (if (empty? open-set)
+                 (dec (count fallen))
+                 (let [new-resting (into {} (map (fn [[b s]] [b (set (remove open-set s))]) resting-on))
+                       new-fallen (apply conj fallen open-set)
+                       new-open-set (set (remove new-fallen (map first (filter #(empty? (second %)) new-resting))))
+                       ]
+                   (recur new-open-set new-resting new-fallen))))))))
+
+;; (time (compute-chain-reaction-fall-total small-input))
+;; "Elapsed time: 2.2963 msecs"
+;; 7
+
+;; (time (compute-chain-reaction-fall-total large-input))
+;; "Elapsed time: 58596.8089 msecs"
+;; 109531
