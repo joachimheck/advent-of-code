@@ -60,7 +60,10 @@
                        \v [[x (inc y)]]
                        \< [[(dec x) y]]
                        \^ [[x (dec y)]]
-                       \. [[(dec x) y] [x (dec y)] [(inc x) y] [x (inc y)]])
+                       \. [(if (some #{\<\.} (list (get grid [(dec x) y]))) [(dec x) y])
+                           (if (some #{\^\.} (list (get grid [x (dec y)]))) [x (dec y)])
+                           (if (some #{\>\.} (list (get grid [(inc x) y]))) [(inc x) y])
+                           (if (some #{\v\.} (list (get grid [x (inc y)]))) [x (inc y)])])
                      [[(dec x) y] [x (dec y)] [(inc x) y] [x (inc y)]])]
     (set
      (for [p unfiltered
@@ -84,14 +87,42 @@
   (let [{:keys [start end]} (find-endpoints pattern)]
     (loop [starts #{start}
            segments {}]
-      (println "find-segments" "starts" starts "segments" segments)
+      ;; (println "find-segments" "starts" starts "segments" segments)
       (if (empty? starts)
         segments
         (let [extendeds (mapcat #(extend % pattern) starts)
-              new-segments (into segments (group-by first extendeds))
-              new-starts (set (map last extendeds))
-              _ (println "extendeds" extendeds "new-segments" new-segments "new-starts" new-starts)]
+              formatteds (map (fn [p] {:start (first p) :end (last p) :length (dec (count p))}) extendeds)
+              grouped (map (fn [[p segs]] [p (into {} (map (fn [[p2 segs2]] [p2 (first segs2)]) (group-by :end segs)))]) (group-by :start formatteds))
+              new-segments (into segments grouped)
+              new-starts (remove (set (keys segments)) (set (map :end formatteds)))
+              ;;_ (println "extendeds" extendeds "new-segments" new-segments "new-starts" new-starts)
+              ]
           (recur new-starts new-segments))))))
+
+(defn find-paths-with-segments [{:keys [width height grid] :as pattern} start end]
+  (let [segments (find-segments pattern)
+        paths (loop [open-paths [[start]]
+                     paths []]
+                ;; (println "open-paths" open-paths "paths" paths)
+                (if (empty? open-paths)
+                  paths
+                  (let [current (first open-paths)
+                        current-segments (dissoc (get segments (last current)) current)
+                        ;; _ (println "current" current "current-segments" current-segments)
+                        ]
+                    (if (empty? current-segments)
+                      (recur (rest open-paths) paths)
+                      (let [extended (map #(conj current %) (keys current-segments))
+                            {finished true unfinished false} (group-by #(= end (last %)) extended)
+                            ;;_ (println "finished" finished "unfinished" unfinished)
+                            ]
+                        (recur (concat (rest open-paths) unfinished) (apply conj paths finished)))))))]
+    (->> paths
+         (map #(partition 2 1 %))
+         (map #(map (fn [[start end]] (get (get segments start) end)) %))
+         (map #(map :length %))
+         (map #(apply + %))
+         )))
 
 (defn find-paths [{:keys [width height grid]} start end]
   (loop [open-paths [[start]]
@@ -107,7 +138,7 @@
           (let [extended (map #(conj current %) moveable)
                 ;; _ (println "extensions" moveable "extended" extended)
                 {finished true unfinished false} (group-by #(= end (last %)) extended)]
-            (recur (vec (apply conj (rest open-paths) unfinished)) (vec (apply conj paths finished)))))))))
+            (recur (concat (rest open-paths) unfinished) (apply conj paths finished))))))))
 
 (defn longest-path-length [input]
   (let [pattern (parse-input input)
@@ -134,4 +165,10 @@
       (apply max (map dec (map count (find-paths pattern start end)))))))
 
 
-;; TODO: infinite loop in find-segments
+;; TODO: I'm missing two paths. I think I need to compute all segments by
+;; finding every intersection and all the segments from each one.
+
+;; (let [pattern (parse-input small-input)
+;;                       {:keys [start end]} (find-endpoints pattern)]
+;;                   (find-paths-with-segments pattern start end))
+;; (90 82 82 94)
