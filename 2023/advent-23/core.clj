@@ -73,57 +73,31 @@
 (defn extensions [path grid]
   (remove (set path) (move-to-able (last path) grid)))
 
-(defn extend [p {:keys [width height grid]}]
-  (loop [paths (map #(vector p %) (move-to-able p grid))
-         finished []]
-    (if (empty? paths)
-      finished
-      (let [path (first paths)
-            nexts (extensions path grid)]
-        (if (= 1 (count nexts)) (recur (vec (conj (rest paths) (apply conj path nexts))) finished)
-            (recur (rest paths) (conj finished path)))))))
+;; (defn extend [p {:keys [width height grid]}]
+;;   (loop [paths (map #(vector p %) (move-to-able p grid))
+;;          finished []]
+;;     (if (empty? paths)
+;;       finished
+;;       (let [path (first paths)
+;;             nexts (extensions path grid)]
+;;         (if (= 1 (count nexts)) (recur (vec (conj (rest paths) (apply conj path nexts))) finished)
+;;             (recur (rest paths) (conj finished path)))))))
 
-(defn find-segments [{:keys [width height grid] :as pattern}]
-  (let [{:keys [start end]} (find-endpoints pattern)]
-    (loop [starts #{start}
-           segments {}]
-      ;; (println "find-segments" "starts" starts "segments" segments)
-      (if (empty? starts)
-        segments
-        (let [extendeds (mapcat #(extend % pattern) starts)
-              formatteds (map (fn [p] {:start (first p) :end (last p) :length (dec (count p))}) extendeds)
-              grouped (map (fn [[p segs]] [p (into {} (map (fn [[p2 segs2]] [p2 (first segs2)]) (group-by :end segs)))]) (group-by :start formatteds))
-              new-segments (into segments grouped)
-              new-starts (remove (set (keys segments)) (set (map :end formatteds)))
-              ;;_ (println "extendeds" extendeds "new-segments" new-segments "new-starts" new-starts)
-              ]
-          (recur new-starts new-segments))))))
-
-(defn find-paths-with-segments [{:keys [width height grid] :as pattern} start end]
-  (let [segments (find-segments pattern)
-        paths (loop [open-paths [[start]]
-                     paths []]
-                ;; (println "open-paths" open-paths "paths" paths)
-                (if (empty? open-paths)
-                  paths
-                  (let [current (first open-paths)
-                        current-segments (dissoc (get segments (last current)) current)
-                        ;; _ (println "current" current "current-segments" current-segments)
-                        ]
-                    (if (empty? current-segments)
-                      (recur (rest open-paths) paths)
-                      (let [extended (map #(conj current %) (keys current-segments))
-                            {finished true unfinished false} (group-by #(= end (last %)) extended)
-                            ;;_ (println "finished" finished "unfinished" unfinished)
-                            ]
-                        (recur (concat (rest open-paths) unfinished) (apply conj paths finished)))))))]
-    (->> paths
-         (map #(partition 2 1 %))
-         (map #(map (fn [[start end]] (get (get segments start) end)) %))
-         (map #(map :length %))
-         (map #(apply + %))
-         )))
-
+;; (defn find-segments [{:keys [width height grid] :as pattern}]
+;;   (let [{:keys [start end]} (find-endpoints pattern)]
+;;     (loop [starts #{start}
+;;            segments {}]
+;;       ;; (println "find-segments" "starts" starts "segments" segments)
+;;       (if (empty? starts)
+;;         segments
+;;         (let [extendeds (mapcat #(extend % pattern) starts)
+;;               formatteds (map (fn [p] {:start (first p) :end (last p) :length (dec (count p))}) extendeds)
+;;               grouped (map (fn [[p segs]] [p (into {} (map (fn [[p2 segs2]] [p2 (first segs2)]) (group-by :end segs)))]) (group-by :start formatteds))
+;;               new-segments (into segments grouped)
+;;               new-starts (remove (set (keys segments)) (set (map :end formatteds)))
+;;               ;;_ (println "extendeds" extendeds "new-segments" new-segments "new-starts" new-starts)
+;;               ]
+;;           (recur new-starts new-segments))))))
 (defn find-paths [{:keys [width height grid]} start end]
   (loop [open-paths [[start]]
          paths []]
@@ -158,17 +132,199 @@
 
 ;; Part 2
 ;; Ignore slippery slopes.
-(defn longest-path-length-2 [input]
+
+(defn get-surrounding [[x y] grid]
+  (remove #{\#} [(get grid [(inc x) y]) (get grid [x (inc y)]) (get grid [(dec x) y]) (get grid [x (dec y)])]))
+
+(defn at-intersection? [p grid]
+  (let [at-p (get grid p)
+        surrounding (get-surrounding p grid)]
+    (and (= at-p \.)
+         (or (> (count surrounding) 2)
+             (some nil? surrounding)))))
+
+(defn find-intersections [{:keys [width height grid] :as pattern}]
+  (for [x (range width)
+        y (range height)
+        :when (at-intersection? [x y] grid)]
+    [x y]))
+
+(defn extend [p {:keys [width height grid]}]
+  (loop [paths (map #(vector p %) (move-to-able p grid))
+         finished []]
+    (if (empty? paths)
+      finished
+      (let [path (first paths)
+            nexts (extensions path grid)
+            surrounding (get-surrounding (last path) grid)]
+        (if (and (= 1 (count nexts)) (not (at-intersection? (last path) grid)))
+          (recur (vec (conj (rest paths) (apply conj path nexts))) finished)
+          (recur (rest paths) (conj finished path)))))))
+
+(defn find-segments [{:keys [width height grid] :as pattern}]
+  (let [{:keys [start end]} (find-endpoints pattern)
+        grouped (apply concat
+                       (for [intersection (find-intersections pattern)]
+                         (let [extendeds (extend intersection pattern)
+                               formatteds (map (fn [p] {:start (first p) :end (last p) :length (dec (count p))}) extendeds)
+                               grouped (map (fn [[p segs]]
+                                              [p (into {} (map (fn [[p2 segs2]]
+                                                                 [p2 (first segs2)]) (group-by :end segs)))]) (group-by :start formatteds))]
+                           grouped)))]
+    (into {} grouped)))
+
+(defn path-to-length [path segments]
+  (->> path
+       (partition 2 1)
+       (map (fn [[start end]] (get (get segments start) end)))
+       (map :length)
+       (apply +)))
+
+(defn find-paths-with-segments [{:keys [width height grid] :as pattern} start end max-paths]
+  (let [segments (find-segments pattern)]
+    (println "Found" (count segments) "segments.")
+    (loop [open-paths [[start]]
+           path-lengths []
+           path-segment-counts []]
+      ;; (println "open-paths" open-paths "path-lengths" path-lengths)
+      (if (or (>= (count path-lengths) max-paths) (empty? open-paths))
+        {:path-lengths path-lengths
+         :path-segment-counts path-segment-counts}
+        (let [current-path (first open-paths)
+              current-segments (apply dissoc (get segments (last current-path)) current-path)
+              ;; _ (println "current-path" current-path "current-segments" current-segments)
+              ]
+          (let [extended (map #(conj current-path %) (keys current-segments))
+                {finished true unfinished false} (group-by #(= end (last %)) extended)
+                ;;_ (println "finished" finished "unfinished" unfinished)
+                new-path-lengths (apply conj path-lengths (map #(path-to-length % segments) finished))
+                new-path-segment-counts (apply conj path-segment-counts (map count finished))
+                ;; _ (if (not= (count path-lengths) (count new-path-lengths)) (println "path-lengths" (sort new-path-lengths)))
+                ]
+            (recur (doall (concat (rest open-paths) unfinished)) new-path-lengths new-path-segment-counts)))))))
+
+(defn longest-path-length-2 [input max-paths]
   (binding [slippery false]
     (let [pattern (parse-input input)
-          {:keys [start end]} (find-endpoints pattern)]
-      (apply max (map dec (map count (find-paths pattern start end)))))))
+          {:keys [start end]} (find-endpoints pattern)
+          {:keys [path-lengths path-segment-counts]} (find-paths-with-segments pattern start end max-paths)]
+      ;; (println "found" (count path-lengths) "paths")
+      ;; (println "path-lengths" path-lengths)
+      {:path-count (count path-lengths)
+       :longest (apply max path-lengths)
+       :most-segments (apply max path-segment-counts)})))
 
 
-;; TODO: I'm missing two paths. I think I need to compute all segments by
-;; finding every intersection and all the segments from each one.
+;; 2034
+;; 2482
+;; 3218
+;; ---> answer <---
 
-;; (let [pattern (parse-input small-input)
-;;                       {:keys [start end]} (find-endpoints pattern)]
-;;                   (find-paths-with-segments pattern start end))
-;; (90 82 82 94)
+
+;; (time (longest-path-length-2 large-input 100))
+;; "Elapsed time: 2064.9518 msecs"
+;; 2034
+;; advent-23.core> (time (longest-path-length-2 large-input 500))
+;; "Elapsed time: 17056.2807 msecs"
+;; 2482
+;; advent-23.core> (time (longest-path-length-2 large-input 1000))
+;; "Elapsed time: 38162.203101 msecs"
+;; 2482
+;; advent-23.core> (time (longest-path-length-2 large-input 10000))
+;; "Elapsed time: 3480178.673201 msecs"
+;; 3218
+;; advent-23.core> 
+
+(defn find-segments-basic [{:keys [width height grid] :as pattern}]
+  (let [{:keys [start end]} (find-endpoints pattern)]
+    (->> pattern
+         (find-intersections)
+         (mapcat #(extend % pattern))
+         (mapcat (fn [p] [[[(first p) (last p)] (dec (count p))] [[(last p) (first p)] (dec (count p))]]))
+         ;; I use negative distances to find the _longest_ path with bellman-ford.
+         ;; (map (fn [[k v]] [k (- v)]))
+         (into {}))))
+
+(defn longest-path-bellman-ford [input]
+  (binding [slippery false]
+    (let [pattern (parse-input input)
+          {:keys [start end]} (find-endpoints pattern)
+          vertices (find-intersections pattern)
+          edges (find-segments-basic pattern)]
+      (loop [distances (assoc (into {} (map (fn [v] [v Integer/MAX_VALUE]) vertices)) start 0)
+             predecessors (into {} (map (fn [v] [v nil]) vertices))
+             i 0]
+        (if (= i (dec (count vertices)))
+          {:distances distances :predecessors predecessors}
+          (let [[new-distances new-predecessors]
+                (reduce (fn [[distances predecessors :as acc] [[start end] distance]]
+                          (if (< (+ (get distances start) distance) (get distances end))
+                            [(assoc distances end (+ (get distances start) distance))
+                             (assoc predecessors end start)]
+                            acc))
+                        [distances predecessors]
+                        edges)]
+            (recur new-distances new-predecessors (inc i))))))))
+
+(defn path-to-length-2 [path segment-map]
+  (->> path
+       (partition 2 1)
+       (map #(get segment-map %))
+       (apply +)))
+
+(defn find-paths-with-segments-2 [{:keys [width height grid] :as pattern} start end max-paths]
+  (let [segment-map (find-segments-basic pattern)
+        connections (into {} (map (fn [[k v]] [k (map second v)]) (group-by first (keys segment-map))))]
+    (println "Found" (count segment-map) "segments.")
+    (loop [open-paths [[start]]
+           path-lengths []
+           path-segment-counts []
+           longest-path nil]
+      ;; (println "open-paths" open-paths "path-lengths" path-lengths)
+      (if (or (>= (count path-lengths) max-paths) (empty? open-paths))
+        {:path-lengths path-lengths
+         :path-segment-counts path-segment-counts
+         :longest-path longest-path}
+        (let [current-path (first open-paths)
+              current-connections (get connections (last current-path))
+              nexts (remove (set current-path) current-connections)]
+          (let [extended (map #(conj current-path %) nexts)
+                {finished true unfinished false} (group-by #(= end (last %)) extended)
+                ;;_ (println "finished" finished "unfinished" unfinished)
+                new-path-lengths (apply conj path-lengths (map #(path-to-length-2 % segment-map) finished))
+                new-path-segment-counts (apply conj path-segment-counts (map count finished))
+                ;; _ (if (not= (count path-lengths) (count new-path-lengths)) (println "path-lengths" (sort new-path-lengths)))
+                paths-by-length (group-by #(path-to-length-2 % segment-map) (conj finished longest-path))
+                ;; _ (println "paths-by-length" paths-by-length "finished" finished "grouped" (group-by count paths-by-length))
+                new-longest-path (first (val (apply max-key key paths-by-length)))]
+            (recur (doall (concat (rest open-paths) unfinished))
+                   new-path-lengths
+                   new-path-segment-counts
+                   new-longest-path)))))))
+
+(defn longest-path-length-3 [input max-paths]
+  (binding [slippery true]
+    (println "Slippery:" slippery)
+    (let [pattern (parse-input input)
+          {:keys [start end]} (find-endpoints pattern)
+          {:keys [path-lengths path-segment-counts longest-path]} (find-paths-with-segments-2 pattern start end max-paths)]
+      ;; (println "found" (count path-lengths) "paths")
+      ;; (println "path-lengths" path-lengths)
+      {:path-count (count path-lengths)
+       :most-segments (apply max path-segment-counts)
+       :longest-length (apply max path-lengths)
+       :longest-path longest-path
+       })))
+
+
+;; (time (longest-path-length-3 large-input 500))
+;; Slippery: true
+;; Found 122 segments.
+;; "Elapsed time: 19311.1165 msecs"
+;; {:path-count 500,
+;;  :most-segments 15,
+;;  :longest-length 2482,
+;;  :longest-path [[1 0] [5 5] [17 41] [9 57] [5 89] [19 105] [37 137] [67 135] [65 99] [87 111] [85 137] [109 133] [133 125] [139 140]]}
+
+;; TODO: longest-path-length-3 gives the wrong answer for part 1. Draw the path to see if it makes any sense. It gives the same
+;; answer whether slippery is true or false. Then, is it faster than longest-path-length-2?
