@@ -54,6 +54,7 @@
 (def ^:dynamic slippery true)
 
 (defn move-to-able [[x y] grid]
+  ;; (println "move-to-able" [x y] (get grid [x y]))
   (let [unfiltered (if slippery
                      (case (get grid [x y])
                        \> [[(inc x) y]]
@@ -136,28 +137,45 @@
 (defn get-surrounding [[x y] grid]
   (remove #{\#} [(get grid [(inc x) y]) (get grid [x (inc y)]) (get grid [(dec x) y]) (get grid [x (dec y)])]))
 
-(defn at-intersection? [p grid]
+(defn ways-in-and-out [[x y :as p] grid]
   (let [at-p (get grid p)
-        surrounding (get-surrounding p grid)]
-    (and (= at-p \.)
-         (or (> (count surrounding) 2)
-             (some nil? surrounding)))))
+        surrounding [[(inc x) y] [x (inc y)] [(dec x) y] [x (dec y)]]
+        all-ways-in {[(inc x) y] \< [x (inc y)] \^ [(dec x) y] \> [x (dec y)] \v}
+        all-ways-out {[(inc x) y] \> [x (inc y)] \v [(dec x) y] \< [x (dec y)] \^}]
+    (reduce (fn [acc sp]
+              (let [at-sp (get grid sp)]
+                (if slippery
+                  (if (some #{at-sp} [\. (get all-ways-out sp) (get all-ways-in sp)]) (conj acc sp) acc)
+                  (if (not= at-sp \#) (conj acc sp) acc))))
+            []
+            surrounding)))
+
+;; (defn at-intersection? [p grid]
+;;   (let [at-p (get grid p)
+;;         surrounding (get-surrounding p grid)]
+;;     (and (= at-p \.)
+;;          (or (> (count surrounding) 2)
+;;              (some nil? surrounding)))))
+
+(defn at-intersection? [[x y :as p] {:keys [width height grid] :as pattern}]
+  (and (not= \# (get grid p))
+       (or (or (= x 0) (= x (dec width)) (= y 0) (= y (dec height)))
+           (> (count (ways-in-and-out p grid)) 2))))
 
 (defn find-intersections [{:keys [width height grid] :as pattern}]
   (for [x (range width)
         y (range height)
-        :when (at-intersection? [x y] grid)]
+        :when (at-intersection? [x y] pattern)]
     [x y]))
 
-(defn extend [p {:keys [width height grid]}]
+(defn extend [p {:keys [width height grid] :as pattern}]
   (loop [paths (map #(vector p %) (move-to-able p grid))
          finished []]
     (if (empty? paths)
       finished
       (let [path (first paths)
-            nexts (extensions path grid)
-            surrounding (get-surrounding (last path) grid)]
-        (if (and (= 1 (count nexts)) (not (at-intersection? (last path) grid)))
+            nexts (remove #{(get path (- (count path) 2))} (move-to-able (last path) grid))]
+        (if (and (= 1 (count nexts)) (not (at-intersection? (last path) pattern)))
           (recur (vec (conj (rest paths) (apply conj path nexts))) finished)
           (recur (rest paths) (conj finished path)))))))
 
@@ -235,12 +253,20 @@
 ;; 3218
 ;; advent-23.core> 
 
+(defn find-segment-points [{:keys [width height grid] :as pattern}]
+  (let [{:keys [start end]} (find-endpoints pattern)]
+    (->> pattern
+         (find-intersections)
+         (mapcat #(extend % pattern))
+         (map (fn [p] [[(first p) (last p)] p]))
+         (into {}))))
+
 (defn find-segments-basic [{:keys [width height grid] :as pattern}]
   (let [{:keys [start end]} (find-endpoints pattern)]
     (->> pattern
          (find-intersections)
          (mapcat #(extend % pattern))
-         (mapcat (fn [p] [[[(first p) (last p)] (dec (count p))] [[(last p) (first p)] (dec (count p))]]))
+         (map (fn [p] [[(first p) (last p)] (dec (count p))]))
          ;; I use negative distances to find the _longest_ path with bellman-ford.
          ;; (map (fn [[k v]] [k (- v)]))
          (into {}))))
@@ -280,42 +306,37 @@
            path-lengths []
            path-segment-counts []
            longest-path nil]
-      ;; (println "open-paths" open-paths "path-lengths" path-lengths)
       (if (or (>= (count path-lengths) max-paths) (empty? open-paths))
         {:path-lengths path-lengths
          :path-segment-counts path-segment-counts
          :longest-path longest-path}
         (let [current-path (first open-paths)
               current-connections (get connections (last current-path))
-              nexts (remove (set current-path) current-connections)]
-          (let [extended (map #(conj current-path %) nexts)
-                {finished true unfinished false} (group-by #(= end (last %)) extended)
-                ;;_ (println "finished" finished "unfinished" unfinished)
-                new-path-lengths (apply conj path-lengths (map #(path-to-length-2 % segment-map) finished))
-                new-path-segment-counts (apply conj path-segment-counts (map count finished))
-                ;; _ (if (not= (count path-lengths) (count new-path-lengths)) (println "path-lengths" (sort new-path-lengths)))
-                paths-by-length (group-by #(path-to-length-2 % segment-map) (conj finished longest-path))
-                ;; _ (println "paths-by-length" paths-by-length "finished" finished "grouped" (group-by count paths-by-length))
-                new-longest-path (first (val (apply max-key key paths-by-length)))]
-            (recur (doall (concat (rest open-paths) unfinished))
-                   new-path-lengths
-                   new-path-segment-counts
-                   new-longest-path)))))))
+              nexts (remove (set current-path) current-connections)
+              extended (map #(conj current-path %) nexts)
+              {finished true unfinished false} (group-by #(= end (last %)) extended)
+              new-path-lengths (apply conj path-lengths (map #(path-to-length-2 % segment-map) finished))
+              new-path-segment-counts (apply conj path-segment-counts (map count finished))
+              paths-by-length (group-by #(path-to-length-2 % segment-map) (conj finished longest-path))
+              new-longest-path (first (val (apply max-key key paths-by-length)))]
+          (recur (doall (concat (rest open-paths) unfinished))
+                 new-path-lengths
+                 new-path-segment-counts
+                 new-longest-path))))))
 
-(defn longest-path-length-3 [input max-paths]
-  (binding [slippery true]
+(defn longest-path-length-3 [input slippery-in max-paths]
+  (binding [slippery slippery-in]
     (println "Slippery:" slippery)
     (let [pattern (parse-input input)
           {:keys [start end]} (find-endpoints pattern)
           {:keys [path-lengths path-segment-counts longest-path]} (find-paths-with-segments-2 pattern start end max-paths)]
       ;; (println "found" (count path-lengths) "paths")
       ;; (println "path-lengths" path-lengths)
-      {:path-count (count path-lengths)
-       :most-segments (apply max path-segment-counts)
-       :longest-length (apply max path-lengths)
-       :longest-path longest-path
-       })))
-
+      ;; {:path-count (count path-lengths)
+      ;;  :most-segments (apply max (conj path-segment-counts 0))
+      ;;  :longest-length (apply max (conj path-lengths 0))
+      ;;  :longest-path longest-path}
+      (apply max (conj path-lengths 0)))))
 
 ;; (time (longest-path-length-3 large-input 500))
 ;; Slippery: true
@@ -328,3 +349,9 @@
 
 ;; TODO: longest-path-length-3 gives the wrong answer for part 1. Draw the path to see if it makes any sense. It gives the same
 ;; answer whether slippery is true or false. Then, is it faster than longest-path-length-2?
+
+(defn write-path-to-pattern [{:keys [width height grid] :as pattern} path]
+  (let [segment-map (find-segment-points pattern)
+        points (mapcat #(get segment-map %) (partition 2 1 path))]
+    (println "Path length" (count points))
+    (assoc pattern :grid (reduce (fn [acc p] (if (= \. (get acc p)) (assoc acc p \O) acc)) grid points))))
