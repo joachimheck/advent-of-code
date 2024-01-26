@@ -238,6 +238,9 @@
 ;; 3218
 ;; ---> answer <---
 
+;; other answers
+;; 5658
+;; 6194
 
 ;; (time (longest-path-length-2 large-input 100))
 ;; "Elapsed time: 2064.9518 msecs"
@@ -295,36 +298,64 @@
 (defn path-to-length-2 [path segment-map]
   (->> path
        (partition 2 1)
-       (map #(get segment-map %))
+       (map #(get segment-map (reverse %)))
        (apply +)))
+
+(def profile-times (atom {}))
+
+(defmacro profile [name exp]
+  `(let [start# (System/nanoTime)
+         result# ~exp
+         elapsed# (/ (double (- (System/nanoTime) start#)) 1000000.0)]
+     (swap! profile-times update ~name #(+ (or % 0) elapsed#))
+     result#))
 
 (defn find-paths-with-segments-2 [{:keys [width height grid] :as pattern} start end max-paths]
   (let [segment-map (find-segments-basic pattern)
         connections (into {} (map (fn [[k v]] [k (map second v)]) (group-by first (keys segment-map))))]
     (println "Found" (count segment-map) "segments.")
-    (loop [open-paths [[start]]
+    (loop [
+           ;; open-paths [[start]]
+           open-paths [(list start)]
            path-lengths []
-           path-segment-counts []
-           longest-path nil]
+           ;; path-segment-counts []
+           ;; longest-path nil
+           ]
       (if (or (>= (count path-lengths) max-paths) (empty? open-paths))
-        {:path-lengths path-lengths
-         :path-segment-counts path-segment-counts
-         :longest-path longest-path}
+        (do
+          (println "Remaining open paths:" (count open-paths))
+          {:path-lengths path-lengths
+           ;; :path-segment-counts path-segment-counts
+           ;; :longest-path longest-path
+           })
         (let [current-path (first open-paths)
-              current-connections (get connections (last current-path))
-              nexts (remove (set current-path) current-connections)
-              extended (map #(conj current-path %) nexts)
-              {finished true unfinished false} (group-by #(= end (last %)) extended)
-              new-path-lengths (apply conj path-lengths (map #(path-to-length-2 % segment-map) finished))
-              new-path-segment-counts (apply conj path-segment-counts (map count finished))
-              paths-by-length (group-by #(path-to-length-2 % segment-map) (conj finished longest-path))
-              new-longest-path (first (val (apply max-key key paths-by-length)))]
-          (recur (doall (concat (rest open-paths) unfinished))
+              current-connections (profile "find connections" (get connections (first current-path)))
+
+              ;; nexts (remove (set current-path) current-connections)
+              nexts (profile "find nexts"
+                             (for [connection current-connections
+                                   :when (not (some #{connection} current-path))]
+                               connection))
+
+              extended (profile "extend" (map #(conj current-path %) nexts))
+              {finished true unfinished false} (profile "group" (group-by #(= end (first %)) extended))
+              new-path-lengths (profile "find path lengths" (apply conj path-lengths (map #(path-to-length-2 % segment-map) finished)))
+              ;; new-path-segment-counts (apply conj path-segment-counts (map count finished))
+              ;; paths-by-length (group-by #(path-to-length-2 % segment-map) (conj finished longest-path))
+              ;; new-longest-path (first (val (apply max-key key paths-by-length)))
+              old-max (apply max (conj path-lengths 0))
+              new-max (apply max (conj new-path-lengths 0))
+              _ (if (> new-max old-max) (println "New max:" new-max))
+              ]
+          (recur (profile "new open paths" (doall (apply conj (rest open-paths) unfinished)))
                  new-path-lengths
-                 new-path-segment-counts
-                 new-longest-path))))))
+                 ;; new-path-segment-counts
+                 ;; new-longest-path
+                 ))))))
 
 (defn longest-path-length-3 [input slippery-in max-paths]
+  (reset! profile-times {})
+  (profile "test" (list 1 2 3))
   (binding [slippery slippery-in]
     (println "Slippery:" slippery)
     (let [pattern (parse-input input)
@@ -336,6 +367,7 @@
       ;;  :most-segments (apply max (conj path-segment-counts 0))
       ;;  :longest-length (apply max (conj path-lengths 0))
       ;;  :longest-path longest-path}
+      (println "finished finding paths.")
       (apply max (conj path-lengths 0)))))
 
 ;; (time (longest-path-length-3 large-input 500))
