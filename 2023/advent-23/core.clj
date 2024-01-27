@@ -318,8 +318,9 @@
            ;; open-paths [[start]]
            open-paths [(list start)]
            path-lengths []
+           ;; path-points #{}
            ;; path-segment-counts []
-           ;; longest-path nil
+           longest-path nil
            ]
       (if (or (>= (count path-lengths) max-paths) (empty? open-paths))
         (do
@@ -341,16 +342,27 @@
               {finished true unfinished false} (profile "group" (group-by #(= end (first %)) extended))
               new-path-lengths (profile "find path lengths" (apply conj path-lengths (map #(path-to-length-2 % segment-map) finished)))
               ;; new-path-segment-counts (apply conj path-segment-counts (map count finished))
-              ;; paths-by-length (group-by #(path-to-length-2 % segment-map) (conj finished longest-path))
-              ;; new-longest-path (first (val (apply max-key key paths-by-length)))
+              paths-by-length (group-by #(path-to-length-2 % segment-map) (conj finished longest-path))
+              new-longest-path (first (val (apply max-key key paths-by-length)))
               old-max (apply max (conj path-lengths 0))
               new-max (apply max (conj new-path-lengths 0))
-              _ (if (> new-max old-max) (println "New max:" new-max))
+
+              ;; new-path-points (if (> (count new-longest-path) (count longest-path))
+              ;;                   (if (or (empty? longest-path) (empty? new-longest-path))
+              ;;                     (set new-longest-path)
+              ;;                     (set/intersection longest-path (set new-longest-path))))
+              ;; _ (if (> (count new-longest-path) (count longest-path))
+              ;;     (println "new-longest-path" new-longest-path "longest-path" longest-path
+              ;;              "intersection" (set/intersection longest-path (set new-longest-path))))
+              _ (if (> new-max old-max)
+                  (println (str (new java.util.Date (System/currentTimeMillis))) "New max:" new-max
+                           "\n" (reverse new-longest-path)))
               ]
           (recur (profile "new open paths" (doall (apply conj (rest open-paths) unfinished)))
                  new-path-lengths
+                 ;; new-path-points
                  ;; new-path-segment-counts
-                 ;; new-longest-path
+                 new-longest-path
                  ))))))
 
 (defn longest-path-length-3 [input slippery-in max-paths]
@@ -368,7 +380,7 @@
       ;;  :longest-length (apply max (conj path-lengths 0))
       ;;  :longest-path longest-path}
       (println "finished finding paths.")
-      (apply max (conj path-lengths 0)))))
+      (list (apply max (conj path-lengths 0)) (str "Considered " (count path-lengths) " paths.")))))
 
 ;; (time (longest-path-length-3 large-input 500))
 ;; Slippery: true
