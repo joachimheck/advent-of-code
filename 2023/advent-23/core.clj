@@ -295,17 +295,27 @@
                         edges)]
             (recur new-distances new-predecessors (inc i))))))))
 
+;; (defn path-to-length-2 [path segment-map]
+;;   (->> path
+;;        (partition 2 1)
+;;        (map #(get segment-map (reverse %)))
+;;        (apply +)))
+
 (defn path-to-length-2 [path segment-map]
   (->> path
        (partition 2 1)
-       (map #(get segment-map (reverse %)))
-       (apply +)))
+       (reduce (fn [acc [end start]]
+                 (+ acc (get segment-map [start end])))
+               0)
+       ;; (map #(get segment-map (reverse %)))
+       ;; (apply +)
+       ))
 
 (def profile-times (atom {}))
 
 (defmacro profile [name exp]
   `(let [start# (System/nanoTime)
-         result# ~exp
+         result# (doall ~exp)
          elapsed# (/ (double (- (System/nanoTime) start#)) 1000000.0)]
      (swap! profile-times update ~name #(+ (or % 0) elapsed#))
      result#))
@@ -321,11 +331,13 @@
            ;; path-points #{}
            ;; path-segment-counts []
            longest-path nil
+           paths-tested '()
            ]
       (if (or (>= (count path-lengths) max-paths) (empty? open-paths))
         (do
           (println "Remaining open paths:" (count open-paths))
           {:path-lengths path-lengths
+           :paths-tested paths-tested
            ;; :path-segment-counts path-segment-counts
            ;; :longest-path longest-path
            })
@@ -339,10 +351,10 @@
                                connection))
 
               extended (profile "extend" (map #(conj current-path %) nexts))
-              {finished true unfinished false} (profile "group" (group-by #(= end (first %)) extended))
+              {finished true unfinished false} (profile "group extensions" (group-by #(= end (first %)) extended))
               new-path-lengths (profile "find path lengths" (apply conj path-lengths (map #(path-to-length-2 % segment-map) finished)))
               ;; new-path-segment-counts (apply conj path-segment-counts (map count finished))
-              paths-by-length (group-by #(path-to-length-2 % segment-map) (conj finished longest-path))
+              paths-by-length (profile "group by length" (group-by #(path-to-length-2 % segment-map) (conj finished longest-path)))
               new-longest-path (first (val (apply max-key key paths-by-length)))
               old-max (apply max (conj path-lengths 0))
               new-max (apply max (conj new-path-lengths 0))
@@ -354,33 +366,77 @@
               ;; _ (if (> (count new-longest-path) (count longest-path))
               ;;     (println "new-longest-path" new-longest-path "longest-path" longest-path
               ;;              "intersection" (set/intersection longest-path (set new-longest-path))))
-              _ (if (> new-max old-max)
-                  (println (str (new java.util.Date (System/currentTimeMillis))) "New max:" new-max
-                           "\n" (reverse new-longest-path)))
+              ;; _ (if (> new-max old-max)
+              ;;     (println (str (new java.util.Date (System/currentTimeMillis))) "New max:" new-max
+              ;;              "\n" (reverse new-longest-path)))
               ]
           (recur (profile "new open paths" (doall (apply conj (rest open-paths) unfinished)))
                  new-path-lengths
                  ;; new-path-points
                  ;; new-path-segment-counts
                  new-longest-path
+                 (conj paths-tested current-path)
                  ))))))
+
+(defn find-paths-with-segments-path-objects [{:keys [width height grid] :as pattern} start end max-paths]
+  (let [segment-map (find-segments-basic pattern)
+        connections (into {} (map (fn [[k v]] [k (map second v)]) (group-by first (keys segment-map))))]
+    (println "Found" (count segment-map) "segments.")
+    (profile "total"
+             (loop [open-path-objects [{:path (list start) :length 0}]
+                    ;; path-lengths []
+                    paths-found 0
+                    longest-path {:path [] :length 0}]
+               (if (or (>= paths-found max-paths) (empty? open-path-objects))
+                 (do
+                   (println "Remaining open paths:" (count open-path-objects))
+                   {
+                    ;; :path-lengths path-lengths
+                    :paths-found paths-found
+                    :longest-path longest-path})
+                 (let [current-path-object (first open-path-objects)
+                       current-path (:path current-path-object)
+                       current-path-length (:length current-path-object)
+                       path-end (first current-path) ; path is a list, so reversed.
+                       current-connections (profile "find connections" (get connections path-end))
+                       nexts (profile "find nexts"
+                                      (for [connection current-connections
+                                            :when (not (some #{connection} current-path))]
+                                        connection))
+
+                       extended (profile "extend" (map (fn [n]
+                                                         (-> current-path-object
+                                                             (update :path #(conj % n))
+                                                             (update :length #(+ % (get segment-map [path-end n])))))
+                                                       nexts))
+                       ;; {finished true unfinished false} (profile "group extensions" (group-by #(= end (first (:path %))) extended))
+                       finished (profile "find finished" (filter #(= end (first (:path %))) extended))
+                       unfinished (profile "find unfinished" (filter #(not= end (first (:path %))) extended))
+                       ;; new-path-lengths (profile "find path lengths" (apply conj path-lengths (map :length finished)))
+                       paths-by-length (profile "group by length" (group-by :length (if finished (conj finished longest-path) (list longest-path))))
+                       new-longest-path (profile "new longest path" (first (val (apply max-key key paths-by-length))))]
+                   (recur (profile "new open paths" (doall (apply conj (rest open-path-objects) unfinished)))
+                          ;; new-path-lengths
+                          (+ paths-found (count finished))
+                          new-longest-path)))))))
 
 (defn longest-path-length-3 [input slippery-in max-paths]
   (reset! profile-times {})
-  (profile "test" (list 1 2 3))
   (binding [slippery slippery-in]
     (println "Slippery:" slippery)
     (let [pattern (parse-input input)
-          {:keys [start end]} (find-endpoints pattern)
-          {:keys [path-lengths path-segment-counts longest-path]} (find-paths-with-segments-2 pattern start end max-paths)]
+          {:keys [start end]} (profile "find endpoints" (find-endpoints pattern))
+          {:keys [paths-found longest-path]}
+          (find-paths-with-segments-path-objects pattern start end max-paths)]
       ;; (println "found" (count path-lengths) "paths")
       ;; (println "path-lengths" path-lengths)
       ;; {:path-count (count path-lengths)
       ;;  :most-segments (apply max (conj path-segment-counts 0))
       ;;  :longest-length (apply max (conj path-lengths 0))
       ;;  :longest-path longest-path}
-      (println "finished finding paths.")
-      (list (apply max (conj path-lengths 0)) (str "Considered " (count path-lengths) " paths.")))))
+      (println "Finished finding paths.")
+      ;; (println "Tested" (count paths-tested) "paths," (count (distinct paths-tested)) "distinct.")
+      (list "longest:" (:length longest-path) (str "Considered " paths-found " paths.")))))
 
 ;; (time (longest-path-length-3 large-input 500))
 ;; Slippery: true
@@ -399,3 +455,28 @@
         points (mapcat #(get segment-map %) (partition 2 1 path))]
     (println "Path length" (count points))
     (assoc pattern :grid (reduce (fn [acc p] (if (= \. (get acc p)) (assoc acc p \O) acc)) grid points))))
+
+
+;; (let [result (time (longest-path-length-3 large-input false 1000000))
+;;                       sorted-times (sort-by val @profile-times)]
+;;                   (println "Unaccounted time:" (- (get @profile-times "total")
+;;                                                   (apply + (map val (remove #(some #{"total"} (list (first %))) @profile-times)))))
+;;                   [sorted-times result])
+;; Slippery: false
+;; Found 120 segments.
+;; Remaining open paths: 17
+;; Finished finding paths.
+;; "Elapsed time: 279167.7498 msecs"
+;; Unaccounted time: 60454.40529511927
+;; [(["find endpoints" 0.1243]
+;;   ["find unfinished" 10199.969600792283]
+;;   ["find connections" 10222.89180138973]
+;;   ["find finished" 13547.349498507134]
+;;   ["new longest path" 17833.47340177084]
+;;   ["group by length" 18339.71770028351]
+;;   ["new open paths" 24227.83690087563]
+;;   ["extend" 28383.278197172614]
+;;   ["find nexts" 95602.78310408902]
+;;   ["total" 278811.8298])
+;;  ("longest:" 6302 "Considered 1000000 paths.")]
+;; advent-23.core>
