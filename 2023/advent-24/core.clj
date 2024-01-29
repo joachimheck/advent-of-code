@@ -85,3 +85,85 @@
 ;; (time (count-intersections large-input 200000000000000 400000000000000))
 ;; "Elapsed time: 758.8846 msecs"
 ;; 11098
+
+
+
+;; Part 2
+;; Throw a rock that will hit every hailstone.
+
+;; At time t, stone {:x x0 :y y0 :z z0 :vx vx :vy vy :vz vz} will be at position
+;; [(+ x0 (* t vx)) (+ y0 (* t vy)) (+ z0 (* t vz))]
+
+
+(defn find-intersection-3 [stone1 stone2]
+  (let [slope1 (/ (:vy stone1) (:vx stone1))
+        slope2 (/ (:vy stone2) (:vx stone2))]
+    (if (not= slope1 slope2)
+      (let [x (/ (+ (- (:y stone2) (:y stone1)) (- (* (:x stone1) slope1) (* (:x stone2) slope2)))
+                 (- slope1 slope2))
+            y (+ (:y stone1) (* (- x (:x stone1)) slope1))]
+        [x y]))))
+
+;;  {:x 19, :y 13, :z 30, :vx -2, :vy 1, :vz -2}
+;;  {:x 18, :y 19, :z 22, :vx -1, :vy -1, :vz -2}
+;;  {:x 20, :y 25, :z 34, :vx -2, :vy -2, :vz -4}
+;;  {:x 12, :y 31, :z 28, :vx -1, :vy -2, :vz -1}
+;;  {:x 20, :y 19, :z 15, :vx 1, :vy -5, :vz -3}
+
+;; -2t + t -2t = 62
+;; 19 + -2t
+
+;; y = mx + b
+;; y = (-1/2)x + 22.5
+
+;; x = 19 + -2t
+;; y = 13 + t
+;; z = 30 -2t
+
+;; x - 19 = -2t
+;; y - 13 = t
+;; z - 30 = -2t
+
+;; 19/2 - x/2 = t
+;; y - 13 = t
+;; 15 - z/2 = t
+
+;; 19/2 - x/2 = y - 13
+;; 45/2 - x/2 - y = 0
+
+;; 45/2 - x/2 - y = 15 - z/2
+;; 45/2 - 30/2 - x/2 - y + z/2 = 0
+;; 15/2 - x/2 - y + z/2 = 0
+;; 15 - x - 2y + z = 0
+;; - x - 2y + z = - 15
+
+
+;; {:x 19, :y 13, :vx -2, :vy 1}
+;; {:x 18, :y 19, :vx -1, :vy -1}
+
+;; x = (+ 19 (* -2 t)) = (+ 18 (* -1 s))
+;; y = (+ 13 (* 1 t)) = (+ 19 (* -1 s))
+
+;; (+ 19 (* -2 t)) = (+ 18 (* -1 s))
+;; (* -2 t) = (+ 18 (* -1 s) -19)
+;; (* -2 t) = (+ -1 (* -1 s))
+;; (- (* 2 t)) = (- (+ s 1))
+;; (* 2 t) = (+ s 1)
+;; t = (/ (+ s 1) 2)
+
+;; (+ 13 t) = (+ 19 (- s))
+;; t = (+ 19 (- s) -13)
+;; t = (+ 6 (- s))
+
+;; (/ (+ s 1) 2) = (+ 6 (- s))
+;; (+ s 1) = (+ 12 (* -2 s))
+;; (* 3 s) = 11
+;; s = (/ 11 3)
+
+;; x(s) = (+ 18 - (/ 11 3)) = (/ (- 54 11) 3) = (/ 43 3) =~ 14.333
+;; y(s) = (+ 19 (* -1 (/ 11 3))) = (- (/ 57 3) (/ 11 3)) = (/ 46 3) =~ 15.333
+
+;; OK, I was able to manually take the parameterized equations for the two lines,
+;; solve for t in terms of s, then set x(s) = x(t) and solve for s, then backfill
+;; to get the intersection point. Next I need to write code to do this, and then
+;; it needs to be expanded to three (four?) dimensions to solve the problem.
