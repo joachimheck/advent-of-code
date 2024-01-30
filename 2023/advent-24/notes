@@ -1,0 +1,57 @@
+In 4d spacetime, the example lines look like this:
+A {:x 19, :y 13, :z 30, :t 0 :vx -2, :vy 1, :vz -2 :vt 1}
+B {:x 18, :y 19, :z 22, :t 0 :vx -1, :vy -1, :vz -2 :vt 1}
+C {:x 20, :y 25, :z 34, :t 0 :vx -2, :vy -2, :vz -4 :vt 1}
+D {:x 12, :y 31, :z 28, :t 0 :vx -1, :vy -2, :vz -1 :vt 1}
+E {:x 20, :y 19, :z 15, :t 0 :vx 1, :vy -5, :vz -3 :vt 1}
+
+So we have the following equations:
+
+Ax(a) = -2a + 19
+Ay(a) = 1a + 13
+Az(a) = -2a + 30
+At(a) = 1a + 0
+
+Bx(b) = -1b + 18
+By(b) = -1b + 19
+Bz(b) = -2b + 22
+Bt(b) = 1b + 0
+
+Cx(c) = -2c + 20
+Cy(c) = -2c + 25
+Cz(c) = -4c + 34
+Ct(c) = 1c + 0
+
+Dx(d) = -1d + 12
+Dy(d) = -2d + 31
+Dz(d) = -1d + 28
+Dt(d) = 1d + 0
+
+Ex(e) = 1e + 20
+Ey(e) = -5e + 19
+Ez(e) = -3e + 15
+Et(e) = 1e + 0
+
+Lx(l) = l1l + l2
+Ly(l) = l3l + l4
+Lz(l) = l5l + l6
+Lt(l) = l7l + l8
+
+
+Ax(a) = -2a + 19
+Ay(a) = 1a + 13
+Az(a) = -2a + 30
+At(a) = 1a + 0
+
+x = -2a + 19
+x - 19 = -2a
+19 - x = 2a
+a = (19 - x) / 2
+
+y = 1a + 13
+y = ((19 - x) / 2) + 13
+
+z = -2a + 30
+z = x - 19 + 30
+
+(19, 13, 30)

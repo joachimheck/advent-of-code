@@ -167,3 +167,12 @@
 ;; solve for t in terms of s, then set x(s) = x(t) and solve for s, then backfill
 ;; to get the intersection point. Next I need to write code to do this, and then
 ;; it needs to be expanded to three (four?) dimensions to solve the problem.
+
+
+;; (let [parsed (parse-input small-input)
+;;                       with-t (map #(assoc % :t 0 :vt 1) parsed)
+;;                       inputs (map list [\A \B \C \D \E] [\a \b \c \d \e] with-t)
+;;                       format-eq (fn [[line-name param coefficients]]
+;;                                   (for [[axis v axis-name] [[:x :vx "x"] [:y :vy "y"] [:z :vz "z"] [:t :vt "t"]]]
+;;                                     (format "%s%s(%s) = %d%s + %d" line-name axis-name param (get coefficients v) param (get coefficients axis))))]
+;;                   (mapcat format-eq inputs))
