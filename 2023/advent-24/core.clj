@@ -176,3 +176,93 @@
 ;;                                   (for [[axis v axis-name] [[:x :vx "x"] [:y :vy "y"] [:z :vz "z"] [:t :vt "t"]]]
 ;;                                     (format "%s%s(%s) = %d%s + %d" line-name axis-name param (get coefficients v) param (get coefficients axis))))]
 ;;                   (mapcat format-eq inputs))
+
+(defn vector-add [v1 v2]
+  (mapv + v1 v2))
+
+(defn vector-multiply [v s]
+  (mapv #(* s %) v))
+
+(defn gaussian-eliminate [matrix]
+  (loop [matrix matrix
+         r 0]
+    (if (= r (count matrix))
+      matrix
+      (let [row (get matrix r)
+            at-pivot (get row r)
+            row-with-pivot (vector-multiply row (/ 1 at-pivot))
+            new-matrix (vec (for [fr (range (count matrix))
+                                  :let [f-row (get matrix fr)
+                                        at-col (get f-row r)]]
+                              (if (= fr r)
+                                row-with-pivot
+                                (vector-add f-row (vector-multiply row-with-pivot (- at-col))))))]
+        (recur new-matrix (inc r))))))
+
+(deftest test-gaussian-eliminate
+  (is (= [[1 0 7] [0 1 4]] (gaussian-eliminate [[3 -3 9] [2 -3 2]])))
+  (is (= [[1 0 0 -17] [0 1 0 -3] [0 0 1 2]] (gaussian-eliminate [[2 -8 6 2] [-3 16 -5 -7] [-3 15 -9 -12]]))))
+
+;; A {:x 19, :y 13, :z 30, :t 0 :vx -2, :vy 1, :vz -2 :vt 1}
+;; B {:x 18, :y 19, :z 22, :t 0 :vx -1, :vy -1, :vz -2 :vt 1}
+;; C {:x 20, :y 25, :z 34, :t 0 :vx -2, :vy -2, :vz -4 :vt 1}
+;; D {:x 12, :y 31, :z 28, :t 0 :vx -1, :vy -2, :vz -1 :vt 1}
+;; E {:x 20, :y 19, :z 15, :t 0 :vx 1, :vy -5, :vz -3 :vt 1}
+
+;; How to compute the intersection of lines A and B, ignoring the z component (from part 1)?
+
+;; Ax = -2t + 19
+;; Ay =  1t + 13
+;; Az = -2t + 30
+;; Bx = -1t + 18
+;; By = -1t + 19
+;; Bz = -2t + 22
+;; Lx =  lt +  i
+;; Ly =  mt +  j
+;; Lz =  nt +  k
+
+;; 16 variables: ax ay az bx by bz lx ly lz t l m n i j k, 9 equations - too many variables!
+
+(defn create-matrix [params]
+  (let [var-count (+ (* 3 (count params)) 2)]
+    (reduce (fn [acc [i {:keys [x y z vx vy vz]}]]
+              (-> acc
+                  (assoc-in [(+ 0 (* i 3)) (+ 0 (* i 3))] 1)
+                  (assoc-in [(+ 0 (* i 3)) (- var-count 2)] (- vx))
+                  (assoc-in [(+ 0 (* i 3)) (dec var-count)] x)
+                  (assoc-in [(+ 1 (* i 3)) (+ 1 (* i 3))] 1)
+                  (assoc-in [(+ 1 (* i 3)) (- var-count 2)] (- vy))
+                  (assoc-in [(+ 1 (* i 3)) (dec var-count)] y)
+                  (assoc-in [(+ 2 (* i 3)) (+ 2 (* i 3))] 1)
+                  (assoc-in [(+ 2 (* i 3)) (- var-count 2)] (- vz))
+                  (assoc-in [(+ 2 (* i 3)) (dec var-count)] z)))
+            (vec (repeat (* 3 (count params)) (vec (repeat var-count 0))))
+            (map-indexed list params))))
+
+;; Ax = -2p + 19
+;; Ay =  1p + 13
+;; Az = -2p + 30
+;; At = p
+;; Bx = -1p + 18
+;; By = -1p + 19
+;; Bz = -2p + 22
+;; Bt = p
+(defn create-matrix-2 [params]
+  (let [var-count (+ (* 4 (count params)) 2)]
+    (reduce (fn [acc [i {:keys [x y z vx vy vz]}]]
+              (-> acc
+                  (assoc-in [(+ 0 (* i 4)) (+ 0 (* i 4))] 1)
+                  (assoc-in [(+ 0 (* i 4)) (- var-count 2)] (- vx))
+                  (assoc-in [(+ 0 (* i 4)) (dec var-count)] x)
+                  (assoc-in [(+ 1 (* i 4)) (+ 1 (* i 4))] 1)
+                  (assoc-in [(+ 1 (* i 4)) (- var-count 2)] (- vy))
+                  (assoc-in [(+ 1 (* i 4)) (dec var-count)] y)
+                  (assoc-in [(+ 2 (* i 4)) (+ 2 (* i 4))] 1)
+                  (assoc-in [(+ 2 (* i 4)) (- var-count 2)] (- vz))
+                  (assoc-in [(+ 2 (* i 4)) (dec var-count)] z)
+                  (assoc-in [(+ 3 (* i 4)) (+ 3 (* i 4))] 1)
+                  (assoc-in [(+ 3 (* i 4)) (- var-count 2)] -1)
+                  (assoc-in [(+ 3 (* i 4)) (dec var-count)] 0)))
+            (vec (repeat (* 4 (count params)) (vec (repeat var-count 0))))
+            (map-indexed list params))))
+

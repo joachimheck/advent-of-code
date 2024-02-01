@@ -55,3 +55,244 @@ z = -2a + 30
 z = x - 19 + 30
 
 (19, 13, 30)
+
+
+;; simplest example
+y = 3x + 2
+x = (y - 2) / 3
+y = 2x + 3
+y = 2(y - 2) / 3 + 3
+y = (2y - 4) / 3 + 3
+3y = 2y - 4 + 9
+y = 5
+x = (5 - 2) / 3 = 3/3 = 1
+
+;; parametric example
+x1 = p
+y1 = 3p + 2
+x2 = q
+y2 = 2q + 3
+
+x1 - p = 0
+y1 - 3p = 2
+x2 - q = 0
+y2 - 2q = 3
+
+unknowns: x1 y1 x2 y2 p q
+
+1*x1 + 0*y1 + 0*x2 + 0*y2 + -1*p +  0*q = 0
+0*x1 + 1*y1 + 0*x2 + 0*y2 + -3*p +  0*q = 2
+0*x1 + 0*y1 + 1*x2 + 0*y2 +  0*p + -1*q = 0
+0*x1 + 0*y1 + 0*x2 + 1*y2 +  0*p + -2*q = 3
+
+| 1  0  0  0 -1  0  0|
+| 0  1  0  0 -3  0  2|
+| 0  0  1  0  0 -1  0|
+| 0  0  0  1  0 -2  3|
+
+
+A {:x 19, :y 13, :z 30, :t 0 :vx -2, :vy 1, :vz -2 :vt 1}
+B {:x 18, :y 19, :z 22, :t 0 :vx -1, :vy -1, :vz -2 :vt 1}
+C {:x 20, :y 25, :z 34, :t 0 :vx -2, :vy -2, :vz -4 :vt 1}
+D {:x 12, :y 31, :z 28, :t 0 :vx -1, :vy -2, :vz -1 :vt 1}
+E {:x 20, :y 19, :z 15, :t 0 :vx 1, :vy -5, :vz -3 :vt 1}
+
+Ax = -2t + 19
+Ay =  1t + 13
+Bx = -1t + 18
+By = -1t + 19
+Cx = -2t + 20
+Cy = -2t + 25
+Lx =  lt +  i
+Ly =  mt +  j
+
+(Lx, Ly) = (Ax, Ay)
+-2t + 19 = lt + i
+-2t -lt = i - 19
+lt = 2t + i - 19
+l = 2 + i/t - 19/t
+t (-2 - l) = i - 19
+t = (i - 19) / (-2 - l)
+
+t + 13 = mt + j
+mt = t + 13 - j
+m = 1 + 13/t - j/t
+t - mt = j - 13
+t(1 - m) = j - 13
+t = (j - 13) / (1 - m)
+
+m = 1 + 13/((i - 19) / (-2 - l)) - j/((i - 19) / (-2 - l)) -> m = 1, correct
+l = 2 + i/((j - 13) / (1 - m)) - 19/((j - 13) / (1 - m)) -> divide by zero
+
+i = 24, j = 13, l = -3, m = 1
+
+;; Find all the intersection points. Do we have enough equations to solve?
+A {:x 19, :y 13, :z 30 :vx -2, :vy  1, :vz -2}
+B {:x 18, :y 19, :z 22 :vx -1, :vy -1, :vz -2}
+C {:x 20, :y 25, :z 34 :vx -2, :vy -2, :vz -4}
+D {:x 12, :y 31, :z 28 :vx -1, :vy -2, :vz -1}
+E {:x 20, :y 19, :z 15 :vx  1, :vy -5, :vz -3}
+
+Ax = -2t + 19
+Ay =  1t + 13
+Az = -2t + 30
+Bx = -1t + 18
+By = -1t + 19
+Bz = -2t + 22
+Cx = -2t + 20
+Cy = -2t + 25
+Cz = -4t + 34
+Dx = -1t + 12
+Dy = -2t + 31
+Dz = -1t + 28
+Ex =  1t + 20
+Ey = -5t + 19
+Ez = -3t + 15
+Lx = lt + i
+Ly = mt + j
+Lz = nt + k
+
+Lx(Ta) = Ax(Ta) => -2Ta + 19 = lTa + i => Ta(-2 - l) - i = - 19 => Ta = (i - 19)/(-2 - l)
+Ly(Ta) = Ay(Ta) =>   Ta + 13 = mTa + j => Ta(1 - m) = j - 13 => Ta = (j - 13)/(1 - m)
+Lz(Ta) = Az(Ta) => -2Ta + 30 = nTa + k => Ta(-2 - n) = k - 30 => Ta = (k - 30)/(-2 - n)
+Lx(Tb) = Bx(Tb) =>  -Tb + 18 = lTb + i
+Ly(Tb) = By(Tb) =>  -Tb + 19 = mTb + j
+Lz(Tb) = Bz(Tb) => -2Tb + 22 = nTb + k
+Lx(Tc) = Cx(Tc) => -2Tc + 20 = lTc + i
+Ly(Tc) = Cy(Tc) => -2Tc + 25 = mTc + j
+Lz(Tc) = Cz(Tc) => -4Tc + 34 = nTc + k
+Lx(Td) = Dx(Td) => -1Td + 12 = lTd + i
+Ly(Td) = Dy(Td) => -2Td + 31 = mTd + j
+Lz(Td) = Dz(Td) => -1Td + 28 = nTd + k
+
+12 equations, 10 variables (Ta, Tb, Tc, Td l, m, n, i, j, k)
+However, lmn are multiplying the time variables, so they can't be separated.
+
+Insight: all the points ABCDE are on L, so the distance between them is a multple of l, m, and n.
+Bx(Tb) = Ax(Ta) + l(Tb - Ta) => lTb - lTa + Ax(Ta) - Bx(Tb) = 0
+Ax(Ta) = -2Ta + 19
+Bx(Tb) = -Tb + 18
+lTb - lTa + (-2Ta + 19) - (-Tb + 18) = 0
+lTb - lTa - 2Ta + 19 + Tb - 18 = 0
+lTb - lTa - 2Ta + Tb = - 1
+lTb + Tb = -1 + lTa + 2Ta
+(l + 1)Tb = (l + 2)Ta - 1
+Tb = ((l + 2)Ta - 1) / (l + 1)
+
+Cx(Tc) = Ax(Ta) + l(Tc - Ta)
+Ax(Ta) = -2Ta + 19
+Cx(Tc) = -2Tc + 20
+-2Tc + 20 = -2Ta + 19 + l(Tc - Ta)
+-2Tc = -2Ta + 19 - 20 + lTc - lTa
+-2Tc - lTc = -2Ta - lTa - 1
+(-2 - l)Tc = (-2 - l)Ta - 1
+(l + 2)Tc = (l + 2)Ta + 1
+Tc = ((l + 2)Ta + 1) / (l + 2)
+
+
+-2Ta + 19 = lTa + i
+2Ta + lTa + i = 19
+(l + 2)Ta + i = 19
+
+-Tb + 18 = lTb + i
+Tb + lTb + i = 18
+(l + 1)Tb + i = 18
+
+-2Tc + 20 = lTc + i
+2Tc + lTc + i = 20
+(l + 2)Tc + i = 20
+
+
+(l + 2)Ta + i = 19                           
+(l + 1)Tb + i = 18 => (l + 2)Ta - 1 + i = 18 => (l + 2)Ta + i = 19
+(l + 2)Tc + i = 20 => (l + 2)Ta + 1 + i = 20 => (l + 2)Ta + i = 19
+
+
+
+Lx(Ta) = Ax(Ta) => -2Ta + 19 = lTa + i
+Ly(Ta) = Ay(Ta) =>   Ta + 13 = mTa + j
+Lz(Ta) = Az(Ta) => -2Ta + 30 = nTa + k
+Lx(Tb) = Bx(Tb) =>  -Tb + 18 = lTb + i
+Ly(Tb) = By(Tb) =>  -Tb + 19 = mTb + j
+Lz(Tb) = Bz(Tb) => -2Tb + 22 = nTb + k
+Lx(Tc) = Cx(Tc) => -2Tc + 20 = lTc + i
+Ly(Tc) = Cy(Tc) => -2Tc + 25 = mTc + j
+Lz(Tc) = Cz(Tc) => -4Tc + 34 = nTc + k
+Lx(Td) = Dx(Td) => -1Td + 12 = lTd + i
+Ly(Td) = Dy(Td) => -2Td + 31 = mTd + j
+Lz(Td) = Dz(Td) => -1Td + 28 = nTd + k
+
+-2Ta + 19 = lTa + i => lTa + 2Ta = 19 - i => (l + 2)Ta = 19 - i
+  Ta + 13 = mTa + j => mTa - 1Ta = 13 - j => (m - 1)Ta = 13 - j
+-2Ta + 30 = nTa + k => nTa + 2Ta = 30 - k => (n + 2)Ta = 30 - k
+ -Tb + 18 = lTb + i => lTb + 1Tb = 18 - i => (l + 1)Tb = 18 - i
+ -Tb + 19 = mTb + j => mTb + 1Tb = 19 - j => (m + 1)Tb = 19 - j
+-2Tb + 22 = nTb + k => nTb + 2Tb = 22 - k => (n + 2)Tb = 22 - k
+-2Tc + 20 = lTc + i => lTc + 2Tc = 20 - i => (l + 2)Tc = 20 - i
+-2Tc + 25 = mTc + j => mTc + 2Tc = 25 - j => (m + 2)Tc = 25 - j
+-4Tc + 34 = nTc + k => nTc + 4Tc = 34 - k => (n + 4)Tc = 34 - k
+-1Td + 12 = lTd + i => lTd + 1Td = 12 - i => (l + 1)Td = 12 - i
+-2Td + 31 = mTd + j => mTd + 2Td = 31 - j => (m + 2)Td = 31 - j
+-1Td + 28 = nTd + k => nTd + 1Td = 28 - k => (n + 1)Td = 28 - k
+
+-2Ta + 19 = lTa + i => lTa + 2Ta = 19 - i => (l + 2)Ta = 19 - i
+-1Tb + 18 = lTb + i => lTb + 1Tb = 18 - i => (l + 1)Tb = 18 - i
+-2Tc + 20 = lTc + i => lTc + 2Tc = 20 - i => (l + 2)Tc = 20 - i
+
+Bx(Tb) = Ax(Ta) + l(Tb - Ta) => lTb - lTa + Ax(Ta) - Bx(Tb) = 0
+lTb - lTa + -2Ta + 19 + Tb - 18 = 0
+-lTa - 2Ta + lTb + Tb + 1 = 0
+lTa + 2Ta - lTb - Tb -1 = 0
+(l + 2)Ta - (l + 1)Tb = 1
+
+Cx(Tc) = Ax(Ta) + l(Tc - Ta) => l(Tc - Ta) + Ax(Ta) - Cx(Tc) = 0
+lTc - lTa + -2Ta + 19 + 2Tc - 20 = 0
+-lTc + lTa + 2Ta - 19 - 2Tc + 20 = 0
+(l + 2)Ta + -(l + 2)Tc = -1
+
+    Ta      Tb       Tc
+|(l + 2)    0        0    (19 - i)|
+|(l + 2) (-l - 1)    0    1       |
+|(l + 2)    0    (-l - 2) -1      |
+
+|   1       0        0    (19 - i)/(l + 2)|
+|(l + 2) (-l - 1)    0    1       |
+|(l + 2)    0    (-l - 2) -1      |
+
+|   1       0        0    (19 - i)/(l + 2)|
+|   0    (-l - 1)    0     1 - (19 - i)   |
+|   0       0    (-l - 2) -1 - (19 - i)   |
+
+|   1       0        0    (19 - i)/(l + 2)|
+|   0       1        0     (1 - (19 - i)) / (-l - 1) |
+|   0       0        1    (-1 - (19 - i)) / (-l - 2) |
+
+Test by substituting in l and i (actual values: Ta = 5, Ax(Ta) = 19, l = -3, i = 24)
+
+Ta = (19 - i) / (l + 2) = -5 / -1 = 5, correct
+Tb = (1 - (19 - i)) / (-l - 1) = (1 - -5) / 2 = 6/2 = 3, correct
+Tc = (-1 - (19 - i)) / (-l - 2) = (-1 + 5) / 1 = 4, correct
+
+So I have all the intercept times in terms of l, m, n, i, j, and k - six variables. What are the equations?
+
+(l + 2)Ta + i = 19
+(l + 1)Tb + i = 18
+(l + 2)Tc + i = 20
+(m - 1)Ta + j = 13
+(m + 1)Tb + j = 19
+(m + 2)Tc + j = 25
+(n + 2)Ta + k = 30
+(n + 2)Tb + k = 22
+(n + 4)Tc + k = 34
+
+   Ta      Tb      Tc   i j k
+(l + 2)    0       0    1 0 0 | 19
+   0    (l + 1)    0    1 0 0 | 18
+   0       0    (l + 2) 1 0 0 | 20
+(m - 1)    0       0    0 1 0 | 13
+   0    (m + 1)    0    0 1 0 | 19
+   0       0    (m + 2) 0 1 0 | 25
+(n + 2)    0       0    0 0 1 | 30
+   0    (n + 2)    0    0 0 1 | 22
+   0       0    (n + 4) 0 0 1 | 34
+   
