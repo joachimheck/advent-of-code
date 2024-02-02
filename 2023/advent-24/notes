@@ -295,4 +295,125 @@ So I have all the intercept times in terms of l, m, n, i, j, and k - six variabl
 (n + 2)    0       0    0 0 1 | 30
    0    (n + 2)    0    0 0 1 | 22
    0       0    (n + 4) 0 0 1 | 34
-   
+
+
+The problem isn't that I have (l + 2) or whatever, it's that I have lTa.
+Can I treat that as a variable and solve from there?
+
+
+Lx(Ta) = Ax(Ta) => -2Ta + 19 = lTa + i
+Lx(Tb) = Bx(Tb) =>  -Tb + 18 = lTb + i
+Lx(Tc) = Cx(Tc) => -2Tc + 20 = lTc + i
+
+Bx(Tb) = Ax(Ta) + l(Tb - Ta)
+Bx(Tb) = -2Ta + 19 + lTb - lTa
+-Tb + 18 = -2Ta + 19 + lTb - lTa
+-1Tb + 2Ta - lTb + lTa = 19 - 18
+lTa + 2Ta - lTb - 1Tb = 1
+(l + 2)Ta + (-l - 1)Tb = 1
+(l + 2)Ta + -(l + 1)Tb + 0Tc = 1
+
+Cx(Tc) = Ax(Ta) + l(Tc - Ta)
+Cx(Tc) = -2
+Ta + 19 + lTc - lTa
+-2Tc + 20 = -2Ta + 19 + lTc - lTa
+-2Tc + 2Ta - lTc + lTa = 19 - 20
+(l + 2)Ta + 0Tb + (-l - 2)Tc = -1
+(l + 2)Ta + 0Tb + -(l + 2)Tc = -1
+
+   Ta      Tb      Tc   i
+(l + 2)    0       0    1 | 19
+   0    (l + 1)    0    1 | 18
+   0       0    (l + 2) 1 | 20
+(l + 2) -(l + 1)   0    0 |  1
+(l + 2)    0   -(l + 2) 0 | -1
+
+
+Just try plugging some numbers into my gaussian eliminator. If I plug all five
+example parameter sets AND the solution into a matrix, it's diagonalizable.
+Can I compute the missing row?
+
+Solution: [24 13 10 -3 1 2]
+
+
+ [19 13 30 -2  1 -2]
+ [18 19 22 -1 -1 -2]
+ [20 25 34 -2 -2 -4]
+ [12 31 28 -1 -2 -1]
+ [20 19 15  1 -5 -3]
+ [ a  b  c  d  e  f]
+
+x1 = -2t1 + 19
+x2 = -1t2 + 18
+x3 = -2t3 + 20
+
+x2 = x1 + l(t2 - t1) + i
+
+x1 = -2t + 19
+x2 = -t + 18
+x2 - x1 = -t + 18 + 2t - 19 = t - 1
+x2 = x1 + t - 1
+
+x1(0) = 19
+x1(1) = 17
+x1(2) = 15
+
+x2(0) = 18 + 0
+x2(1) = 18 + -1t = 18 + -1 = 17
+x2(2) = 18 + -1t = 18 + -2 = 16
+
+x2(0) = x1(0) + 0 - 1 = 19 + 0 - 1 = 18
+x2(1) = x1(1) + 1 - 1 = 17 + 1 - 1 = 17
+x2(2) = x1(2) + 2 - 1 = 15 + 2 - 1 = 16
+
+x3 - x1 = -2t + 20 + 2t - 19 = 1
+x3 = x1 + 1
+
+x1 = -2t + 19
+x2 = x1 + t - 1
+x3 = x1 + 1
+
+At T1, x = x1(T1) = -2T1 + 19
+At T2, x = x2(T2) = -T2 + 18
+
+1x + 2t = 19
+1x + 1t = 18
+
+
+Ax(t) = -2t + 19
+Bx(t) = Ax(t) + t - 1
+Cx(t) = Ax(t) + 1
+
+At time 5, we meet stone A:
+Ax(5) = -2*5 + 19 = 9
+
+At time 3, we meet stone B:
+Bx(3) = -1*3 + 18 = 15
+
+At time 4, we meet stone C:
+CX(4) = -2*4 + 20 = 12
+
+l = (Bx(3) - Ax(5)) / (3 - 5) = (15 - 9) / (3 - 5) = 6 / -2 = -3
+That's true but we need the times 3 and 5 to calculate it.
+l = (Bx(Tb) - Ax(Ta)) / (Tb - Ta)
+l = (Cx(Tc) - Ax(Ta)) / (Tc - Ta)
+
+Bx(t) = Ax(t) + t - 1
+Cx(t) = Ax(t) + 1
+
+l = (Ax(Tb) + Tb - 1 - Ax(Ta)) / (Tb - Ta) = (-2Tb + 19 + Tb - 1 + 2Ta - 19) / (Tb - Ta)
+l = (2Ta - Tb - 1) / (Tb - Ta)
+l = (Ax(Tc) + 1 - Ax(Ta)) / (Tc - Ta) = (-2Tc + 19 + 1 + 2Ta - 19) / (Tc - Ta)
+l = (2Ta - 2Tc + 1) / (Tc - Ta)
+
+(2Ta - Tb - 1) / (Tb - Ta) = (2Ta - 2Tc + 1) / (Tc - Ta)
+(2Ta - Tb - 1) (Tc - Ta) = (2Ta - 2Tc + 1) (Tb - Ta)
+
+2TaTc - TbTc - Tc -2TaTa + TbTa + Ta = 2TaTb - 2TcTb + Tb + 2TaTa + 2TcTa - Ta
+2TaTc - TbTc - Tc -2TaTa + TaTb + Ta = 2TaTb - 2TbTc + Tb + 2TaTa + 2TaTc - Ta
+2TaTc - TbTc - Tc -2TaTa + TaTb + 2Ta = 2TaTb - 2TbTc + Tb + 2TaTa + 2TaTc
+
+TbTc - Tc - 4TaTa - TaTb + 2Ta - Tb = 0
+
+TODO: It doesn't look like this gives me l like I was hoping, or Ta/Tb/Tc - does it?
+TODO: Maybe reduce the other two dimensions this way and solve all the time equations?

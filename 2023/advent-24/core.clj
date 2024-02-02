@@ -178,10 +178,14 @@
 ;;                   (mapcat format-eq inputs))
 
 (defn vector-add [v1 v2]
-  (mapv + v1 v2))
+  (mapv + v1 v2)
+  ;; (mapv int (map + v1 v2))
+  )
 
 (defn vector-multiply [v s]
-  (mapv #(* s %) v))
+  (mapv #(* s %) v)
+  ;; (mapv int (map #(* s %) v))
+  )
 
 (defn gaussian-eliminate [matrix]
   (loop [matrix matrix
