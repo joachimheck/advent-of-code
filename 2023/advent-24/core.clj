@@ -270,3 +270,72 @@
             (vec (repeat (* 4 (count params)) (vec (repeat var-count 0))))
             (map-indexed list params))))
 
+
+;; I finally tried a different tack, brute forcing the solution.
+;; I'll check every tuple [a b c t1 t2 t3] of three lines and three times with equal intervals
+;; between them. If the three points are all on the line, I've found the solution. This works
+;; for the example input but will be extremely slow for the real input. Or maybe I'll get lucky.
+(defn compute-result [input]
+  (let [data (parse-input input)
+        pairs (pairs data)
+        max-t 10]
+    (first
+     (for [[a b] pairs
+           t1 (range max-t)
+           t2 (range (inc t1) max-t)
+           :let [[ax ay az :as pa] [(+ (:x a) (* t1 (:vx a)))
+                                    (+ (:y a) (* t1 (:vy a)))
+                                    (+ (:z a) (* t1 (:vz a)))]
+                 [bx by bz :as pb] [(+ (:x b) (* t2 (:vx b)))
+                                    (+ (:y b) (* t2 (:vy b)))
+                                    (+ (:z b) (* t2 (:vz b)))]
+                 t3 (+ t2 (- t2 t1))]
+           c data
+           :when (and (not= c a) (not= c b))
+           :let [[cx cy cz :as pc] [(+ (:x c) (* t3 (:vx c)))
+                                    (+ (:y c) (* t3 (:vy c)))
+                                    (+ (:z c) (* t3 (:vz c)))]
+                 l1 (- bx ax)
+                 l2 (- cx bx)
+                 m1 (- by ay)
+                 m2 (- cy by)
+                 n1 (- bz az)
+                 n2 (- cz bz)]
+           :when (and (= l1 l2) (= m1 m2) (= n1 n2))]
+       (let [x (- ax (* (/ (- bx ax) (- t2 t1)) t1))
+             y (- ay (* (/ (- by ay) (- t2 t1)) t1))
+             z (- az (* (/ (- bz az) (- t2 t1)) t1))]
+        [:x x :y y :z z :vx l1 :vy m1 :vz n1
+         ;;:pa pa :t1 t1 :pb pb :t2 t2
+         :sum (+ x y z)])))))
+
+(defn compute-result-2 [input max-t]
+  (let [data (parse-input input)
+        [a b c] (take 3 data)]
+    (first
+     (for [t1 (range 1 (- max-t 2))
+           t2 (range (inc t1) (dec max-t))
+           t3 (range (inc t2) max-t)
+           :let [[ax ay az :as pa] [(+ (:x a) (* t1 (:vx a)))
+                                    (+ (:y a) (* t1 (:vy a)))
+                                    (+ (:z a) (* t1 (:vz a)))]
+                 [bx by bz :as pb] [(+ (:x b) (* t2 (:vx b)))
+                                    (+ (:y b) (* t2 (:vy b)))
+                                    (+ (:z b) (* t2 (:vz b)))]
+                 [cx cy cz :as pc] [(+ (:x c) (* t3 (:vx c)))
+                                    (+ (:y c) (* t3 (:vy c)))
+                                    (+ (:z c) (* t3 (:vz c)))]
+                 l1 (/ (- bx ax) (- t2 t1))
+                 m1 (/ (- by ay) (- t2 t1))
+                 n1 (/ (- bz az) (- t2 t1))]
+           ;; :when (and (int? l1) (int? m1) (int? n1))
+           :let [l2 (/ (- cx bx) (- t3 t2))
+                 m2 (/ (- cy by) (- t3 t2))
+                 n2 (/ (- cz bz) (- t3 t2))]
+           :when (and (= l1 l2) (= m1 m2) (= n1 n2))]
+       (let [x (- ax (* l1 t1))
+             y (- ay (* m1 t1))
+             z (- az (* n1 t1))]
+        [:x x :y y :z z :vx l1 :vy m1 :vz n1
+         ;;:pa pa :t1 t1 :pb pb :t2 t2
+         :sum (+ x y z)])))))
