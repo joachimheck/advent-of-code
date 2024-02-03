@@ -339,3 +339,29 @@
         [:x x :y y :z z :vx l1 :vy m1 :vz n1
          ;;:pa pa :t1 t1 :pb pb :t2 t2
          :sum (+ x y z)])))))
+
+(defn format-equations [input var-set]
+  (let [data (parse-input input)
+        [{ax :x ay :y az :z avx :vx avy :vy avz :vz}
+         {bx :x by :y bz :z bvx :vx bvy :vy bvz :vz}
+         {cx :x cy :y cz :z cvx :vx cvy :vy cvz :vz}] (take 3 data)
+        vs [["Ta" "Tb" "Tc"] ["t" "u" "v"]]
+        v (fn [i] (get-in vs [var-set i]))]
+    [(format "ax %d ay %d az %d" ax ay az)
+     (format "bx %d by %d bz %d" bx by bz)
+     (format "cx %d cy %d cz %d" cx cy cz)
+     (format "(%d%s + %d%s + bx - ax) (%s - %s) = (%d%s + %d%s + cx - bx) (%s - %s)"
+             bvx (v 1) (- avx) (v 0) (v 2) (v 1)
+             cvx (v 2) (- bvx) (v 1) (v 1) (v 0))
+     (format "(%d%s + %d%s + by - ay) (%s - %s) = (%d%s + %d%s + cy - by) (%s - %s)"
+             bvy (v 1) (- avy) (v 0) (v 2) (v 1)
+             cvy (v 2) (- bvy) (v 1) (v 1) (v 0))
+     (format "(%d%s + %d%s + bz - az) (%s - %s) = (%d%s + %d%s + cz - bz) (%s - %s)"
+             bvz (v 1) (- avz) (v 0) (v 2) (v 1)
+             cvz (v 2) (- bvz) (v 1) (v 1) (v 0))
+     (format "%d%s%s + %d%s%s + bx*%s - ax*%s + %d%s%s + %d%s%s - bx*%s + ax*%s)"
+             bvx (v 1) (v 2) (- avx) (v 0) (v 2) (v 2) (v 2)
+             (- bvx) (v 1) (v 1) avx (v 0) (v 1) (v 1) (v 1)
+
+)
+]))

@@ -208,7 +208,6 @@ Tb + lTb + i = 18
 (l + 2)Tc + i = 20 => (l + 2)Ta + 1 + i = 20 => (l + 2)Ta + i = 19
 
 
-
 Lx(Ta) = Ax(Ta) => -2Ta + 19 = lTa + i
 Ly(Ta) = Ay(Ta) =>   Ta + 13 = mTa + j
 Lz(Ta) = Az(Ta) => -2Ta + 30 = nTa + k
@@ -417,3 +416,114 @@ TbTc - Tc - 4TaTa - TaTb + 2Ta - Tb = 0
 
 TODO: It doesn't look like this gives me l like I was hoping, or Ta/Tb/Tc - does it?
 TODO: Maybe reduce the other two dimensions this way and solve all the time equations?
+
+
+My new code picks three points and then works through all possible Ta/Tb/Tc until it
+finds a triplet on the same slope. Can I find those times mathematically?
+
+Ax(t) = -2t + 19
+Bx(t) = Ax(t) + t - 1 = -t + 18
+Cx(t) = Ax(t) + 1     = -2t + 20
+Ta = 5, Tb = 3, Tc = 4
+
+(Bx - Ax) / (Tb - Ta) = (Cx - Bx) / (Tc - Tb)
+(-Tb + 18 - (-2Ta + 19)) / (Tb - Ta) = (-2Tc + 20 - (-Tb + 18)) / (Tc - Tb)
+(18 - Tb + 2Ta - 19) / (Tb - Ta) = (20 - 2Tc + Tb - 18) / (Tc - Tb)
+(2Ta - Tb - 1) / (Tb - Ta) = (Tb - 2Tc + 2) / (Tc - Tb)
+(2Ta - Tb - 1)(Tc - Tb) = (Tb - 2Tc + 2)(Tb - Ta)
+2TaTc - TbTc - Tc -2TaTb + TbTb + Tb = TbTb - 2TbTc + 2Tb - TaTb + 2TaTc - 2Ta
+2TaTc - TbTc - Tc -2TaTb + Tb = -2TbTc + 2Tb - TaTb + 2TaTc - 2Ta
+2TaTc - TbTc - Tc -2TaTb = -2TbTc + Tb - TaTb + 2TaTc - 2Ta
+-TbTc - Tc -2TaTb = -2TbTc + Tb - TaTb - 2Ta
+-Tc -2TaTb = -TbTc + Tb - TaTb - 2Ta
+-Tc -TaTb = -TbTc + Tb - 2Ta
+-Tc -TaTb + TbTc - Tb + 2Ta = 0
+
+Ay(Ta) = Ta + 13
+By(Tb) = -Tb + 19
+Cy(Tc) = -2Tc + 25
+
+(By - Ay) / (Tb - Ta) = (Cy - By) / (Tc - Tb)
+(-Tb + 19 - (Ta + 13)) / (Tb - Ta) = (-2Tc + 25 - (-Tb + 19)) / (Tc - Tb)
+(19 - Tb - Ta - 13) (Tc - Tb) = (25 - 2Tc + Tb - 19) (Tb - Ta)
+(-Ta - Tb + 6) (Tc - Tb) = (Tb - 2Tc + 6) (Tb - Ta)
+-TaTc - TbTc + 6Tc + TaTb + TbTb - 6Tb = TbTb - 2TbTc + 6Tb - TaTb + 2TaTc - 6Ta
+-3TaTc + TbTc + 2TaTb + 6Ta - 12Tb + 6Tc = 0
+
+Az(Ta) = -2Ta + 30
+Bz(Tb) = -2Tb + 22
+Cz(Tc) = -4Tc + 34
+
+(Bz - Az) / (Tb - Ta) = (Cz - Bz) / (Tc - Tb)
+(-2Tb + 22 - (-2Ta + 30)) / (Tb - Ta) = (-4Tc + 34 - (-2Tb + 22)) / (Tc - Tb)
+(22 - 2Tb + 2Ta - 30) (Tc - Tb) = (34 - 4Tc + 2Tb - 22) (Tb - Ta)
+(2Ta - 2Tb - 8) (Tc - Tb) = (2Tb - 4Tc + 12) (Tb - Ta)
+2TaTc - 2TbTc - 8Tc - 2TaTb + 2TbTb + 8Tb = 2TbTb - 4TbTc + 12Tb - 2TaTb + 4TaTc - 12Ta
+-2TaTc + 2TbTc + 12Ta - 4Tb - 8Tc = 0
+
+
+Now I have three equations in three variables Ta, Tb, and Tc, BUT they multiply each other.
+-Tc - TaTb + TbTc - Tb + 2Ta = 0
+-3TaTc + TbTc + 2TaTb + 6Ta - 12Tb + 6Tc = 0
+-2TaTc + 2TbTc + 12Ta - 4Tb - 8Tc = 0
+
+AKA
+-xy + yz + 2x - y - z = 0
+2xy - 3xz + yz + 6x - 12y + 6z = 0
+-2xz + 2yz + 12x - 4y - 8z = 0
+
+
+The left sides of these equations are all equal.
+-Tc - TaTb + TbTc - Tb + 2Ta = -3TaTc + TbTc + 2TaTb + 6Ta - 12Tb + 6Tc
+-7Tc - TaTb + TbTc - Tb + 2Ta = -3TaTc + TbTc + 2TaTb + 6Ta - 12Tb
+-7Tc - 3TaTb + TbTc - Tb + 2Ta = -3TaTc + TbTc + 6Ta - 12Tb
+-7Tc - 3TaTb - Tb + 2Ta = -3TaTc + 6Ta - 12Tb
+-7Tc - 3TaTb + 11Tb + 2Ta = -3TaTc + 6Ta
+-7Tc - 3TaTb + 11Tb - 4Ta = -3TaTc
+-7Tc - 3TaTb + 3TaTc + 11Tb - 4Ta = 0
+-3TaTb + 3TaTc - 4Ta + 11Tb - 7Tc = 0
+
+-3TaTb + 3TaTc - 4Ta + 11Tb - 7Tc = -2TaTc + 2TbTc + 12Ta - 4Tb - 8Tc
+-3TaTb + 5TaTc - 2TbTc - 4Ta + 11Tb - 7Tc = 12Ta - 4Tb - 8Tc
+-3TaTb + 5TaTc - 2TbTc - 16Ta + 15Tb + Tc = 0
+
+-3TaTb + 5TaTc - 2TbTc - 16Ta + 15Tb + Tc = 0
+
+Find Ta in terms of Tb and Tc:
+-3TaTb + 5TaTc - 16Ta = 2TbTc - 15Tb - Tc
+Ta(-3Tb + 5Tc - 16) = 2TbTc - 15Tb - Tc
+Ta = (2TbTc - 15Tb - Tc) / (-3Tb + 5Tc - 16)
+
+Find Tb in terms of Ta and Tc:
+-3TaTb + 5TaTc - 2TbTc - 16Ta + 15Tb + Tc = 0
+-3TaTb - 2TbTc + 15Tb = -5TaTc + 16Ta - Tc
+Tb(-3Ta - 2Tc + 15) =  -5TaTc + 16Ta - Tc
+Tb = (-5TaTc + 16Ta - Tc) / (-3Ta - 2Tc + 15)
+
+Find Tc in terms of Ta and Tb:
+-3TaTb + 5TaTc - 2TbTc - 16Ta + 15Tb + Tc = 0
+5TaTc - 2TbTc + Tc = 3TaTb + 16Ta - 15Tb
+Tc(5Ta - 2Tb + 1) = 3TaTb + 16Ta - 15Tb
+Tc = (3TaTb + 16Ta - 15Tb) / (5Ta - 2Tb + 1)
+
+
+Try to remove Tc from the first equation:
+-Tc -TaTb + TbTc - Tb + 2Ta = 0
+Tc = (3TaTb + 16Ta - 15Tb) / (5Ta - 2Tb + 1)
+-(3TaTb + 16Ta - 15Tb) / (5Ta - 2Tb + 1) - TaTb + Tb(3TaTb + 16Ta - 15Tb) / (5Ta - 2Tb + 1) - Tb + 2Ta = 0
+-(3TaTb + 16Ta - 15Tb) - TaTb(5Ta - 2Tb + 1) + Tb(3TaTb + 16Ta - 15Tb) - Tb(5Ta - 2Tb + 1) + 2Ta(5Ta - 2Tb + 1) = 0
+-3TaTb - 16Ta + 15Tb - 5TaTaTb + 2TaTbTb - TaTb + 3TaTbTb + 16TaTb - 15TbTb - 5TaTb + 2TbTb - Tb + 10TaTa - 4TaTb + 2Ta = 0
+-5TaTaTb + 10TaTa + 2TaTbTb + 3TaTbTb - 15TbTb - 3TaTb + 16TaTb - 5TaTb - TaTb - 4TaTb + 2TbTb - 16Ta + 15Tb - Tb + 2Ta = 0
+-5TaTaTb + 10TaTa + 5TaTbTb - 17TbTb + 3TaTb - 14Ta + 14Tb = 0
+
+Solve for Tb in terms of Ta:
+-5TaTaTb + 10TaTa + 5TaTbTb - 17TbTb + 3TaTb - 14Ta + 14Tb = 0
+-5TaTa*Tb + 10TaTa + 5Ta*TbTb - 17*TbTb + 3Ta*Tb - 14Ta + 14*Tb = 0
+5Ta*TbTb - 17*TbTb + 3Ta*Tb - 5TaTa*Tb + 14*Tb + 10TaTa - 14Ta = 0
+(5Ta - 17)TbTb (-5TaTa + 3Ta + 14)Tb + 10TaTa - 14Ta = 0
+
+
+If I plug these three equations into Wolfram alpha, I get the right answers. Try it with large input data?
+-xy + yz + 2x - y - z = 0
+2xy - 3xz + yz + 6x - 12y + 6z = 0
+-2xz + 2yz + 12x - 4y - 8z = 0
