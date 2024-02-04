@@ -527,3 +527,51 @@ If I plug these three equations into Wolfram alpha, I get the right answers. Try
 -xy + yz + 2x - y - z = 0
 2xy - 3xz + yz + 6x - 12y + 6z = 0
 -2xz + 2yz + 12x - 4y - 8z = 0
+
+
+
+Or, can I solve them myself?
+1: -xy + yz + 2x - y - z = 0
+yz - z = xy - 2x + y
+z(y - 1) = xy - 2x + y
+z = (xy - 2x + y) / (y - 1)
+
+2: 2xy - 3xz + yz + 6x - 12y + 6z = 0
+2xy - 3x((xy - 2x + y) / (y - 1)) + y((xy - 2x + y) / (y - 1)) + 6x - 12y + 6((xy - 2x + y) / (y - 1)) = 0
+(2xy)(y - 1) - 3x(xy - 2x + y) + y(xy - 2x + y) + 6x(y - 1) - 12y(y - 1) + 6(xy - 2x + y) = 0
+2xyy - 2xy - 3xxy + 6xx - 3y + xyy -2xy + yy + 6xy - 6x - 12yy + 12y + 6xy - 12x + 6y = 0
+-3xxy + 3xyy + 6xx + 8xy - 11yy - 18x + 15y = 0
+-3yxx + 6xx + 3yyx + 8yx - 18x - 11yy + 15y = 0
+(-3y + 6)xx + (3yy + 8y - 18)x - 11yy + 15y = 0
+quadratic equation?
+
+
+avx = -2t ax = 19
+avy =   t ay = 13
+avz = -2t az = 30
+bvx =  -t bx = 18
+bvy =  -t by = 19
+bvz = -2t bz = 22
+cvx = -2t cx = 20
+cvy = -2t cy = 25
+cvz = -4t cz = 34
+
+Bx(t) = Ax(t) + (bx - ax) + t(bvx - avx)
+Cx(t) = Cx(t) + (Cx - ax) + t(cvx - avx)
+
+(Bx - Ax) / (Tb - Ta) = (Cx - Bx) / (Tc - Tb)
+(Bx - Ax) (Tc - Tb) = (Cx - Bx) (Tb - Ta)
+((bvx*Tb + bx) - (avx*Ta + ax)) (Tc - Tb) = ((cvx*Tc + cx) - (bvx*Tb + bx)) (Tb - Ta)
+(bvx*Tb + bx - avx*Ta - ax) (Tc - Tb) = (cvx*Tc + cx - bvx*Tb - bx) (Tb - Ta)
+(bvx*Tb*Tc + bx*Tc - avx*Ta*Tc - ax*Tc) - (bvx*Tb*Tb + bx*Tb - avx*Ta*Tb - ax*Tb) = (cvx*Tc*Tb + cx*Tb - bvx*Tb*Tb - bx*Tb) - (cvx*Tc*Ta + cx*Ta - bvx*Tb*Ta - bx*Ta)
+bvx*Tb*Tc + bx*Tc - avx*Ta*Tc - ax*Tc + -bvx*Tb*Tb + -bx*Tb + avx*Ta*Tb + ax*Tb -cvx*Tc*Tb - cx*Tb + bvx*Tb*Tb + bx*Tb + cvx*Tc*Ta + cx*Ta - bvx*Tb*Ta - bx*Ta = 0
++ avx*Ta*Tb - bvx*Ta*Tb - avx*Ta*Tc + cvx*Tc*Ta + -bvx*Tb*Tb + bvx*Tb*Tb + bvx*Tb*Tc - cvx*Tc*Tb + cx*Ta - bx*Ta + -bx*Tb  + ax*Tb - cx*Tb + bx*Tb + bx*Tc - ax*Tc = 0
+
+(avx - bvx)TaTb + (cvx - avx)TaTc + (bvx - cvx)TbTc + (cx - bx)Ta + (ax - cx)Tb + (bx - ax)Tc = 0
+
+(By - Ay) / (Tb - Ta) = (Cy - By) / (Tc - Tb)
+(Bz - Az) / (Tb - Ta) = (Cz - Bz) / (Tc - Tb)
+
+(avx - bvx)TaTb + (cvx - avx)TaTc + (bvx - cvx)TbTc + (cx - bx)Ta + (ax - cx)Tb + (bx - ax)Tc = 0
+(avy - bvy)TaTb + (cvy - avy)TaTc + (bvy - cvy)TbTc + (cy - by)Ta + (ay - cy)Tb + (by - ay)Tc = 0
+(avz - bvz)TaTb + (cvz - avz)TaTc + (bvz - cvz)TbTc + (cz - bz)Ta + (az - cz)Tb + (bz - az)Tc = 0

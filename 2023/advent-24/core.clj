@@ -340,28 +340,82 @@
          ;;:pa pa :t1 t1 :pb pb :t2 t2
          :sum (+ x y z)])))))
 
+(defn replace-vars [s v-map]
+  (reduce (fn [acc k] (str/replace acc (re-pattern k) (get v-map k)))
+          s
+          (keys v-map)))
+
+;; (avx - bvx)TaTb + (cvx - avx)TaTc + (bvx - cvx)TbTc + (cx - bx)Ta + (ax - cx)Tb + (bx - ax)Tc = 0
+;; (avy - bvy)TaTb + (cvy - avy)TaTc + (bvy - cvy)TbTc + (cy - by)Ta + (ay - cy)Tb + (by - ay)Tc = 0
+;; (avz - bvz)TaTb + (cvz - avz)TaTc + (bvz - cvz)TbTc + (cz - bz)Ta + (az - cz)Tb + (bz - az)Tc = 0
 (defn format-equations [input var-set]
   (let [data (parse-input input)
         [{ax :x ay :y az :z avx :vx avy :vy avz :vz}
          {bx :x by :y bz :z bvx :vx bvy :vy bvz :vz}
          {cx :x cy :y cz :z cvx :vx cvy :vy cvz :vz}] (take 3 data)
-        vs [["Ta" "Tb" "Tc"] ["t" "u" "v"]]
-        v (fn [i] (get-in vs [var-set i]))]
-    [(format "ax %d ay %d az %d" ax ay az)
-     (format "bx %d by %d bz %d" bx by bz)
-     (format "cx %d cy %d cz %d" cx cy cz)
-     (format "(%d%s + %d%s + bx - ax) (%s - %s) = (%d%s + %d%s + cx - bx) (%s - %s)"
-             bvx (v 1) (- avx) (v 0) (v 2) (v 1)
-             cvx (v 2) (- bvx) (v 1) (v 1) (v 0))
-     (format "(%d%s + %d%s + by - ay) (%s - %s) = (%d%s + %d%s + cy - by) (%s - %s)"
-             bvy (v 1) (- avy) (v 0) (v 2) (v 1)
-             cvy (v 2) (- bvy) (v 1) (v 1) (v 0))
-     (format "(%d%s + %d%s + bz - az) (%s - %s) = (%d%s + %d%s + cz - bz) (%s - %s)"
-             bvz (v 1) (- avz) (v 0) (v 2) (v 1)
-             cvz (v 2) (- bvz) (v 1) (v 1) (v 0))
-     (format "%d%s%s + %d%s%s + bx*%s - ax*%s + %d%s%s + %d%s%s - bx*%s + ax*%s)"
-             bvx (v 1) (v 2) (- avx) (v 0) (v 2) (v 2) (v 2)
-             (- bvx) (v 1) (v 1) avx (v 0) (v 1) (v 1) (v 1)
+        v-maps [{"Ta" "Ta" "Tb" "Tb" "Tc" "Tc"}
+                 {"Ta" "t" "Tb" "u" "Tc" "v"}]]
+    [(format "ax %d ay %d az %d avx %d avy %d avz %d" ax ay az avx avy avz)
+     (format "bx %d by %d bz %d bvx %d bvy %d bvz %d" bx by bz bvx bvy bvz)
+     (format "cx %d cy %d cz %d cvx %d cvy %d cvz %d" cx cy cz cvx cvy cvz)
+     (newline)
+     (replace-vars (format "%dTaTb + %dTaTc + %dTbTc + %dTa + %dTb + %dTc = 0"
+                           (- avx bvx) (- cvx avx) (- bvx cvx) (- cx bx) (- ax cx) (- bx ax))
+                   (get v-maps var-set))
+     (replace-vars (format "%dTaTb + %dTaTc + %dTbTc + %dTa + %dTb + %dTc = 0"
+                           (- avy bvy) (- cvy avy) (- bvy cvy) (- cy by) (- ay cy) (- by ay))
+                   (get v-maps var-set))
+     (replace-vars (format "%dTaTb + %dTaTc + %dTbTc + %dTa + %dTb + %dTc = 0"
+                           (- avz bvz) (- cvz avz) (- bvz cvz) (- cz bz) (- az cz) (- bz az))
+                   (get v-maps var-set))]))
 
-)
-]))
+(defn compute-start-position [input t u]
+  (let [data (parse-input input)
+        [{ax :x ay :y az :z avx :vx avy :vy avz :vz}
+         {bx :x by :y bz :z bvx :vx bvy :vy bvz :vz}
+         {cx :x cy :y cz :z cvx :vx cvy :vy cvz :vz}] (take 3 data)
+        [pax pay paz] [(+ ax (* avx t)) (+ ay (* avy t)) (+ az (* avz t))]
+        [pbx pby pbz] [(+ bx (* bvx u)) (+ by (* bvy u)) (+ bz (* bvz u))]
+        l (/ (- pbx pax) (- u t))
+        m (/ (- pby pay) (- u t))
+        n (/ (- pbz paz) (- u t))
+        [startx starty startz :as start-pos] [(- pax (* l t)) (- pay (* m t)) (- paz (* n t))]]
+    {:start-pos start-pos
+     :result (apply + start-pos)
+     ;; :pa [pax pay paz]
+     ;; :pb [pbx pby pbz]
+     ;; :slope [l m n]
+      }))
+
+
+;; (format-equations small-input 1)
+
+;; ["ax 19 ay 13 az 30 avx -2 avy 1 avz -2"
+;;  "bx 18 by 19 bz 22 bvx -1 bvy -1 bvz -2"
+;;  "cx 20 cy 25 cz 34 cvx -2 cvy -2 cvz -4"
+;;  nil
+;;  "-1tu + 0tv + 1uv + 2t + -1u + -1v = 0"
+;;  "2tu + -3tv + 1uv + 6t + -12u + 6v = 0"
+;;  "0tu + -2tv + 2uv + 12t + -4u + -8v = 0"]
+
+;; From Wolfram Alpha:
+;; t = 5 and u = 3 and v = 4
+
+;; (compute-start-position small-input 5 3)
+;; {:start-pos [24 13 10], :result 47}
+
+
+;; (format-equations large-input 1)
+;; ["ax 156689809620606 ay 243565579389165 az 455137247320393 avx -26 avy 48 avz -140"
+;;  "bx 106355761063908 by 459832650718033 bz 351953299411025 bvx 73 bvy -206 bvz -52"
+;;  "cx 271915251832336 cy 487490927073225 cz 398003502953444 cvx 31 cvy -414 cvz -304"
+;;  nil
+;;  "-99tu + 57tv + 42uv + 165559490768428t + -115225442211730u + -50334048556698v = 0"
+;;  "254tu + -462tv + 208uv + 27658276355192t + -243925347684060u + 216267071328868v = 0"
+;;  "-88tu + -164tv + 252uv + 46050203542419t + 57133744366949u + -103183947909368v = 0"]
+
+;; From Wolfram Alpha:
+;; t = 931974028142 and u = 829702369046 and v = 474506740599
+
+;; (compute-start-position large-input 931974028142 829702369046)
+;; {:start-pos [446533732372768 293892176908833 180204909018503], :result 920630818300104}
