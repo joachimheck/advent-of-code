@@ -23,14 +23,13 @@
      (swap! profile-times update ~name #(+ (or % 0) elapsed#))
      result#))
 
-;; Part 1
-;; What is the product of the sizes of the two groups of components
-;; that can be created by separating three wires.
 (defn parse-input [input]
   (->> (read-lines input)
        (map #(str/split % #" +"))
        (map #(mapv parse-long %))))
 
+;; Part 1
+;; What is the sum of the differences between the two columns of numbers?
 (defn sum-distances [input]
   (let [nums (parse-input input)
         firsts (sort (map first nums))
@@ -51,6 +50,8 @@
 
 
 
+;; Part 2
+;; What is the sum of the similarity scores?
 (defn sum-similarities [input]
   (let [nums (parse-input input)
         firsts (map first nums)
