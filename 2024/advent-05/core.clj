@@ -29,11 +29,11 @@
     {:order-rules (map #(let [[_ a b] (re-find #"(\d+)\|(\d+)" %)]
                           [(parse-long a) (parse-long b)])
                        order-rules)
-     :pages (map (fn [s] (->> s
-                              (re-seq #"(\d+)")
-                              (map second)
-                              (mapv parse-long)))
-                 pages)
+     :updates (map (fn [s] (->> s
+                                (re-seq #"(\d+)")
+                                (map second)
+                                (mapv parse-long)))
+                   pages)
      }
     ))
 
@@ -66,8 +66,8 @@
   (get pages (quot (count pages) 2)))
 
 (defn sum-middle-pages-of-valid-updates [input]
-  (let [{:keys [order-rules pages]} (parse-input input)]
-    (->> pages
+  (let [{:keys [order-rules updates]} (parse-input input)]
+    (->> updates
          (filter #(correct-order? % order-rules))
          (map middle-value)
          (apply +))))
@@ -83,4 +83,53 @@
 
 
 ;; Part 2
-;; 
+;; Fix the order of the invalid updates.
+(defn relevant-rules [update rules]
+  (for [[lo hi] rules
+        :when (and (some #{lo} update)
+                   (some #{hi} update))]
+    [lo hi]))
+
+(defn valid-for-rule? [update [lo hi :as rule]]
+  (let [lo-pos (.indexOf update lo)
+        hi-pos (.indexOf update hi)]
+    (< lo-pos hi-pos)))
+
+(defn valid? [update rules]
+  (every? #(valid-for-rule? update %) rules))
+
+(defn swap [pages v1 v2]
+  (let [v1-pos (.indexOf pages v1)
+        v2-pos (.indexOf pages v2)]
+    ;; (println "swapping" v1 "and" v2 "in" pages "positions" v1-pos v2-pos)
+    (assoc (assoc pages v1-pos v2)
+           v2-pos v1)))
+
+(defn fix-updates [updates order-rules]
+  (for [pages updates
+        :let [rules (relevant-rules pages order-rules)]]
+    (reduce (fn [acc rule]
+              (if (valid? acc rules)
+                (reduced acc)
+                (let [broken-rule (first (filter #(= (second %) false) (map #(list % (valid-for-rule? acc %)) rules)))]
+                  ;; (println "broken rule" acc broken-rule)
+                  (swap acc (first (first broken-rule)) (second (first broken-rule)))
+                  )))
+            pages
+            rules)))
+
+(defn sum-middle-pages-of-fixed-updates [input]
+  (let [{:keys [order-rules updates]} (parse-input input)
+        broken (filter #(not (valid? % (relevant-rules % order-rules))) updates)
+        fixed (fix-updates broken order-rules)]
+    (->> fixed
+         (map middle-value)
+         (apply +))))
+
+
+;; (time (sum-middle-pages-of-fixed-updates small-input))
+;; "Elapsed time: 5.5998 msecs"
+;; 123
+;; (time (sum-middle-pages-of-fixed-updates large-input))
+;; "Elapsed time: 2932.1844 msecs"
+;; 6319
