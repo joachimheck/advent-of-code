@@ -14,15 +14,6 @@
   (with-open [rdr (clojure.java.io/reader f)]
     (doall(line-seq rdr))))
 
-(def profile-times (atom {}))
-
-(defmacro profile [name exp]
-  `(let [start# (System/nanoTime)
-         result# (doall ~exp)
-         elapsed# (/ (double (- (System/nanoTime) start#)) 1000000.0)]
-     (swap! profile-times update ~name #(+ (or % 0) elapsed#))
-     result#))
-
 (defn parse-input [input]
   (let [grid (->> input
                   (read-lines)
@@ -84,3 +75,27 @@
 ;; 4374
 
 
+;; Part 2
+;; Where can an object be placed to make the guard's path a loop?
+(defn loop? [{:keys [grid height width start]}]
+  (loop [pos start
+         positions [start]]
+    (let [[ni nj nd :as next] (move grid pos)]
+      (cond
+        (some #{next} positions)
+        (is-in? positions next)
+        true
+        (and (< -1 ni width) (< -1 nj height))
+        (recur next (conj positions next))
+        :else
+        false))))
+
+(defn count-loop-positions [input]
+  (let [{:keys [grid height width start] :as state} (parse-input input)]
+    (count
+      (filter true?
+              (for [j (range height)
+                    i (range width)
+                    :when (not= [i j] (take 2 start))
+                    :let [new-state (assoc state :grid (assoc-in grid (reverse [i j]) \#))]]
+                (loop? new-state))))))
