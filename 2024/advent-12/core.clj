@@ -91,3 +91,54 @@
 ;; "Elapsed time: 10261.1795 msecs"
 ;; 1424006
 
+(defn sides [grid region]
+  (let [plant (get grid (first region))
+        ;; _ (println "Plant:" plant)
+        side-map (into {}
+                       (vec
+                        (for [[x y :as pos] region
+                              :let [neighbors (list [(inc x) y :east] [x (inc y) :south] [(dec x) y :west] [x (dec y) :north])]]
+                          (vector pos (mapcat #(drop 2 %) (filter #(not= plant (get grid (take 2 %))) neighbors))))))
+        side-elements (for [k (keys side-map)
+                            v (get side-map k)]
+                        (conj k v))]
+    (loop [elements side-elements
+           sides []]
+      (Thread/sleep 1)
+      ;; (println "elements" elements)
+      (if (empty? elements)
+        sides
+        (let [new-side (loop [current (into #{} (list (first elements)))
+                              side #{}]
+                         (Thread/sleep 1)
+                         (if (empty? current)
+                           side
+                           (let [ ;; _ (println "current:" current)
+                                 ;; _ (println "last:" (last (first current)))
+                                 dir (last (first current))
+                                 new (filter #(some #{dir} (get side-map (take 2 %)))
+                                             (if (or (= dir :north) (= dir :south))
+                                               (mapcat (fn [[x y d]] (list [(dec x) y d] [(inc x) y d])) current)
+                                               (mapcat (fn [[x y d]] (list [x (dec y) d] [x (inc y) d])) current)))
+                                 ;; _ (println "new" new)
+                                 new-side (apply conj side current)]
+                             (recur (remove new-side new) new-side))))]
+          (recur (remove (set new-side) elements)
+                 (conj sides new-side)))))))
+
+(defn fencing-total-price-sides [input]
+  (let [grid (parse-input input)
+        regions (group-regions grid)]
+    (apply +
+           (for [region regions]
+             (let [a (area region)
+                   s (count (sides grid region))]
+               ;; (println "A region of" (str (get grid (first region))) "plants with price" a " * " s " = " (* a s) ".")
+               (* a s))))))
+
+;; (time (fencing-total-price-sides small-input))
+;; "Elapsed time: 817.2016 msecs"
+;; 1206
+;; (time (fencing-total-price-sides large-input))
+;; "Elapsed time: 82418.9818 msecs"
+;; 858684
