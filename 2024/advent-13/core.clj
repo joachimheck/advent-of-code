@@ -81,3 +81,62 @@
 ;; (time (fewest-tokens-2 (nth (parse-input-2 small-input) 1) 15000))
 ;; "Elapsed time: 13786.1263 msecs"
 ;; nil
+
+(defn prime-factors [n]
+  (let [[n factors]
+        (loop [n n
+               factors []]
+          (Thread/sleep 1)
+          (cond (= n 1)
+                factors
+                (= 0 (rem n 2))
+                (do
+                  (println "factors" (conj factors 2) (quot n 2))
+                  (recur (quot n 2) (conj factors 2)))
+                :else
+                [n factors]))]
+    (loop [n n
+           d 3
+           factors factors
+           root (Math/sqrt n)]
+      (Thread/sleep 1)
+      (cond (= n 1)
+            factors
+            (> d root)
+            (conj factors n)
+            (= 0 (rem n d))
+            (do
+              (println "factors" (conj factors d) (quot n d) (Math/sqrt (quot n d)))
+              (recur (quot n d)
+                     d
+                     (conj factors d)
+                     (Math/sqrt (quot n d))))
+            :else
+            (recur n (+ d 2) factors root)))))
+
+(defn fewest-tokens-x [{[ax ay] :a [bx by] :b [px py] :prize :as machine}]
+  (let [[a b :as moves]
+        (first
+         (for [a (range (inc (max ax ay bx by)))
+               b (range (inc (max ax ay bx by)))
+               :when (and (not (and (zero? a) (zero? b)))
+                          (zero? (rem px (+ (* a ax) (* b bx))))
+                          (zero? (rem py (+ (* a ay) (* b by)))))]
+           [a b]))
+        factor (if (some? moves)
+                 (quot px (+ (* ax a) (* bx b))))]
+    (if (some? factor)
+      (mapv #(* % factor) [a b (+ (* 3 a) b)]))))
+
+
+;; This seems to disprove my theory that the maximum values of a and b are
+;; bounded by the values of ax, ay, bx, and by.
+
+;; (first
+;;  (filter (fn [[_ _ _ b _]] (= false b))
+;;          (for [[index machine] (map-indexed list (parse-input large-input))
+;;                :let [f (fewest-tokens machine)
+;;                      f-x (fewest-tokens-x machine)]
+;;                :when (or (some? f) (some? f-x))]
+;;            (list index f f-x (= f f-x) machine))))
+;; (2 [96 71 359] nil false {:a [13 42], :b [71 29], :prize [6289 6091]})
