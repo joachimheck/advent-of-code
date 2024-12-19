@@ -83,36 +83,23 @@
 ;; nil
 
 (defn prime-factors [n]
-  (let [[n factors]
-        (loop [n n
-               factors []]
-          (Thread/sleep 1)
-          (cond (= n 1)
-                factors
-                (= 0 (rem n 2))
-                (do
-                  (println "factors" (conj factors 2) (quot n 2))
-                  (recur (quot n 2) (conj factors 2)))
-                :else
-                [n factors]))]
-    (loop [n n
-           d 3
-           factors factors
-           root (Math/sqrt n)]
-      (Thread/sleep 1)
-      (cond (= n 1)
-            factors
-            (> d root)
-            (conj factors n)
-            (= 0 (rem n d))
-            (do
-              (println "factors" (conj factors d) (quot n d) (Math/sqrt (quot n d)))
-              (recur (quot n d)
-                     d
-                     (conj factors d)
-                     (Math/sqrt (quot n d))))
-            :else
-            (recur n (+ d 2) factors root)))))
+  (loop [n n
+         d 2
+         factors []
+         root (Math/sqrt n)]
+    (cond (= n 1)
+          factors
+          (> d root)
+          (conj factors n)
+          (= 0 (rem n d))
+          (let [new-n (quot n d)]
+            ;; (println "Found factor for" n factors)
+            (recur new-n
+                   d
+                   (conj factors d)
+                   (Math/sqrt new-n)))
+          :else
+          (recur n (if (= d 2) 3 (+ d 2)) factors root))))
 
 (defn fewest-tokens-x [{[ax ay] :a [bx by] :b [px py] :prize :as machine}]
   (let [[a b :as moves]
@@ -140,3 +127,41 @@
 ;;                :when (or (some? f) (some? f-x))]
 ;;            (list index f f-x (= f f-x) machine))))
 ;; (2 [96 71 359] nil false {:a [13 42], :b [71 29], :prize [6289 6091]})
+(defn fewest-tokens-x [ax bx px]
+  (let [[multiples factors] (partition-by #(< % (min ax bx)) (prime-factors px))
+        _ (println "multiples/factors" [multiples factors])
+        multiplier (apply * multiples)
+        ;; [a b :as moves]
+        moves (for [mini-px factors]
+                (first
+                 (for [a (range (quot mini-px ax))
+                       b (range (quot mini-px bx))
+                       :when (and (not (and (zero? a) (zero? b)))
+                                  (zero? (rem mini-px (+ (* a ax) (* b bx)))))
+                       :let [_ (Thread/sleep 1)]]
+                   [a b (quot mini-px (+ (* a ax) (* b bx)))])))
+        _ (println "moves" moves)
+        answer (reduce (fn [[a b] [a' b' m]] [(* a a' m) (* b b' m)])
+                       [multiplier multiplier]
+                       moves)
+
+        ;; factor (if (some? moves)
+        ;;          (quot px (+ (* ax a) (* bx b))))
+        _ (println "answer" answer)
+
+]
+    ;; (if (some? factor)
+    ;;   (mapv #(* % factor) [a b]))
+
+    [answer (* (first answer) ax) (* (second answer) bx) (+ (* (first answer) ax) (* (second answer) bx))]
+    ))
+
+;; (+ (* 3 a) b) - score
+
+;; #1: {:a [26 66], :b [67 21], :prize [10000000012748 10000000012176]}
+;; #3: {:a [69 23], :b [27 71], :prize [10000000018641 10000000010279]}
+
+;; (prime-factors 10000000012748) [2 2 789511 3166517]
+
+;; This is close but I'm not decomposing the sum correctly. I need to get the a and b values out,
+;; but I have the total correct.
