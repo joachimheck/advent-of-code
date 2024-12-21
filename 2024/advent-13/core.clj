@@ -87,13 +87,15 @@
          d 2
          factors []
          root (Math/sqrt n)]
+    ;; (Thread/sleep 1)
+    (Thread/yield)
     (cond (= n 1)
           factors
           (> d root)
           (conj factors n)
           (= 0 (rem n d))
           (let [new-n (quot n d)]
-            ;; (println "Found factor for" n factors)
+            ;; (println "Found factor for" n (conj factors d))
             (recur new-n
                    d
                    (conj factors d)
@@ -128,7 +130,7 @@
 ;;            (list index f f-x (= f f-x) machine))))
 ;; (2 [96 71 359] nil false {:a [13 42], :b [71 29], :prize [6289 6091]})
 (defn fewest-tokens-x [ax bx px]
-  (let [[multiples factors] (partition-by #(< % (min ax bx)) (prime-factors px))
+  (let [{multiples true factors false} (group-by #(< % (min ax bx)) (prime-factors px))
         _ (println "multiples/factors" [multiples factors])
         multiplier (apply * multiples)
         ;; [a b :as moves]
@@ -138,23 +140,19 @@
                        b (range (quot mini-px bx))
                        :when (and (not (and (zero? a) (zero? b)))
                                   (zero? (rem mini-px (+ (* a ax) (* b bx)))))
-                       :let [_ (Thread/sleep 1)]]
+                       :let [_ (Thread/yield)]]
                    [a b (quot mini-px (+ (* a ax) (* b bx)))])))
         _ (println "moves" moves)
-        answer (reduce (fn [[a b] [a' b' m]] [(* a a' m) (* b b' m)])
-                       [multiplier multiplier]
-                       moves)
-
-        ;; factor (if (some? moves)
-        ;;          (quot px (+ (* ax a) (* bx b))))
-        _ (println "answer" answer)
-
-]
-    ;; (if (some? factor)
-    ;;   (mapv #(* % factor) [a b]))
-
-    [answer (* (first answer) ax) (* (second answer) bx) (+ (* (first answer) ax) (* (second answer) bx))]
-    ))
+        final-multiplier (reduce (fn [acc [a b]]
+                                   (if (empty? [a b])
+                                     acc
+                                     (* acc (+ (* a ax) (* b bx)))))
+                                 multiplier
+                                 (rest moves))
+        _ (println "final-multiplier" final-multiplier)
+        answer (if (seq moves)
+                 [(* final-multiplier (first (first moves))) (* final-multiplier (second (first moves)))])]
+    {:answer answer :total (if (seq answer) (+ (* ax (first answer)) (* bx (second answer))))}))
 
 ;; (+ (* 3 a) b) - score
 
@@ -165,3 +163,54 @@
 
 ;; This is close but I'm not decomposing the sum correctly. I need to get the a and b values out,
 ;; but I have the total correct.
+
+;; (* multiplier
+;;    (+ (* a1 ax) (* b1 bx))
+;;    (+ (* a2 ax) (* b2 bx)))
+
+(defn two-x-points
+  ([{[ax _] :a [bx _] :b [px _] :prize :as machine}]
+   (two-x-points ax bx px))
+  ([ax bx px]
+   (take 2
+         (let [amax (quot px ax)]
+           (for [n (range (inc amax))
+                 :let [a (- amax n)
+                       aval (* ax a)
+                       arem (- px aval)
+                       b (quot arem bx)
+                       bval (* bx b)
+                       diff (- px (+ aval bval))]
+                 :when (zero? diff)]
+             ;; {:a a :b b :aval aval :bval bval :diff diff :score (+ (* 3 a) b)}
+             [a b])))))
+
+(defn x-solutions [[[a1 b1] [a2 b2] :as points]]
+  (if (seq points)
+    ;; The first point is to the right of the second.
+    (let [adiff (- a1 a2)
+          bdiff (- b1 b2)]
+      (take-while #(and (> (first %) 0) (> (second %) 0))
+                  (iterate #(vector (- (first %) adiff) (- (second %) bdiff)) [a1 b1])))))
+
+(defn is-y-solution? [{[_ ay] :a [_ by] :b [_ py] :prize :as machine} [a b]]
+  (= (+ (* a ay) (* b by)) py))
+
+(defn fewest-tokens-linear [{[ax ay] :a [bx by] :b [px py] :prize :as machine}]
+  (let [x-sols (x-solutions (two-x-points machine))
+        solutions (filter #(true? (last %)) (map #(list % (is-y-solution? machine %)) x-sols))
+        ;; Assuming for now that only one answer will work so we don't have to check scores.
+        ;; _ (println "solutions" solutions)
+        [a b] (if (empty? solutions) [0 0] (first (first solutions)))]
+    (+ (* 3 a) b)))
+
+(defn min-tokens-to-win-linear [input]
+  (let [machines (parse-input input)]
+    (apply + (map fewest-tokens-linear machines))))
+
+
+
+;; (min-tokens-to-win-linear large-input)
+;; Execution error (NullPointerException) at advent-13.core/x-solutions (form-init2682020877504120393.clj:191).
+;; Cannot invoke "Object.getClass()" because "x" is null
+;; advent-13.core> 
