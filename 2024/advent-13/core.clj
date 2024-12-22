@@ -180,18 +180,49 @@
                        arem (- px aval)
                        b (quot arem bx)
                        bval (* bx b)
-                       diff (- px (+ aval bval))]
+                       diff (- px (+ aval bval))
+                       ;; _ (Thread/sleep 1)
+                       ]
                  :when (zero? diff)]
-             ;; {:a a :b b :aval aval :bval bval :diff diff :score (+ (* 3 a) b)}
              [a b])))))
 
-(defn x-solutions [[[a1 b1] [a2 b2] :as points]]
-  (if (seq points)
-    ;; The first point is to the right of the second.
-    (let [adiff (- a1 a2)
-          bdiff (- b1 b2)]
-      (take-while #(and (> (first %) 0) (> (second %) 0))
-                  (iterate #(vector (- (first %) adiff) (- (second %) bdiff)) [a1 b1])))))
+(defn two-y-points
+  ([{[_ ay] :a [_ by] :b [_ py] :prize :as machine}]
+   (two-y-points ay by py))
+  ([ay by py]
+   (take 2
+         (let [amax (quot py ay)]
+           (for [n (range (inc amax))
+                 :let [a (- amax n)
+                       aval (* ay a)
+                       arem (- py aval)
+                       b (quot arem by)
+                       bval (* by b)
+                       diff (- py (+ aval bval))
+                       ;; _ (Thread/sleep 1)
+                       ]
+                 :when (zero? diff)]
+             [a b])))))
+
+(defn line-equation [[x1 y1 :as p1] [x2 y2 :as p2]]
+  (let [slope (if (>= x2 x1)
+                (/ (- y2 y1) (- x2 x1))
+                (/ (- y1 y2) (- x1 x2)))]
+    slope))
+
+(defn x-solutions [[[a1 b1 :as p1] [a2 b2 :as p2] :as points]]
+  (cond (nil? p1)
+        '()
+        (nil? p2)
+        (list p1)
+        (and (seq points)
+             (not (or (seq (filter nil? points)) (seq (filter nil? [a1 b1 a2 b2])))))
+        ;; The first point is to the right of the second.
+        (let [adiff (- a1 a2)
+              bdiff (- b1 b2)]
+          ;; (println "adiff" adiff "bdiff" bdiff)
+          (take-while #(and (>= (first %) 0) (>= (second %) 0))
+                      (iterate #(vector (- (first %) adiff) (- (second %) bdiff)) [a1 b1])))))
 
 (defn is-y-solution? [{[_ ay] :a [_ by] :b [_ py] :prize :as machine} [a b]]
   (= (+ (* a ay) (* b by)) py))
@@ -204,8 +235,13 @@
         [a b] (if (empty? solutions) [0 0] (first (first solutions)))]
     (+ (* 3 a) b)))
 
-(defn min-tokens-to-win-linear [input]
-  (let [machines (parse-input input)]
+(defn score [[a b]]
+  (+ (* 3 a) b))
+
+(defn min-tokens-to-win-linear [input size]
+  (let [machines (if (= size :large)
+                   (parse-input-2 input)
+                   (parse-input input))]
     (apply + (map fewest-tokens-linear machines))))
 
 
@@ -214,3 +250,41 @@
 ;; Execution error (NullPointerException) at advent-13.core/x-solutions (form-init2682020877504120393.clj:191).
 ;; Cannot invoke "Object.getClass()" because "x" is null
 ;; advent-13.core> 
+
+;; Here's a difference between my part 1 method and my new method:
+;; {:machine {:a [17 32], :b [58 29], :prize [2516 3373]}, :y-solns (), :f-ts [90 17 287]}
+
+(defn intersection [[[x1 y1] [x2 y2] :as l1] [[x3 y3] [x4 y4] :as l2]]
+  (if (= 8 (count (flatten [l1 l2])))
+    (let [xnum (- (* (- (* x1 y2) (* y1 x2)) (- x3 x4))
+                  (* (- x1 x2) (- (* x3 y4) (* y3 x4))))
+          xdenom (- (* (- x1 x2) (- y3 y4))
+                    (* (- y1 y2) (- x3 x4)))
+          ynum (- (* (- (* x1 y2) (* y1 x2)) (- y3 y4))
+                  (* (- y1 y2) (- (* x3 y4) (* y3 x4))))
+          ydenom (- (* (- x1 x2) (- y3 y4))
+                    (* (- y1 y2) (- x3 x4)))]
+      (if (and (not (or (zero? xdenom) (zero? ydenom)))
+               (zero? (rem xnum xdenom))
+               (zero? (rem ynum ydenom)))
+        [(/ xnum xdenom) (/ ynum ydenom)]))))
+
+(defn min-tokens-to-win-intersection [input & size]
+  ;; (println "size" size)
+  (let [machines (if (= size :large)
+                   (parse-input-2 input)
+                   (parse-input input))]
+    (apply +
+           (map score
+                (remove nil?
+                        (for [machine machines
+                              :let [x-points (two-x-points machine)
+                                    y-points (two-y-points machine)]]
+                          (intersection x-points y-points)))))))
+
+
+;; (time (min-tokens-to-win-intersection large-input))
+;; "Elapsed time: 24.2556 msecs"
+;; 23113
+;; This should be 29023. Figure out why it's wrong.
+
