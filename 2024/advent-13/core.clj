@@ -36,11 +36,14 @@
          b (range 101)
          :when (and (= px (+ (* a ax) (* b bx)))
                     (= py (+ (* a ay) (* b by))))]
-     [a b (+ (* 3 a) b)])))
+     [a b])))
+
+(defn score [[a b]]
+  (+ (* 3 a) b))
 
 (defn min-tokens-to-win-winnable-prizes [input]
   (let [machines (parse-input input)]
-    (apply + (map last (remove nil? (map fewest-tokens machines))))))
+    (apply + (map score (remove nil? (map fewest-tokens machines))))))
 
 ;; (time (min-tokens-to-win-winnable-prizes small-input))
 ;; "Elapsed time: 2.4968 msecs"
@@ -235,9 +238,6 @@
         [a b] (if (empty? solutions) [0 0] (first (first solutions)))]
     (+ (* 3 a) b)))
 
-(defn score [[a b]]
-  (+ (* 3 a) b))
-
 (defn min-tokens-to-win-linear [input size]
   (let [machines (if (= size :large)
                    (parse-input-2 input)
@@ -255,23 +255,38 @@
 ;; {:machine {:a [17 32], :b [58 29], :prize [2516 3373]}, :y-solns (), :f-ts [90 17 287]}
 
 (defn intersection [[[x1 y1] [x2 y2] :as l1] [[x3 y3] [x4 y4] :as l2]]
-  (if (= 8 (count (flatten [l1 l2])))
-    (let [xnum (- (* (- (* x1 y2) (* y1 x2)) (- x3 x4))
-                  (* (- x1 x2) (- (* x3 y4) (* y3 x4))))
-          xdenom (- (* (- x1 x2) (- y3 y4))
-                    (* (- y1 y2) (- x3 x4)))
-          ynum (- (* (- (* x1 y2) (* y1 x2)) (- y3 y4))
-                  (* (- y1 y2) (- (* x3 y4) (* y3 x4))))
-          ydenom (- (* (- x1 x2) (- y3 y4))
-                    (* (- y1 y2) (- x3 x4)))]
-      (if (and (not (or (zero? xdenom) (zero? ydenom)))
-               (zero? (rem xnum xdenom))
-               (zero? (rem ynum ydenom)))
-        [(/ xnum xdenom) (/ ynum ydenom)]))))
+  (let [num-terms (count (flatten [l1 l2]))]
+    (cond (= 8 num-terms)
+          (let [xnum (- (* (- (* x1 y2) (* y1 x2)) (- x3 x4))
+                        (* (- x1 x2) (- (* x3 y4) (* y3 x4))))
+                xdenom (- (* (- x1 x2) (- y3 y4))
+                          (* (- y1 y2) (- x3 x4)))
+                ynum (- (* (- (* x1 y2) (* y1 x2)) (- y3 y4))
+                        (* (- y1 y2) (- (* x3 y4) (* y3 x4))))
+                ydenom (- (* (- x1 x2) (- y3 y4))
+                          (* (- y1 y2) (- x3 x4)))]
+            ;; (println "x" xnum "/" xdenom "y" ynum "/" ydenom)
+            (if (and (not (or (zero? xdenom) (zero? ydenom)))
+                     (zero? (rem xnum xdenom))
+                     (zero? (rem ynum ydenom)))
+              [(/ xnum xdenom) (/ ynum ydenom)]))
+          (= 6 num-terms)
+          (let [[[[s-x s-y] :as smaller] [[l-x1 l-y1] [l-x2 l-y2] :as larger]] (if (= 1 (count l1)) [l1 l2] [l2 l1])
+                a (- l-y1 l-y2)
+                b (- l-x2 l-x1)
+                c (- (* l-x1 l-y2) (* l-x2 l-y1))]
+            ;; (if (or (zero? a) (zero? b) (zero? s-x) (zero? s-y)
+            ;;         (nil? a) (nil? b) (nil? s-x) (nil? s-y))
+            ;;   (println "zero value l1" l1 "l2" l2))
+            (if (zero? (+ (* a s-x) (* b s-y) c))
+              (first smaller)))
+          (= 1 (count l1) (count l2))
+          (if (= (first l1) (first l2))
+            (first l1)))))
 
 (defn min-tokens-to-win-intersection [input & size]
   ;; (println "size" size)
-  (let [machines (if (= size :large)
+  (let [machines (if (= (first size) :large)
                    (parse-input-2 input)
                    (parse-input input))]
     (apply +
