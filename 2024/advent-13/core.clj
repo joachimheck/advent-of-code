@@ -91,18 +91,23 @@
          factors []
          root (Math/sqrt n)]
     ;; (Thread/sleep 1)
-    (Thread/yield)
+    ;; (if (zero? (rem (dec d) 1000))
+    ;;   (println "d" d))
     (cond (= n 1)
           factors
           (> d root)
           (conj factors n)
+
+          ;; (> d 36000)
+          ;; (conj factors :error)
+
           (= 0 (rem n d))
           (let [new-n (quot n d)]
-            ;; (println "Found factor for" n (conj factors d))
+            ;; (println "Found factor" new-n d (conj factors d) (inc (long (Math/sqrt new-n))))
             (recur new-n
                    d
                    (conj factors d)
-                   (Math/sqrt new-n)))
+                   (inc (long (Math/sqrt new-n)))))
           :else
           (recur n (if (= d 2) 3 (+ d 2)) factors root))))
 
@@ -175,8 +180,7 @@
   ([{[ax _] :a [bx _] :b [px _] :prize :as machine}]
    (two-x-points ax bx px))
   ([ax bx px]
-   (take 2
-         (let [amax (quot px ax)]
+   (let [amax (quot px ax)]
            (for [n (range (inc amax))
                  :let [a (- amax n)
                        aval (* ax a)
@@ -187,7 +191,7 @@
                        ;; _ (Thread/sleep 1)
                        ]
                  :when (zero? diff)]
-             [a b])))))
+             [a b]))))
 
 (defn two-y-points
   ([{[_ ay] :a [_ by] :b [_ py] :prize :as machine}]
@@ -195,16 +199,14 @@
   ([ay by py]
    (take 2
          (let [amax (quot py ay)]
-           (for [n (range (inc amax))
-                 :let [a (- amax n)
-                       aval (* ay a)
+           (println "amax" amax)
+           (for [a (range (min (inc amax) 10000000))
+                 :let [aval (* ay a)
                        arem (- py aval)
-                       b (quot arem by)
-                       bval (* by b)
-                       diff (- py (+ aval bval))
                        ;; _ (Thread/sleep 1)
                        ]
-                 :when (zero? diff)]
+                 :when (zero? (rem arem by))
+                 :let [b (quot arem by)]]
              [a b])))))
 
 (defn line-equation [[x1 y1 :as p1] [x2 y2 :as p2]]
@@ -287,15 +289,19 @@
 (defn min-tokens-to-win-intersection [input & size]
   ;; (println "size" size)
   (let [machines (if (= (first size) :large)
-                   (parse-input-2 input)
-                   (parse-input input))]
+                   (map-indexed list (parse-input-2 input))
+                   (map-indexed list (parse-input input)))]
     (apply +
            (map score
                 (remove nil?
-                        (for [machine machines
+                        (for [[index machine] machines
                               :let [x-points (two-x-points machine)
                                     y-points (two-y-points machine)]]
-                          (intersection x-points y-points)))))))
+                          (do
+                           (Thread/sleep 1)
+                           (printf "Processing machine #%d\n" index)
+                           (flush)
+                           (intersection x-points y-points))))))))
 
 
 ;; (time (min-tokens-to-win-intersection large-input))
@@ -303,3 +309,26 @@
 ;; 23113
 ;; This should be 29023. Figure out why it's wrong.
 
+
+;: Now it seems to be working but way too slowly (again). My technique for finding
+;; two points that work is already too slow.
+
+;; (let [{[ax ay] :a [bx by] :b [px py] :prize :as machine} (nth (parse-input small-input) 0)
+;;       amax-x (quot px ax)
+;;       amax-y (quot py ay)
+;;       x-points (two-x-points machine)]
+;;   (for [[x-a x-b] x-points
+;;         :let [y (+ (* ay x-a) (* by x-b))]
+;;         :when (= 5400 y)]
+;;     (list [x-a x-b] y)))
+;; (([80 40] 5400))
+
+;; (let [{[ax ay] :a [bx by] :b [px py] :prize :as machine} (nth (parse-input-2 large-input) 10)
+;;                       amax-x (quot px ax)
+;;                       amax-y (quot py ay)
+;;                       x-points (two-x-points machine)]
+;;                   (for [[x-a x-b] x-points
+;;                         :let [y (+ (* ay x-a) (* by x-b))]
+;;                         :when (= 10000000007146 y)]
+;;                         (list [x-a x-b] y)))
+;; - takes a long time.
