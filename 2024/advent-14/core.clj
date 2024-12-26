@@ -63,3 +63,41 @@
 ;; (time (safety-factor large-input))
 ;; "Elapsed time: 6.6761 msecs"
 ;; 226236192
+
+
+;; Part 2
+;; How many seconds until the robots take the shape of a christmas tree?
+(defn print-robots [positions [width height]]
+  (let [occupied (set positions)]
+    (doall
+     (for [j (range height)]
+       (println
+        (str/join
+         (for [i (range width)]
+           (if (some #{[i j]} occupied) "*" "."))))))
+    nil))
+
+(defn how-long-until-christmas-tree [input max-seconds]
+  (let [{robots :robots [width height :as dimensions] :dimensions :as state} (parse-input input)]
+    (loop [seconds 0]
+      (if (and (> seconds 0)
+               (= 0 (rem seconds 10000)))
+        (println seconds "seconds"))
+      ;; (Thread/sleep 1)
+      (let [robot-positions (compute-positions state seconds)
+            robots-by-line (group-by second robot-positions)
+            matches (apply concat
+                           (for [[line robots] robots-by-line
+                                 :let [midpoint (quot width 2)]]
+                             (for [[x y :as robot] robots]
+                               (cond (= x midpoint)
+                                     true
+                                     :else
+                                     (boolean (some #{[(- (dec width) x) line]} robots))))))]
+        (cond (> seconds max-seconds)
+              nil
+              (every? true? matches)
+              (doall (list (print-robots robot-positions dimensions)
+                           seconds))
+              :else
+              (recur (inc seconds)))))))
