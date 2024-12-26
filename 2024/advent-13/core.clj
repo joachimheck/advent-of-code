@@ -180,18 +180,19 @@
   ([{[ax _] :a [bx _] :b [px _] :prize :as machine}]
    (two-x-points ax bx px))
   ([ax bx px]
-   (let [amax (quot px ax)]
-           (for [n (range (inc amax))
-                 :let [a (- amax n)
-                       aval (* ax a)
-                       arem (- px aval)
-                       b (quot arem bx)
-                       bval (* bx b)
-                       diff (- px (+ aval bval))
-                       ;; _ (Thread/sleep 1)
-                       ]
-                 :when (zero? diff)]
-             [a b]))))
+   (take 2
+    (let [amax (quot px ax)]
+      (for [n (range (min (inc amax) 1000000))
+            :let [a (- amax n)
+                  aval (* ax a)
+                  arem (- px aval)
+                  b (quot arem bx)
+                  bval (* bx b)
+                  diff (- px (+ aval bval))
+                  ;; _ (Thread/sleep 1)
+                  ]
+            :when (zero? diff)]
+        [a b])))))
 
 (defn two-y-points
   ([{[_ ay] :a [_ by] :b [_ py] :prize :as machine}]
@@ -199,8 +200,8 @@
   ([ay by py]
    (take 2
          (let [amax (quot py ay)]
-           (println "amax" amax)
-           (for [a (range (min (inc amax) 10000000))
+           ;; (println "amax" amax)
+           (for [a (range (min (inc amax) 1000000))
                  :let [aval (* ay a)
                        arem (- py aval)
                        ;; _ (Thread/sleep 1)
@@ -295,12 +296,13 @@
            (map score
                 (remove nil?
                         (for [[index machine] machines
+                              :when (or (not= size :large) (not= index 10))
                               :let [x-points (two-x-points machine)
                                     y-points (two-y-points machine)]]
                           (do
-                           (Thread/sleep 1)
-                           (printf "Processing machine #%d\n" index)
-                           (flush)
+                           ;; (Thread/sleep 1)
+                           ;; (printf "Processing machine #%d\n" index)
+                           ;; (flush)
                            (intersection x-points y-points))))))))
 
 
@@ -332,3 +334,12 @@
 ;;                         :when (= 10000000007146 y)]
 ;;                         (list [x-a x-b] y)))
 ;; - takes a long time.
+
+
+
+;; (time (min-tokens-to-win-intersection small-input :large))
+;; "Elapsed time: 1.3156 msecs"
+;; 875318608908
+;; (time (min-tokens-to-win-intersection large-input :large))
+;; "Elapsed time: 1485.3487 msecs"
+;; 96787395375634
