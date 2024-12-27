@@ -77,27 +77,108 @@
            (if (some #{[i j]} occupied) "*" "."))))))
     nil))
 
-(defn how-long-until-christmas-tree [input max-seconds]
+(defn step-positions [{robots :robots [width height :as dimensions] :dimensions :as state}]
+  (let [{new-robots :robots new-line-points :line-points}
+        (reduce (fn [acc {[x y] :p [vx vy] :v :as robot}]
+                  (let [line-points (:line-points acc)
+                        newx (mod (+ x vx) width)
+                        newy (mod (+ y vy) height)]
+                    (assoc acc
+                           :robots (conj (:robots acc) {:p [newx newy] :v [vx vy]})
+                           :line-points (if (<= newy 3)
+                                          (assoc line-points newy (conj (get line-points newy 0) [newx newy]))
+                                          line-points))))
+                {:robots '()
+                 :line-points {0 #{} 1 #{} 2 #{} 3 #{}}}
+                robots)]
+    (assoc state
+          :robots new-robots
+          :line-counts (into {} (map (fn [[k v]] [k (count v)]) new-line-points))
+         
+          ;; (map (fn [{[x y] :p [vx vy] :v :as robot}]
+          ;;        {:p [(mod (+ x vx) width) (mod (+ y vy) height)] :v [vx vy]})
+          ;;      robots)
+          )))
+
+(defn how-long-until-christmas-tree-compute [input max-seconds]
   (let [{robots :robots [width height :as dimensions] :dimensions :as state} (parse-input input)]
     (loop [seconds 0]
       (if (and (> seconds 0)
                (= 0 (rem seconds 10000)))
         (println seconds "seconds"))
       ;; (Thread/sleep 1)
-      (let [robot-positions (compute-positions state seconds)
+      (let [
+            robot-positions (compute-positions state seconds)
+            ;; by-quadrant (group-by #(which-quadrant % dimensions) (set robot-positions))
+
             robots-by-line (group-by second robot-positions)
-            matches (apply concat
-                           (for [[line robots] robots-by-line
-                                 :let [midpoint (quot width 2)]]
-                             (for [[x y :as robot] robots]
-                               (cond (= x midpoint)
-                                     true
-                                     :else
-                                     (boolean (some #{[(- (dec width) x) line]} robots))))))]
+            ;; matches (apply concat
+            ;;                (for [[line robots] robots-by-line
+            ;;                      :let [midpoint (quot width 2)]]
+            ;;                  (for [[x y :as robot] robots]
+            ;;                    (cond (= x midpoint)
+            ;;                          true
+            ;;                          :else
+            ;;                          (boolean (some #{[(- (dec width) x) line]} robots))))))
+
+            ;; balance-score (+ (abs (- (count (:upper-left by-quadrant)) (count (:upper-right by-quadrant))))
+            ;;                  (abs (- (count (:lower-left by-quadrant)) (count (:lower-right by-quadrant)))))
+            ]
         (cond (> seconds max-seconds)
               nil
-              (every? true? matches)
+              ;; (< balance-score (Math/ceil (* (count robots) 0.1)))
+              ;; (= balance-score 0)
+              ;; (not (some #(> (count (second %)) 2) robots-by-line))
+              (and (= 1 (count (get robots-by-line 0)))
+                   (= (quot width 2) (first (first (get robots-by-line 0))))
+                   ;; (= 2 (count (get robots-by-line 1)))
+                   )
               (doall (list (print-robots robot-positions dimensions)
-                           seconds))
+                           seconds
+                           ;; [balance-score (count robots)]
+                           ))
               :else
               (recur (inc seconds)))))))
+
+(defn how-long-until-christmas-tree-step [input max-seconds]
+  (let [{robots :robots [width height :as dimensions] :dimensions :as state} (parse-input input)
+        robot-positions (map :p (:robots state))
+        robots-by-line (group-by second robot-positions)
+        line-counts (into {}
+                          (map (fn [[line robots]]
+                                 [line (count robots)])
+                               (filter #(<= (first %) 3) robots-by-line)))]
+    (println "line-counts" line-counts)
+    (loop [seconds 0
+           state (assoc state :line-counts line-counts)]
+      (if (and (> seconds 0)
+               (= 0 (rem seconds 10000)))
+        (println seconds "seconds"))
+      ;; (Thread/sleep 1)
+      (let [line-counts (:line-counts state)]
+        (cond (> seconds max-seconds)
+              nil
+              ;; (< balance-score (Math/ceil (* (count robots) 0.1)))
+              ;; (= balance-score 0)
+              ;; (not (some #(> (count (second %)) 2) robots-by-line))
+              (and
+               ;; (= 1 (count (get robots-by-line 0)))
+               ;; (= (quot width 2) (first (first (get robots-by-line 0))))
+               ;; (= 2 (count (get robots-by-line 1)))
+               (= 1 (get line-counts 0))
+               (= 2 (get line-counts 1))
+               ;; (= 2 (get line-counts 2))
+               ;; (= 2 (get line-counts 3))
+               (let [robot-positions (map :p (:robots state))
+                     robots-by-line (group-by second robot-positions)]
+                 (= (quot width 2) (first (first (get robots-by-line 0))))))
+              (doall (list (print-robots (map :p (:robots state)) dimensions)
+                           seconds
+                           ;; [balance-score (count robots)]
+                           ))
+              :else
+              (recur (inc seconds)
+                     (step-positions state)
+                     ;; (compute-positions state (inc seconds))
+                     ))))))
+
