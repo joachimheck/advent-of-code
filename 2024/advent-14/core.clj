@@ -157,43 +157,25 @@
         [s t]
         (recur r s t q-next r-next s-next t-next)))))
 
-(defn modular-inverse [a n]
-  (loop [r-last a
-         s-last 1
-         t-last 0
-         q 0
-         r n
-         s 0
-         t 1
-         ]
-    (let [q-next (quot r-last r)
-          r-next (rem r-last r)
-          s-next (- s-last (* q-next s))
-          t-next (- t-last (* q-next t))]
-      (if (= r-next 0)
-        (if (> r 1)
-          :not-invertible
-          (if (< t 0)
-            (+ t n)
-            t))
-        (recur r s t q-next r-next s-next t-next)))))
+(defn time-to-zero [{[x y] :p [vx vy] :v :as robot} height]
+  (loop [j y
+         t 0]
+    (cond (= j 0)
+          t
+          (and (> t 0) (= j y))
+          nil
+          :else
+          (recur (mod (+ j vy) height) (inc t)))))
 
-(defn modular-inverse [a n]
-  (if (= a 0)
-    :not-invertible
-    (loop [t 0
-           r n
-           new-t 1
-           new-r a]
-      ;; (println t r new-t new-r)
-      (if (= new-r 0)
-        (if (> r 1)
-          :not-invertible
-          (if (< t 0)
-            (+ t n)
-            t))
-        (let [quotient (quot r new-r)]
-        (recur new-t (- t (* quotient new-t)) new-r (- r (* quotient new-r))))))))
+(defn time-to-loop [{[x y] :p [vx vy] :v :as robot} height]
+  (loop [j y
+         t 0]
+    (cond (= vy 0)
+          nil
+          (and (> t 0) (= j y))
+          t
+          :else
+          (recur (mod (+ j vy) height) (inc t)))))
 
 (defn how-long-until-christmas-tree-step [input max-seconds]
   (let [{robots :robots [width height :as dimensions] :dimensions :as state} (parse-input input)
@@ -224,9 +206,10 @@
                (= 2 (get line-counts 1))
                ;; (= 2 (get line-counts 2))
                ;; (= 2 (get line-counts 3))
-               (let [robot-positions (map :p (:robots state))
-                     robots-by-line (group-by second robot-positions)]
-                 (= (quot width 2) (first (first (get robots-by-line 0))))))
+               ;; (let [robot-positions (map :p (:robots state))
+               ;;       robots-by-line (group-by second robot-positions)]
+               ;;   (= (quot width 2) (first (first (get robots-by-line 0)))))
+               )
               (doall (list (print-robots (map :p (:robots state)) dimensions)
                            seconds
                            ;; [balance-score (count robots)]
@@ -240,16 +223,19 @@
 
 ;; My hope is to compute when each robot will reach y=0 and only check the states where at least
 ;; (at most?) one robot is on the top line.
-;; my modular-inverse function doesn't seem to work.
 
-;; (let [{robots :robots [width height :as dimensions] :dimensions :as state} (parse-input small-input)]
-;;                   (for [robot robots
-;;                         :let [y (second (:p robot))
-;;                               vy (second (:v robot))
-;;                               ;; _ (doall (println "robot" robot) (flush))
-;;                               mod-inv (modular-inverse vy height)
-;;                               ]
-;;                         ]
-;;                     {:height height
-;;                      :robot robot
-;;                      :mod-inv mod-inv}))
+;; I'm not sure that will be enough. Maybe I need to compute when each robot will be in the top center position.
+
+  ;; (let [{robots :robots [width height :as dimensions] :dimensions :as state} (parse-input large-input)
+  ;;                      times (for [robot robots
+  ;;                                  :let [y (second (:p robot))
+  ;;                                        vy (second (:v robot))
+  ;;                                        ;; _ (doall (println "robot" robot) (flush))
+  ;;                                        t-z (time-to-zero robot height)
+  ;;                                        t-l (time-to-loop robot height)]
+  ;;                                  ]
+  ;;                              {:height height
+  ;;                               :robot robot
+  ;;                               :t-z t-z
+  ;;                               :t-l t-l})]
+  ;;                  (filter #(= 1 (second %)) (frequencies (map #(vector (:t-z %) times)))))
