@@ -52,7 +52,7 @@
 (defn reconstruct-path [came-from current]
   (reverse
    (loop [current current
-          total-path [current]]
+          total-path [[current 0]]]
      (let [[next-pos weight :as next] (get came-from current)]
        (if next
          (recur next-pos (conj total-path next))
@@ -95,7 +95,8 @@
     ;; (println "n" n "open-set" open-set)
     (if (>= n limit)
       :limit-reached
-      (if (not (empty? open-set))
+      (if (empty? open-set)
+        :empty-open-set
         (let [current (first (sort-by #(get f-score %) open-set))]
           (if (= (take 2 current) end)
             (let [path (reconstruct-path came-from current)
@@ -117,6 +118,41 @@
                                 acc)))
                           {:open-set open-set :came-from came-from :g-score g-score :f-score f-score}
                           (neighbors grid current))]
-              (recur open-set came-from g-score f-score (inc n)))))
-        :empty-open-set
-        ))))
+              (recur open-set came-from g-score f-score (inc n)))))))))
+
+(defn print-grid-and-path [grid path]
+  (let [start (:start grid)
+        end (:end grid)
+        path-points (reduce (fn [acc [[x y d] _]]
+                              (assoc acc [x y] (case d
+                                                 :east \>
+                                                 :south \v
+                                                 :west \<
+                                                 :north \^)))
+                            {}
+                            path)]
+   (println
+    (str/join "\n"
+              (for [j (range (:height grid))]
+                (str/join (for [i (range (:width grid))]
+                            (cond 
+                              (= [i j] start) \S
+                              (= [i j] end) \E
+                              (get path-points [i j]) (get path-points [i j])
+                              :else (get grid [i j])))))))))
+
+(defn solve-maze [input limit]
+  (let [grid (parse-input input)
+        {path :path cost :cost :as result} (cheapest-path-a* grid manhattan-distance limit)]
+    ;; (print-grid-and-path grid path)
+    (if (nil? path)
+      result
+      cost)))
+
+
+;; (time (solve-maze small-input 10000))
+;; "Elapsed time: 18.0518 msecs"
+;; 7036
+;; (time (solve-maze large-input 50000))
+;; "Elapsed time: 17390.9261 msecs"
+;; 89460
