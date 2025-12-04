@@ -53,3 +53,33 @@
 ;; (time (count-invalid-ids large-input))
 ;; "Elapsed time: 3455.7184 msecs"
 ;; 28146997880
+
+
+;; Part 2
+;; Invalid ids may consist of any number of repeated sequences.
+(defn is-invalid-id-2? [id]
+  (let [id-string (format "%d" id)
+        id-length (count id-string)]
+    (if (<= id-length 1)
+      false
+      (first (take 1 (filter true?
+                             (for [l (range 1 (inc (quot id-length 2)))]
+                               (if (zero? (rem id-length l))
+                                 (apply = (partition l id-string))
+                                 false)
+                               )))))))
+
+(defn count-invalid-ids-2 [input]
+  (->> (parse-input input)
+       (map #(range (first %) (inc (second %))))
+       (apply concat)
+       (filter is-invalid-id-2?)
+       (apply +)))
+
+
+;; (time (count-invalid-ids-2 small-input))
+;; "Elapsed time: 1.9285 msecs"
+;; 4174379265
+;; (time (count-invalid-ids-2 large-input))
+;; "Elapsed time: 10957.764 msecs"
+;; 40028128307
