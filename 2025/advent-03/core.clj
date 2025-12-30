@@ -113,26 +113,37 @@
 ;; 118981 
 
 (defn largest-x-2 [ns-in x]
-  (let [y (- (count ns-in) x)]
+  (let [window (inc (- (count ns-in) x))]
     (loop [ns ns-in
+           window window
            ns-out []]
-      ;; (println "ns" ns "ns-out" ns-out)
-      ;; (flush)
-      (if (= (count ns-out) y)
-        (to-number (concat ns-out ns))
-        (let [local-ns (take (inc y) ns)
-          ;; _ (println "n" n "local-ns" local-ns)
-          removed (remove-greatest local-ns)
-          _ (println "y" y "ns" ns "local-ns" local-ns "removed" removed "ns-out" ns-out)
-          _ (flush)
-          ]
-          (recur (rest (concat removed (drop y ns))) (conj ns-out (first removed))))))))
-
-(deftest test-small-input-2
-  (is (= 987654321111 (largest-x-2 (to-digits "987654321111111") 12)))
-  (is (= 811111111119 (largest-x-2 (to-digits "811111111111119") 12)))
-  (is (= 434234234278 (largest-x-2 (to-digits "234234234234278") 12)))
-  (is (= 888911112111 (largest-x-2 (to-digits "818181911112111") 12))))
+      ;;      (println "ns" ns "window" window "ns-out" ns-out)
+      ;;      (flush)
+      (if (or (zero? window)
+              (< (count ns) window))
+        (to-number ns-out)
+        (let [current-ns (take window ns)
+              the-max (apply max current-ns)
+              max-index (first (first (filter #(= the-max (second %)) (map-indexed vector ns))))]
+          (recur (subvec (vec ns) (inc max-index))
+                 (- window max-index)
+                 (conj ns-out the-max)))))))
 
 (defn max-joltage-3 [input]
   (apply + (map #(largest-x-2 %1 12) (parse-input input))))
+
+(deftest test-max-joltage-3
+  (is (= 987654321111 (largest-x-2 (to-digits "987654321111111") 12)))
+  (is (= 811111111119 (largest-x-2 (to-digits "811111111111119") 12)))
+  (is (= 434234234278 (largest-x-2 (to-digits "234234234234278") 12)))
+  (is (= 888911112111 (largest-x-2 (to-digits "818181911112111") 12)))
+  (is (= 3121910778619 (max-joltage-3 small-input)))
+  (is (> 172099442692331 (max-joltage-3 large-input))))
+
+;; (time (max-joltage-3 small-input))
+;; "Elapsed time: 2.2208 msecs"
+;; 3121910778619
+
+;; (time (max-joltage-3 large-input))
+;; "Elapsed time: 27.5837 msecs"
+;; 172167155440541
