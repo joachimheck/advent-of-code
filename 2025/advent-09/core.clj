@@ -79,7 +79,7 @@
   (let [points (conj points (first points))]
     (partition 2 1 points)))
 
-(defn find-green [red]
+(defn find-green-lines [red]
   (let [red (conj red (first red))
         pairs (partition 2 1 red)]
     (loop [pairs pairs
@@ -119,11 +119,27 @@
         dir-ab (get-direction a b)
         dir-bc (get-direction b c)
         start-turn (get-turn dir-ab dir-bc)
-        x-fn (cond (and (>= k i) (>= l j)) (fn [[x y]] [(dec x) (dec y)])
-                   (and (>= k i) (< l j)) (fn [[x y]] [(inc x) (inc y)])
-                   (and (< k i) (>= l j)) (fn [[x y]] [(dec x) (dec y)])
-                   (and (< k i) (< l j)) (fn [[x y]] [(dec x) (dec y)]))]
+        x-fn (if (= :r shape-dir)
+               (cond (and (>= k i) (>= l j)) (fn [[x y]] [(dec x) (inc y)])
+                     (and (>= k i) (< l j)) (fn [[x y]] [(inc x) (inc y)])
+                     (and (< k i) (>= l j)) (fn [[x y]] [(dec x) (dec y)])
+                     (and (< k i) (< l j)) (fn [[x y]] [(inc x) (dec y)]))
+               (cond (and (>= k i) (>= l j)) (fn [[x y]] [(inc x) (dec y)])
+                     (and (>= k i) (< l j)) (fn [[x y]] [(dec x) (dec y)])
+                     (and (< k i) (>= l j)) (fn [[x y]] [(inc x) (inc y)])
+                     (and (< k i) (< l j)) (fn [[x y]] [(dec x) (inc y)])))
+        ]
     (x-fn (first red))))
+
+(deftest test-inside-point
+  (is (= [1 1] (inside-point [[0 0] [2 0] [2 2] [0 2]] :r)))
+  (is (= [1 1] (inside-point [[2 0] [2 2] [0 2] [0 0]] :r)))
+  (is (= [1 1] (inside-point [[2 2] [0 2] [0 0] [2 0]] :r)))
+  (is (= [1 1] (inside-point [[0 2] [0 0] [2 0] [2 2]] :r)))
+  (is (= [1 1] (inside-point [[0 0] [0 2] [2 2] [2 0]] :l)))
+  (is (= [1 1] (inside-point [[0 2] [2 2] [2 0] [0 0]] :l)))
+  (is (= [1 1] (inside-point [[2 2] [2 0] [0 0] [0 2]] :l)))
+  (is (= [1 1] (inside-point [[2 0] [0 0] [0 2] [2 2]] :l))))
 
 (defn find-inside [red]
   (let [looped-red (conj red (first red))
@@ -139,3 +155,17 @@
                            (update turns (get-turn current next) inc)))))
         shape-dir (if (> (:r turns) (:l turns)) :r :l)]
     (inside-point red shape-dir)))
+
+(defn adjacent [[x y]]
+  [[x (inc y)] [x (dec y)] [(inc x) y] [(dec x) y]])
+
+(defn fill [red]
+  (let [lines (set (find-green-lines red))]
+    (loop [current [(find-inside red)]
+           filled #{}]
+      (if (empty? current)
+        {:red red :green (concat lines filled)}
+        (recur (remove filled (remove lines (mapcat adjacent current)))
+               (set (concat filled current)))))))
+
+           
