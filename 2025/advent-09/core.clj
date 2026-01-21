@@ -63,7 +63,7 @@
 
 
 ;; Part 2
-;; Find the largest rectangle entirely within the bounds of the shape.
+;; Find the largest red-cornered rectangle entirely within the bounds of the shape.
 (defn draw [red green]
   (let [[xmin ymin xmax ymax :as bounds] [(apply min (map first red)) (apply min (map second red))
                                           (apply max (map first red)) (apply max (map second red))]]
@@ -101,9 +101,17 @@
 
 (defn get-direction [[x y] [i j]]
   (cond (and (= x i) (>= j y)) :s
-                                (and (= x i) (< j y)) :n
-                                (and (= y j) (>= i x)) :e
-                                (and (= y j) (< i x)) :w))
+        (and (= x i) (< j y)) :n
+        (and (= y j) (>= i x)) :e
+        (and (= y j) (< i x)) :w))
+
+(def directions [:e :s :w :n])
+
+(defn right-turn [d]
+  (second (drop-while #(not= % d) (flatten (repeat 2 directions)))))
+
+(defn opposite [d]
+  (d {:e :w :s :n :w :e :n :s}))
 
 (defn get-turn [current next]
   (if (or (and (= current :e) (= next :s))
@@ -168,4 +176,37 @@
         (recur (remove filled (remove lines (mapcat adjacent current)))
                (set (concat filled current)))))))
 
-           
+
+(defn line-segments [red]
+  (map (fn [[[i j :as a] [k l :as b]]]
+         (let [dir-ab (get-direction a b)
+               right (right-turn dir-ab)]
+           [a b right]))
+       (partition 2 1 (conj red (first red)))))
+
+(defn inside-dirs [segments]
+  (let [dirs (mapv last segments)
+        turns (map #(apply get-turn %) (partition 2 1 (conj dirs (first dirs))))
+        turn-freqs (into {:r 0 :l 0} (frequencies turns))]
+    (if (> (:r turn-freqs) (:l turn-freqs))
+      segments
+      (map (fn [[a b d]] [a b (opposite d)]) segments))))
+
+(deftest test-inside-dirs
+  (is (= :s (last (first (inside-dirs (line-segments [[0 0] [2 0] [2 2] [0 2]]))))))
+  (is (= :e (last (first (inside-dirs (line-segments [[0 0] [0 2] [2 2] [2 0]])))))))
+
+(defn intersections [[[lx1 ly1] [lx2 ly2] :as line] segments]
+  (remove nil?
+          (for [[[sx1 sy1] [sx2 sy2] :as segment] segments]
+            (if (or (and (= ly1 ly2) (= sx1 sx2) (<= sy1 ly1 sy2) (<= lx1 sx1 lx2))
+                    (and (= lx1 lx2) (= sy1 sy2) (<= sx1 lx1 sx2) (<= ly1 sy1 ly2))
+                    (and (= ly1 ly2 sy1 sy2) (or (<= sx1 lx1 sx2) (<= sx1 lx2 sx2)))
+                    (and (= lx1 lx2 sx1 sx2) (or (<= sy1 ly1 sy2) (<= sy1 ly2 sy2))))
+              [line segment]))))
+
+(defn rect-lines [[[x y] [i j]]]
+  [[[x y] [i y]]
+   [[i y] [i j]]
+   [[i j] [x j]]
+   [[x j] [x y]]])
