@@ -39,7 +39,7 @@
       (math/pow (- x i) 2))))
 
 (defn rect-area [[x y] [i j]]
-  (abs (* (inc (- x i)) (inc (- y j)))))
+  (* (inc (abs (- x i))) (inc (abs (- y j)))))
 
 (defn pairs [points]
   (loop [points points
@@ -196,13 +196,41 @@
   (is (= :s (last (first (inside-dirs (line-segments [[0 0] [2 0] [2 2] [0 2]]))))))
   (is (= :e (last (first (inside-dirs (line-segments [[0 0] [0 2] [2 2] [2 0]])))))))
 
+(defn perpendicular [[[lx1 ly1] [lx2 ly2] :as line] [[sx1 sy1] [sx2 sy2] :as segment]]
+  (or (and (= lx1 lx2) (not= sx1 sx2))
+      (and (not= lx1 lx2) (= sx1 sx2))))
+
+(defn between? [n a b]
+  (if (< a b) (<= a n b) (<= b n a))
+  ;; (if (< a b) (< a n b) (< b n a))
+  )
+
+(defn intersect? [[[a b] [c d] :as s1] [[e f] [g h] :as s2]]
+  (or (and (= a c) (between? f b d) (between? f b d))
+      (and (= b d) (between? b f h) (between? e a c))))
+
+(defn intersection-point [[[a b] [c d] :as s1] [[e f] [g h] :as s2]]
+  (cond (and (= a c) (= f h)) [f c]
+        (and (= b d) (= e g)) [e b]))
+
+(defn in-segment? [[x y] [p1 p2]]
+  (let [[[sx1 sy1] [sx2 sy2]] (sort [p1 p2])]
+    (if (= x sx1 sx2) (<= sy1 y sy2)
+        (<= sx1 x sx2))))
+
+(defn adjacent-points [[[a b] [c d] :as line] segment]
+  (let [[x y :as ip] (intersection-point line segment)
+        raw-adjacents (if (= a c) [[x (inc y)] [x (dec y)]]
+                          [[(inc x) y] [(dec x) y]])
+        adjacents (filter #(in-segment? % line) raw-adjacents)]
+    adjacents))
+
+;; TODO: check whether the two (or fewer) adjacent points are on the inside side of their respective segments.
+
 (defn intersections [[[lx1 ly1] [lx2 ly2] :as line] segments]
-  (remove nil?
+  (remove empty?
           (for [[[sx1 sy1] [sx2 sy2] :as segment] segments]
-            (if (or (and (= ly1 ly2) (= sx1 sx2) (<= sy1 ly1 sy2) (<= lx1 sx1 lx2))
-                    (and (= lx1 lx2) (= sy1 sy2) (<= sx1 lx1 sx2) (<= ly1 sy1 ly2))
-                    (and (= ly1 ly2 sy1 sy2) (or (<= sx1 lx1 sx2) (<= sx1 lx2 sx2)))
-                    (and (= lx1 lx2 sx1 sx2) (or (<= sy1 ly1 sy2) (<= sy1 ly2 sy2))))
+            (if (intersect? line segment)
               [line segment]))))
 
 (defn rect-lines [[[x y] [i j]]]
@@ -210,3 +238,29 @@
    [[i y] [i j]]
    [[i j] [x j]]
    [[x j] [x y]]])
+
+(defn find-largest-interior-rectangle [input]
+       (let [red (parse-input input)
+             segments (line-segments red)
+             corners (pairs red)
+             rects (map (fn [corners]
+                          (let [result (assoc {} :corners corners :lines (rect-lines corners))
+                                result (assoc result :intersections (remove empty? (map #(intersections % segments) (:lines result))))]
+                            result))
+                        corners)
+             options (filter #(empty? (:intersections %)) rects)]
+         (last (sort-by first (map #(list (apply rect-area %) %) (map :corners options))))
+         ;; rects
+         ))
+
+;;  01234567890123
+;; 0..............
+;; 1.......#XXX#..
+;; 2.......X...X..
+;; 3..#XXXX#...X..
+;; 4..X........X..
+;; 5..#XXXXXX#.X..
+;; 6.........X.X..
+;; 7.........#X#..
+;; 8..............
+
