@@ -27,7 +27,7 @@
   (->> input
        (read-lines)
        (map #(str/split % #","))
-       (mapv #(map parse-long %))))
+       (mapv #(mapv parse-long %))))
     
 
 ;; Part 1
@@ -48,7 +48,16 @@
       pairs
       (let [f (first points)
             r (rest points)]
-        (recur r (concat pairs (map #(list f %) r)))))))
+        (recur r (concat pairs (map #(vector f %) r)))))))
+
+(defn cross [as bs]
+  (loop [as as
+         pairs []]
+    (if (empty? as)
+      pairs
+      (let [a (first as)
+            a-rest (rest as)]
+        (recur a-rest (concat pairs (map #(vector a %) bs)))))))
 
 (defn find-largest-rectangle [input]
   (last (last (sort-by last (map (fn [[a b]] (list a b (rect-area a b))) (pairs (parse-input input)))))))
@@ -200,13 +209,14 @@
   (or (and (= lx1 lx2) (not= sx1 sx2))
       (and (not= lx1 lx2) (= sx1 sx2))))
 
-(defn between? [n a b]
-  (if (< a b) (<= a n b) (<= b n a))
-  ;; (if (< a b) (< a n b) (< b n a))
-  )
+(defn between-inclusive? [n a b]
+  (if (< a b) (<= a n b) (<= b n a)))
+
+(defn between-exclusive? [n a b]
+  (if (< a b) (< a n b) (< b n a)))
 
 (defn intersect? [[[a b] [c d] :as s1] [[e f] [g h] :as s2]]
-  (or (and (= a c) (between? f b d) (between? f b d))
+  (or (and (= a c) (between? f b d) (between? a e g))
       (and (= b d) (between? b f h) (between? e a c))))
 
 (defn intersection-point [[[a b] [c d] :as s1] [[e f] [g h] :as s2]]
@@ -225,13 +235,11 @@
         adjacents (filter #(in-segment? % line) raw-adjacents)]
     adjacents))
 
-;; TODO: check whether the two (or fewer) adjacent points are on the inside side of their respective segments.
-
 (defn intersections [[[lx1 ly1] [lx2 ly2] :as line] segments]
   (remove empty?
           (for [[[sx1 sy1] [sx2 sy2] :as segment] segments]
             (if (intersect? line segment)
-              [line segment]))))
+              {:line line :segment segment}))))
 
 (defn rect-lines [[[x y] [i j]]]
   [[[x y] [i y]]
@@ -239,19 +247,55 @@
    [[i j] [x j]]
    [[x j] [x y]]])
 
+(defn crossing? [[[a b] [c d] :as s1] [[e f] [g h] :as s2]]
+  (or (and (= a c) (= f h) (between-exclusive? f b d) (between-exclusive? a e g))
+      (and (= b d) (= e g) (between-exclusive? b f h) (between-exclusive? e a c))))
+
+(defn overlapping? [[[a b] [c d] :as s1] [[e f] [g h] :as s2]]
+  (or (and (= a c e g) (or (between-inclusive? b f h) (between-inclusive? d f h)))
+      (and (= b d f h) (or (between-inclusive? a e g) (between-inclusive? c e g)))))
+
+(defn adjacent-dir [[x y :as p] dir]
+  (case dir
+    :e [(inc x) y]
+    :s [x (inc y)]
+    :w [(dec x) y]
+    :n [x (dec y)]))
+
+(defn dir-to [[x y :as a] [i j :as b]]
+  (cond (and (= x i) (> j y)) :s
+        (and (= x i) (< j y)) :n
+        (and (= y j) (> i x)) :e
+        (and (= y j) (< i x)) :w))
+        
+(defn other-point [p [a b]]
+  (if (= p a) b a))
+
+;; TODO: Find the outside points around each corner, then determine whether overlapping
+;; lines travel through the outside points.
+
 (defn find-largest-interior-rectangle [input]
-       (let [red (parse-input input)
-             segments (line-segments red)
-             corners (pairs red)
-             rects (map (fn [corners]
-                          (let [result (assoc {} :corners corners :lines (rect-lines corners))
-                                result (assoc result :intersections (remove empty? (map #(intersections % segments) (:lines result))))]
-                            result))
-                        corners)
-             options (filter #(empty? (:intersections %)) rects)]
-         (last (sort-by first (map #(list (apply rect-area %) %) (map :corners options))))
-         ;; rects
-         ))
+  (let [red (parse-input input)
+        segments (line-segments red)
+        corners (pairs red)
+        rectangles (map #(assoc {} :corners % :lines (rect-lines %) :area (apply rect-area %)) corners)
+        rectangle-crossings (map (fn [{:keys [corners lines] :as rectangle}]
+                                   (let [with-crossings (assoc rectangle :any-crossings?
+                                                               (not (empty? (filter #(true? (:crossing? %))
+                                                                                    (map (fn [[l s]] {:line l :segment s :crossing? (crossing? l s)}) (cross lines segments))))))
+                                         with-overlaps (assoc with-crossings :any-overlaps?
+                                                              (not (empty? (filter #(true? (:overlapping? %))
+                                                                                   (map (fn [[l s]] {:line l :segment s :overlapping? (overlapping? l s)}) (cross lines segments))))))]
+                                     with-overlaps))
+                                 rectangles)
+        test-corners [[7 1] [11 7]]
+        test-rect (rect-lines test-corners)
+        crossing-map (filter #(true? (:crossing? %))
+                             (map (fn [[l s]] {:line l :segment s :crossing? (crossing? l s)}) (cross test-rect segments)))
+        ]
+    ;; (remove :any-overlaps? (remove :any-crossings? rectangle-crossings))
+    rectangle-crossings
+    ))
 
 ;;  01234567890123
 ;; 0..............
