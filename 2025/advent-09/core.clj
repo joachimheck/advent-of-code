@@ -50,6 +50,12 @@
             r (rest points)]
         (recur r (concat pairs (map #(vector f %) r)))))))
 
+(defn valid-corners? [[x y] [i j]]
+  (and (not= x i) (not= y j)))
+
+(defn find-rectangles [points]
+  (filter #(apply valid-corners? %) (pairs points)))
+
 (defn cross [as bs]
   (loop [as as
          pairs []]
@@ -225,8 +231,9 @@
 
 (defn in-segment? [[x y] [p1 p2]]
   (let [[[sx1 sy1] [sx2 sy2]] (sort [p1 p2])]
-    (if (= x sx1 sx2) (<= sy1 y sy2)
-        (<= sx1 x sx2))))
+    (cond (= x sx1 sx2) (<= sy1 y sy2)
+          (= y sy1 sy2) (<= sx1 x sx2)
+          :else false)))
 
 (defn adjacent-points [[[a b] [c d] :as line] segment]
   (let [[x y :as ip] (intersection-point line segment)
@@ -271,31 +278,66 @@
 (defn other-point [p [a b]]
   (if (= p a) b a))
 
+(defn outside-points [[a b :as o] [x y :as p] [c d :as q]]
+  (if (or (= a c) (= b d))
+    '()
+    (list (adjacent-dir p (dir-to o p))
+          (adjacent-dir p (dir-to q p)))))
+
+(defn find-outside-points [segments]
+  (let [looped (concat (list (last segments)) segments (list (first segments)))
+        grouped (partition 2 1 looped)]
+    (into {} (remove #(empty? (second %))
+                     (map (fn [[[a b d1 :as s1] [_ c d2 :as s2]]]
+                            (vector b
+                                    (remove nil?
+                                            (list (if (not= d2 (dir-to a b)) (adjacent-dir b (dir-to a b)))
+                                                  (if (not= d1 (dir-to c b)) (adjacent-dir b (dir-to c b)))))))
+                          grouped)))))
+
 ;; TODO: Find the outside points around each corner, then determine whether overlapping
 ;; lines travel through the outside points.
+
+(defn has-crossing? [rect-lines segments]
+  (first
+   (filter true?
+           (for [l rect-lines
+                 s segments]
+             (crossing? l s)))))
+
+(deftest test-has-crossing?
+  (is (false? (boolean (has-crossing? [[[0 0] [2 0]]] [[[0 0] [0 2]]]))))
+  (is (true? (boolean (has-crossing? [[[0 0] [2 0]]] [[[1 -1] [1 2]]]))))
+  (is (false? (boolean (has-crossing? [[[0 0] [2 0]]] [[[0 -1] [0 2]]])))))
+
+(defn has-excursion? [rect-lines outside-points]
+  (first
+   (filter true?
+           (for [p outside-points
+                 l rect-lines]
+             (in-segment? p l)))))
 
 (defn find-largest-interior-rectangle [input]
   (let [red (parse-input input)
         segments (line-segments red)
-        corners (pairs red)
+        corners (find-rectangles red)
+        outside-points (apply concat (vals (find-outside-points segments)))
         rectangles (map #(assoc {} :corners % :lines (rect-lines %) :area (apply rect-area %)) corners)
-        rectangle-crossings (map (fn [{:keys [corners lines] :as rectangle}]
-                                   (let [with-crossings (assoc rectangle :any-crossings?
-                                                               (not (empty? (filter #(true? (:crossing? %))
-                                                                                    (map (fn [[l s]] {:line l :segment s :crossing? (crossing? l s)}) (cross lines segments))))))
-                                         with-overlaps (assoc with-crossings :any-overlaps?
-                                                              (not (empty? (filter #(true? (:overlapping? %))
-                                                                                   (map (fn [[l s]] {:line l :segment s :overlapping? (overlapping? l s)}) (cross lines segments))))))]
-                                     with-overlaps))
-                                 rectangles)
-        test-corners [[7 1] [11 7]]
-        test-rect (rect-lines test-corners)
-        crossing-map (filter #(true? (:crossing? %))
-                             (map (fn [[l s]] {:line l :segment s :crossing? (crossing? l s)}) (cross test-rect segments)))
-        ]
-    ;; (remove :any-overlaps? (remove :any-crossings? rectangle-crossings))
-    rectangle-crossings
-    ))
+        without-crossings (remove (fn [{:keys [lines] :as rectangle}]
+                                    (has-crossing? lines segments))
+                                  rectangles)
+        without-excursions (remove (fn [{:keys [lines] :as rectangle}]
+                                     (has-excursion? lines outside-points))
+                                   without-crossings)]
+    (:area (last (sort-by :area without-excursions)))))
+
+;; (time (find-largest-interior-rectangle small-input))
+;; "Elapsed time: 6.8445 msecs"
+;; 24
+;; (time (find-largest-interior-rectangle large-input))
+;; "Elapsed time: 36414.7878 msecs"
+;; 1560475800
+
 
 ;;  01234567890123
 ;; 0..............
