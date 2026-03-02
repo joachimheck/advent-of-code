@@ -213,12 +213,37 @@
 
 ;; It's very slow. I'm thinking A*.
 
+(defn get-applicable-button-numbers [buttons joltage-requirements joltages]
+  (let [invalid-indices (->> joltage-requirements
+                             (map - joltages)
+                             (map-indexed list)
+                             (filter #(zero? (second %)))
+                             (map first)
+                             (set))]
+    (->> buttons
+         (map-indexed list)
+         (remove #(some invalid-indices (second %)))
+         (map first))))
+
 (defn h-sort [pos goal]
   ;; (println "h-sort pos" pos "goal" goal)
   (->>
    (map list goal pos)
    (map #(- (first %) (second %)))
    (apply +)))
+
+(defn unsolvable? [{:keys [joltage-requirements wiring-schematics] :as device} joltages]
+  (let [remaining-joltages (map-indexed list (map - joltage-requirements joltages))
+        required-joltage-numbers (set (map first (remove #(zero? (second %)) remaining-joltages)))
+        available-buttons (filter #(every? required-joltage-numbers %) wiring-schematics)
+        available-joltage-numbers (set (distinct (flatten available-buttons)))
+
+        ;; _ (println "remaining-joltages" remaining-joltages
+        ;;            "required-joltage-numbers" required-joltage-numbers
+        ;;            "available-buttons" available-buttons
+        ;;            "available-joltage-numbers" available-joltage-numbers)
+]
+    (not= available-joltage-numbers required-joltage-numbers)))
 
 (defn shortest-path-to-joltage-a* [{:keys [joltage-requirements wiring-schematics] :as device} max-iterations sort-fn]
   (let [goal joltage-requirements
@@ -233,23 +258,26 @@
            g-scores {start-joltages 0}
            iterations 0]
       ;; (println "open-set" open-set "froms" froms "f-scores" f-scores "g-scores" g-scores "iterations" iterations)
-      (flush)
+      ;; (flush)
       (cond (empty? open-set)
-            :failure-no-open-nodes
+            (list :failure-no-open-nodes :iterations iterations)
             (= iterations max-iterations)
-            (throw (Exception. (str (list :fail-over-time iterations))))
+            (throw (Exception. (str (list :fail-over-time iterations :froms-size (count froms)
+                                          :current (first (first (sort-by second (map #(list % (get f-scores (:joltages %))) open-set))))))))
             :else
             (let [{:keys [button-presses joltages] :as current} (first (first (sort-by second (map #(list % (get f-scores (:joltages %))) open-set))))]
               (if (= joltages goal)
                 (assoc {} :device device :button-presses button-presses :iterations iterations)
                 (let [open-set (into #{} (remove #{current} open-set))
                       ;; _ (println "button-numbers" button-numbers "button-preses" button-presses "current" current)
+                      button-numbers (get-applicable-button-numbers buttons goal joltages)
                       neighbors (map (fn [b]
                                        {:button-presses (update button-presses b inc)
                                         :joltages (press-button-joltage joltages wiring-schematics b)})
                                      button-numbers)
                       ;; _ (println "neighbors 1" neighbors)
                       neighbors (remove (fn [{:keys [button-presses joltages]}] (over-joltage? joltages joltage-requirements)) neighbors)
+                      neighbors (remove #(unsolvable? % joltages) neighbors)
                       ;; _ (println "current" current "g-score" (get g-scores (:joltages current)) "g-scores" g-scores "neighbors" neighbors)
                       tentative-g-score (inc (get g-scores (:joltages current)))]
                   (let [{new-open-set :open-set new-froms :froms new-f-scores :f-scores new-g-scores :g-scores :as reduce-result}
@@ -281,3 +309,69 @@
 
 
 ;; 1822 - too low!
+
+(defn get-max-presses [button joltages joltage-requirements]
+  (let [remaining-joltages (map-indexed list (map - joltage-requirements joltages))
+        applicable-joltages (filter #(some (set (list (first %))) button) remaining-joltages)]
+    (second (first (sort-by second applicable-joltages)))))
+
+(defn press-n-times [joltages button n]
+  (reduce (fn [acc b]
+            (update acc b #(+ % n)))
+          joltages
+          button))
+
+(defn shortest-path-to-joltage-maxing [{:keys [joltage-requirements wiring-schematics] :as device} max-iterations]
+  (let [goal joltage-requirements
+        buttons (map-indexed list wiring-schematics)
+        start-buttons (vec (repeat (count buttons) 0))
+        start-joltages (vec (repeat (count goal) 0))
+        start {:button-presses start-buttons :joltages start-joltages}]
+    ;; each state is: pressed button counts, joltage
+    (loop [open-set [{:button-presses (into {} (map vector (map first buttons) start-buttons))
+                      :joltages start-joltages}]
+           iterations 0
+           solutions []]
+      (cond (> iterations max-iterations)
+            (list :max-iterations :open-set-size (count open-set))
+            (empty? open-set)
+            (let [solutions-and-presses (map (fn [s] (assoc {} :button-presses (apply + (vals (:button-presses s))) :solution s)) solutions)
+                  first-solution (first (sort-by :button-presses solutions-and-presses))]
+              (if first-solution first-solution (list :no-solution device)))
+            :else
+            (let [{:keys [button-presses joltages] :as current} (first open-set)
+                  new-states (remove nil?
+                                     (for [[n b] buttons]
+                                       (let [max-presses (get-max-presses b joltages joltage-requirements)]
+                                         (if (> max-presses 0)
+                                           {:button-presses (assoc button-presses n max-presses)
+                                            :joltages (press-n-times joltages b max-presses)})
+                                         )))]
+                ;; (println "new-states" new-states)
+              (recur (concat (remove #{current} open-set) new-states)
+                     (inc iterations)
+                     (if (= (:joltages current) joltage-requirements)
+                       (conj solutions current)
+                       solutions)))))))
+
+(defn get-configurations-maxing [devices]
+  (map (fn [device] (shortest-path-to-joltage-maxing device 100000)) devices))
+
+(defn quickest-configuration-maxing [input]
+  (->> input
+       (parse-input)
+       (get-configurations-maxing)
+       ;; (map :button-presses)
+       ;; (apply +)
+       ))
+
+
+
+;; TODO: I'm thinking maybe I need to solve simultaneous equations
+(defn extract-equations [{:keys [joltage-requirements wiring-schematics] :as device}]
+  (let [buttons wiring-schematics]
+    (sort-by #(count (last %))
+             (for [n (range (count joltage-requirements))]
+               (list n (get joltage-requirements n) (filter #(some #{n} %) buttons))))))
+      
+
