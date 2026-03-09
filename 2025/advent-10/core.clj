@@ -369,9 +369,34 @@
 
 ;; TODO: I'm thinking maybe I need to solve simultaneous equations
 (defn extract-equations [{:keys [joltage-requirements wiring-schematics] :as device}]
-  (let [buttons wiring-schematics]
+  (let [buttons wiring-schematics
+        named-buttons (into {} (map vector buttons (map #(str (char %)) (range (int \a) (+ (count buttons) (int \a))))))]
     (sort-by #(count (last %))
-             (for [n (range (count joltage-requirements))]
-               (list n (get joltage-requirements n) (filter #(some #{n} %) buttons))))))
+                   (for [n (range (count joltage-requirements))]
+                     (list (get joltage-requirements n) (map #(get named-buttons %) (filter #(some #{n} %) buttons)))))))
       
+(defn negativize [xs]
+  (for [x xs]
+    (if (string? x)
+      (str/join ["-" x])
+      (- x))))
 
+(defn simplify [equations v]
+  (let [variables (distinct (flatten (map second equations)))
+        eq (first (filter #(some #{v} (second %)) equations))
+        _ (println "eq" eq)
+        sub (list (first (second eq)) (conj (negativize (rest (second eq))) (first eq)))
+        subbed (for [e (rest equations)]
+                 (list (first e) (flatten (replace {(first sub) (rest sub)} (second e)))))
+        simplified {:sub sub
+                        :simplified (for [e subbed]
+                                      (let [rhs (second e)]
+                                        (list (first e)
+                                              (reduce (fn [acc v]
+                                                        (if (and (some #{v} acc) (some #{(str/join ["-" v])} acc))
+                                                          (remove (set (list v (str/join ["-" v]))) acc)
+                                                          acc))
+                                                      rhs
+                                                      variables))))}
+        ]
+    simplified))
