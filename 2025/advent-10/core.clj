@@ -373,30 +373,64 @@
         named-buttons (into {} (map vector buttons (map #(str (char %)) (range (int \a) (+ (count buttons) (int \a))))))]
     (sort-by #(count (last %))
                    (for [n (range (count joltage-requirements))]
-                     (list (get joltage-requirements n) (map #(get named-buttons %) (filter #(some #{n} %) buttons)))))))
+                     (assoc {}
+                            :lhs (get joltage-requirements n)
+                            :rhs (map #(get named-buttons %) (filter #(some #{n} %) buttons)))))))
       
 (defn negativize [xs]
+  ;; (println "negativize" xs)
   (for [x xs]
     (if (string? x)
-      (str/join ["-" x])
+      (if (= \- (first x))
+        (str (first (rest x)))
+        (str/join ["-" x]))
       (- x))))
 
-(defn simplify [equations v]
-  (let [variables (distinct (flatten (map second equations)))
-        eq (first (filter #(some #{v} (second %)) equations))
-        _ (println "eq" eq)
-        sub (list (first (second eq)) (conj (negativize (rest (second eq))) (first eq)))
-        subbed (for [e (rest equations)]
-                 (list (first e) (flatten (replace {(first sub) (rest sub)} (second e)))))
+(defn remove-opposites [equation variables]
+  ;; (println "remove-opposites" equation variables)
+  (reduce (fn [acc x]
+                  (if (and (some #{x} acc) (some #{(str/join ["-" x])} acc))
+                    (let [;; _ (println "dropping" x)
+                          without-v (concat (take-while #(not= x %) acc) (rest (drop-while #(not= x %) acc)))
+                          ;; _ (println "without-v" without-v)
+                          neg-x (str/join ["-" x])
+                          without-neg (concat (take-while #(not= neg-x %) without-v) (rest (drop-while #(not= neg-x %) without-v)))]
+                      without-neg)
+                    acc))
+                equation
+                variables))
+
+(defn sum-digits [equation]
+  (let [{:keys [sum vs]}
+        (reduce (fn [acc v]
+                  (if (number? v)
+                    {:sum (+ v (:sum acc))
+                     :vs (:vs acc)}
+                    {:sum (:sum acc)
+                     :vs (conj (:vs acc) v)}))
+                {:sum 0 :vs []}
+                equation)]
+    (conj vs sum)))
+    
+
+(defn simplify [equations v old-sub]
+  (let [variables (distinct (flatten (map :rhs equations)))
+        eq (first (filter #(some #{v} (:rhs %)) equations))
+        ;; _ (println "v" v "eq" eq ":" equations)
+        sub (let [substitution (sum-digits (concat (negativize (remove #{v} (:rhs eq))) (negativize (list (:lhs eq)))))]
+              (assoc old-sub
+                     v substitution
+                     (str/join ["-" v]) (negativize substitution)))
+        subbed (for [e equations]
+                 (update e :rhs #(flatten (replace sub %))))
+        ;; _ (println "sub" sub "subbed" subbed)
         simplified {:sub sub
-                        :simplified (for [e subbed]
-                                      (let [rhs (second e)]
-                                        (list (first e)
-                                              (reduce (fn [acc v]
-                                                        (if (and (some #{v} acc) (some #{(str/join ["-" v])} acc))
-                                                          (remove (set (list v (str/join ["-" v]))) acc)
-                                                          acc))
-                                                      rhs
-                                                      variables))))}
+                    :simplified (for [e subbed]
+                                  (assoc {}
+                                         :lhs (:lhs e)
+                                         :rhs (sum-digits (remove-opposites (:rhs e) variables))))}
         ]
     simplified))
+
+;; TODO: Look for simplified equations that equate a variable to a number,
+;; then substitute those back through the rest of the equations.
