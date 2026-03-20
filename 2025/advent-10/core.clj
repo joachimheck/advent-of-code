@@ -374,7 +374,7 @@
     (sort-by #(count (last %))
                    (for [n (range (count joltage-requirements))]
                      (assoc {}
-                            :lhs (get joltage-requirements n)
+                            :lhs (list (get joltage-requirements n))
                             :rhs (map #(get named-buttons %) (filter #(some #{n} %) buttons)))))))
       
 (defn negativize [xs]
@@ -386,19 +386,8 @@
         (str/join ["-" x]))
       (- x))))
 
-(defn remove-opposites [equation variables]
-  ;; (println "remove-opposites" equation variables)
-  (reduce (fn [acc x]
-                  (if (and (some #{x} acc) (some #{(str/join ["-" x])} acc))
-                    (let [;; _ (println "dropping" x)
-                          without-v (concat (take-while #(not= x %) acc) (rest (drop-while #(not= x %) acc)))
-                          ;; _ (println "without-v" without-v)
-                          neg-x (str/join ["-" x])
-                          without-neg (concat (take-while #(not= neg-x %) without-v) (rest (drop-while #(not= neg-x %) without-v)))]
-                      without-neg)
-                    acc))
-                equation
-                variables))
+(defn get-variables [{:keys [lhs rhs] :as eq}]
+  (distinct (map #(str/replace % #"\-" "") (filter string? (concat (:lhs eq) (:rhs eq))))))
 
 (defn sum-digits [equation]
   (let [{:keys [sum vs]}
@@ -412,25 +401,95 @@
                 equation)]
     (conj vs sum)))
     
+(defn normalize [eq]
+  (if (= [0] (:lhs eq))
+    eq
+     {:lhs [0]
+      :rhs (sum-digits (reduce (fn [acc v]
+                                 (concat acc (negativize (list v))))
+                               (:rhs eq)
+                               (:lhs eq)))}))
+
+(deftest test-normalize
+  (is (= {:lhs [0] :rhs ["y" "-x" 2]} (normalize {:lhs [1 "x"] :rhs [3 "y"]}))))
+
+(defn remove-opposites [equation]
+  ;; (println "remove-opposites" equation (get-variables equation))
+  (let [normalized (normalize equation)]
+    {:lhs [0]
+     :rhs (reduce (fn [acc x]
+                    (if (and (some #{x} acc) (some #{(str/join ["-" x])} acc))
+                      (let [;; _ (println "dropping" x)
+                            without-v (concat (take-while #(not= x %) acc) (rest (drop-while #(not= x %) acc)))
+                            ;; _ (println "without-v" without-v)
+                            neg-x (str/join ["-" x])
+                            without-neg (concat (take-while #(not= neg-x %) without-v) (rest (drop-while #(not= neg-x %) without-v)))]
+                        without-neg)
+                      acc))
+                  (:rhs normalized)
+                  (get-variables equation))}))
+
+(deftest test-remove-opposites
+  (is (= {:lhs [0] :rhs [0]} (remove-opposites {:lhs [19], :rhs ["-e" 19 "e"]})))
+  (is (= {:lhs [0] :rhs ["c" "-a" 19]} (remove-opposites {:lhs ["a"], :rhs ["-b" 19 "b" "c"]}))))
+
+(defn uses-variable? [eq v]
+  (let [neg-v (str/join ["-" v])]
+        (or (some #{v neg-v} (:lhs eq))
+            (some #{v neg-v} (:rhs eq)))))
+
+(deftest test-uses-variable?
+  (is (= "a" (uses-variable? {:rhs [-19] :lhs ["a" "e"]} "a")))
+  (is (= nil (uses-variable? {:rhs [-19] :lhs ["a" "e"]} "c"))))
+
+(defn remove-zero [{:keys [lhs rhs] :as eq}]
+  (let [new-lhs (remove #(= 0 %) lhs)
+        new-rhs (remove #(= 0 %) rhs)]
+    {:lhs (if (empty? new-lhs) [0] new-lhs)
+     :rhs (if (empty? new-rhs) [0] new-rhs)}))
+
+(defn move-v-to-lhs [eq v]
+  (let [eq (remove-zero (remove-opposites eq))
+        neg-v (str/join ["-" v])
+        v-from-rhs (filter #{v neg-v} (:rhs eq))
+        not-v-from-rhs (remove #{v neg-v} (:rhs eq))
+        v-from-lhs (filter #{v neg-v} (:lhs eq))
+        not-v-from-lhs (remove #{v neg-v} (:lhs eq))
+        lhs (concat v-from-lhs (negativize v-from-rhs))
+        rhs (sum-digits (concat not-v-from-rhs (negativize not-v-from-lhs)))
+        _ (if (> (count lhs) 1) (throw (Exception. (format "Normalization failure lhs: %s rhs: %s" lhs rhs))))]
+    (remove-zero
+     {:lhs (if (some #{neg-v} lhs) (negativize lhs) lhs)
+      :rhs (if (some #{neg-v} lhs) (negativize rhs) rhs)})))
+
+(deftest test-move-v-to-lhs
+  (is (= {:lhs (list "a") :rhs (list "b")}
+         (move-v-to-lhs {:lhs ["b"] :rhs ["a"]} "a")))
+  (is (= {:lhs (list "a") :rhs (list "b" 19)}
+         (move-v-to-lhs {:lhs ["b" 19] :rhs ["a"]} "a"))))
+
+(defn count-variables [eq]
+  (count (get-variables eq)))
+
+(defn has-variable? [eq v]
+  (some #{v} (get-variables eq)))
+
+(defn get-simplest [equations v]
+  (let [relevant-eqs (filter #(has-variable? % v) equations)
+        sized-eqs (map #(list (count-variables %) %) relevant-eqs)]
+    (second (first (sort-by first sized-eqs)))))
 
 (defn simplify [equations v old-sub]
-  (let [variables (distinct (flatten (map :rhs equations)))
-        eq (first (filter #(some #{v} (:rhs %)) equations))
-        ;; _ (println "v" v "eq" eq ":" equations)
-        sub (let [substitution (sum-digits (concat (negativize (remove #{v} (:rhs eq))) (negativize (list (:lhs eq)))))]
-              (assoc old-sub
-                     v substitution
-                     (str/join ["-" v]) (negativize substitution)))
-        subbed (for [e equations]
-                 (update e :rhs #(flatten (replace sub %))))
-        ;; _ (println "sub" sub "subbed" subbed)
-        simplified {:sub sub
-                    :simplified (for [e subbed]
-                                  (assoc {}
-                                         :lhs (:lhs e)
-                                         :rhs (sum-digits (remove-opposites (:rhs e) variables))))}
+  (let [eq (move-v-to-lhs (get-simplest equations v) v)
+        new-sub (assoc old-sub (first (:lhs eq)) (:rhs eq))
+        ;; _ (println "sub" {(first (:lhs eq)) (:rhs eq)})
+        subbed (remove #{{:lhs [0] :rhs [0]}}
+                       (for [e equations]
+                         (remove-opposites (update e :rhs #(flatten (replace {(first (:lhs eq)) (:rhs eq)} %))))))
         ]
-    simplified))
+    {:sub new-sub
+     :simplified subbed}))
 
 ;; TODO: Look for simplified equations that equate a variable to a number,
 ;; then substitute those back through the rest of the equations.
+
