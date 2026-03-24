@@ -378,7 +378,7 @@
                             :rhs (map #(get named-buttons %) (filter #(some #{n} %) buttons)))))))
       
 (defn negativize [xs]
-  ;; (println "negativize" xs)
+  ;; (println "negativize" xs (map type xs))
   (for [x xs]
     (if (string? x)
       (if (= \- (first x))
@@ -390,44 +390,54 @@
   (distinct (map #(str/replace % #"\-" "") (filter string? (concat (:lhs eq) (:rhs eq))))))
 
 (defn sum-digits [equation]
-  (let [{:keys [sum vs]}
-        (reduce (fn [acc v]
-                  (if (number? v)
-                    {:sum (+ v (:sum acc))
-                     :vs (:vs acc)}
-                    {:sum (:sum acc)
-                     :vs (conj (:vs acc) v)}))
-                {:sum 0 :vs []}
-                equation)]
-    (conj vs sum)))
+  ;; (print "sum-digits" equation)
+  (let [sum-fn (fn [equation-side] (reduce (fn [acc v]
+                                             (if (number? v)
+                                               {:sum (+ v (:sum acc))
+                                                :vs (:vs acc)}
+                                               {:sum (:sum acc)
+                                                :vs (conj (:vs acc) v)}))
+                                           {:sum 0 :vs []}
+                                           equation-side))
+        {sum :sum vs :vs} (sum-fn (:lhs equation))
+        lhs (conj vs sum)
+        {sum :sum vs :vs} (sum-fn (:rhs equation))
+        rhs (conj vs sum)
+        ;; _ (println "sum-digits result" {:lhs lhs :rhs rhs})
+        ]
+    {:lhs lhs :rhs rhs}))
     
 (defn normalize [eq]
   (if (= [0] (:lhs eq))
     eq
+    (sum-digits
      {:lhs [0]
-      :rhs (sum-digits (reduce (fn [acc v]
+      :rhs (reduce (fn [acc v]
                                  (concat acc (negativize (list v))))
                                (:rhs eq)
-                               (:lhs eq)))}))
+                               (:lhs eq))})))
 
 (deftest test-normalize
   (is (= {:lhs [0] :rhs ["y" "-x" 2]} (normalize {:lhs [1 "x"] :rhs [3 "y"]}))))
 
 (defn remove-opposites [equation]
   ;; (println "remove-opposites" equation (get-variables equation))
-  (let [normalized (normalize equation)]
-    {:lhs [0]
-     :rhs (reduce (fn [acc x]
-                    (if (and (some #{x} acc) (some #{(str/join ["-" x])} acc))
-                      (let [;; _ (println "dropping" x)
-                            without-v (concat (take-while #(not= x %) acc) (rest (drop-while #(not= x %) acc)))
-                            ;; _ (println "without-v" without-v)
-                            neg-x (str/join ["-" x])
-                            without-neg (concat (take-while #(not= neg-x %) without-v) (rest (drop-while #(not= neg-x %) without-v)))]
-                        without-neg)
-                      acc))
-                  (:rhs normalized)
-                  (get-variables equation))}))
+  (let [normalized (normalize equation)
+        result {:lhs [0]
+                :rhs (reduce (fn [acc x]
+                               (if (and (some #{x} acc) (some #{(str/join ["-" x])} acc))
+                                 (let [;; _ (println "dropping" x)
+                                       without-v (concat (take-while #(not= x %) acc) (rest (drop-while #(not= x %) acc)))
+                                       ;; _ (println "without-v" without-v)
+                                       neg-x (str/join ["-" x])
+                                       without-neg (concat (take-while #(not= neg-x %) without-v) (rest (drop-while #(not= neg-x %) without-v)))]
+                                   without-neg)
+                                 acc))
+                             (:rhs normalized)
+                             (get-variables equation))}
+        ;; _ (println "remove-opposites result" result)
+        ]
+    result))
 
 (deftest test-remove-opposites
   (is (= {:lhs [0] :rhs [0]} (remove-opposites {:lhs [19], :rhs ["-e" 19 "e"]})))
@@ -443,10 +453,14 @@
   (is (= nil (uses-variable? {:rhs [-19] :lhs ["a" "e"]} "c"))))
 
 (defn remove-zero [{:keys [lhs rhs] :as eq}]
+  ;; (println "remove-zero" {:lhs lhs :rhs rhs})
   (let [new-lhs (remove #(= 0 %) lhs)
-        new-rhs (remove #(= 0 %) rhs)]
-    {:lhs (if (empty? new-lhs) [0] new-lhs)
-     :rhs (if (empty? new-rhs) [0] new-rhs)}))
+        new-rhs (remove #(= 0 %) rhs)
+        result {:lhs (if (empty? new-lhs) [0] new-lhs)
+                :rhs (if (empty? new-rhs) [0] new-rhs)}
+        ;; _ (println "remove-zero result" result)
+        ]
+    result))
 
 (defn move-v-to-lhs [eq v]
   (let [eq (remove-zero (remove-opposites eq))
@@ -456,7 +470,7 @@
         v-from-lhs (filter #{v neg-v} (:lhs eq))
         not-v-from-lhs (remove #{v neg-v} (:lhs eq))
         lhs (concat v-from-lhs (negativize v-from-rhs))
-        rhs (sum-digits (concat not-v-from-rhs (negativize not-v-from-lhs)))
+        rhs (concat not-v-from-rhs (negativize not-v-from-lhs))
         _ (if (> (count lhs) 1) (throw (Exception. (format "Normalization failure lhs: %s rhs: %s" lhs rhs))))]
     (remove-zero
      {:lhs (if (some #{neg-v} lhs) (negativize lhs) lhs)
@@ -481,15 +495,33 @@
 
 (defn simplify [equations v old-sub]
   (let [eq (move-v-to-lhs (get-simplest equations v) v)
-        new-sub (assoc old-sub (first (:lhs eq)) (:rhs eq))
-        ;; _ (println "sub" {(first (:lhs eq)) (:rhs eq)})
+        ;; _ (println "simplify sub" {(first (:lhs eq)) (:rhs eq)} "equations" equations)
+        new-sub (assoc old-sub (first (:lhs eq)) (:rhs eq) (first (negativize (:lhs eq))) (negativize (:rhs eq)))
         subbed (remove #{{:lhs [0] :rhs [0]}}
                        (for [e equations]
-                         (remove-opposites (update e :rhs #(flatten (replace {(first (:lhs eq)) (:rhs eq)} %))))))
+                         (remove-zero (sum-digits (remove-opposites (update e :rhs #(flatten (replace {(first (:lhs eq)) (:rhs eq)} %))))))))
         ]
     {:sub new-sub
      :simplified subbed}))
 
-;; TODO: Look for simplified equations that equate a variable to a number,
-;; then substitute those back through the rest of the equations.
+;; (let [equations (extract-equations (parse-line "[...#] (0,1,2) (1,2,3) (1,2) (3) (0,2,3) {19,14,32,51}"))
+;;                       simple1 (simplify equations "a" {})]
+;;                   simple1)
 
+(defn simplify-one-pass [equations sub]
+  (loop [equations equations
+         sub sub
+         variables (sort (distinct (flatten (map get-variables equations))))]
+    ;; (println "equations" equations "sub" sub)
+    (if (empty? variables)
+      {:simplified equations :sub sub}
+      (let [{new-simplified :simplified new-sub :sub} (simplify equations (first variables) sub)]
+        (recur new-simplified new-sub (rest variables))))))))
+
+
+;; TODO: This ends up with all equations having two variables.
+
+;; (let [equations (extract-equations (parse-line "[...#] (0,1,2) (1,2,3) (1,2) (3) (0,2,3) {19,14,32,51}"))
+;;                       result (simplify-one-pass equations {})
+;;                       new-equations (map (fn [[l r]] (assoc {} :lhs (list l) :rhs r)) (:sub result))]
+;;   (simplify-one-pass new-equations (:sub result)))
