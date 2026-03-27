@@ -142,6 +142,7 @@
 ;; Find the fewest total number of button presses to configure the devices so the
 ;; joltage numbers match.
 (defn add-joltages [joltages to-add]
+  ;; (println "add-joltages" joltages to-add)
   (reduce (fn [acc n]
             ;; (println :acc acc :n n :to-flip to-flip :contains (contains? to-flip n))
             (update acc n inc))
@@ -151,8 +152,9 @@
 (defn press-button-joltage
   ([{:keys [joltage-requirements wiring-schematics] :as device} button]
    {:indicator-lights (press-button-joltage joltage-requirements wiring-schematics button)
-    :wiring-schematics wiring-schematics})
-  ([joltage-requirements  wiring-schematics button]
+    :wiring-schematics wiring-schematics
+    :joltage-requirements joltage-requirements})
+  ([joltage-requirements wiring-schematics button]
    (if (or (< button 0) (> button (count wiring-schematics)))
      (throw (Exception. (str ":error-invalid-button: " button)))
      (let [to-add (get wiring-schematics button)]
@@ -377,9 +379,12 @@
         (str/join ["-" x]))
       (- x))))
 
+(defn name-buttons [{:keys [joltage-requirements wiring-schematics] :as device}]
+  (into {} (map vector wiring-schematics (map #(str (char %)) (range (int \a) (+ (count wiring-schematics) (int \a)))))))
+
 (defn extract-equations [{:keys [joltage-requirements wiring-schematics] :as device}]
   (let [buttons wiring-schematics
-        named-buttons (into {} (map vector buttons (map #(str (char %)) (range (int \a) (+ (count buttons) (int \a))))))]
+        named-buttons (name-buttons device)]
     (sort-by #(count (last %))
                    (for [n (range (count joltage-requirements))]
                      (assoc {}
@@ -495,7 +500,7 @@
     (second (first (sort-by first sized-eqs)))))
 
 (defn replace-vars [eq sub-v replacement]
-  (println "replace-vars eq" eq "sub-v" sub-v "replacement" replacement)
+  ;; (println "replace-vars eq" eq "sub-v" sub-v "replacement" replacement)
   (let [sub (assoc {} sub-v replacement (first (negativize (list sub-v))) (negativize replacement))
         ;; _ (println "replace-vars sub" sub "result" (flatten (replace sub (:rhs eq))))
         ]
@@ -503,6 +508,9 @@
 
 (deftest test-replace-vars
   (is (= {:lhs [0], :rhs ["e" -19 "-e" 19]} (replace-vars {:lhs [0] :rhs ["-a" "-e" 19]} "a" ["-e" 19]))))
+
+(defn reduce-equation [eq]
+  (remove-zero (sum-digits (remove-opposites eq))))
 
 (defn simplify [equations v old-sub]
   (let [eq (move-v-to-lhs (get-simplest equations v) v)
@@ -512,19 +520,19 @@
                   (assoc old-sub (first (:lhs eq)) (:rhs eq)))
         subbed (remove #{{:lhs [0] :rhs [0]}}
                        (for [e equations]
-                         (remove-zero (sum-digits (remove-opposites (replace-vars e (first (:lhs eq)) (:rhs eq)))))))
+                         (reduce-equation (replace-vars e (first (:lhs eq)) (:rhs eq)))))
         ]
     {:sub new-sub
      :simplified subbed}))
 
-(defn replace-all [equations v-sub]
-  (map (fn [e]
-         (replace-vars e v-sub))
-       equations))
-
-;; (let [equations (extract-equations (parse-line "[...#] (0,1,2) (1,2,3) (1,2) (3) (0,2,3) {19,14,32,51}"))
-;;                       simple1 (simplify equations "a" {})]
-;;                   simple1)
+(defn replace-all [equations sub]
+  (println "replace-all equations" equations "sub" sub)
+  (map reduce-equation
+       (for [eq equations]
+         (reduce (fn [acc [s r]]
+                   (replace-vars acc s r))
+                 eq
+                 sub))))
 
 (defn simplify-one-pass [equations sub]
   (loop [equations equations
@@ -541,12 +549,30 @@
 
 ;; TODO: This ends up with all equations having two variables.
 
-;; (let [equations (extract-equations (parse-line "[...#] (0,1,2) (1,2,3) (1,2) (3) (0,2,3) {19,14,32,51}"))
-;;                       result (simplify-one-pass equations {})
-;;                       new-equations (map (fn [[l r]] (assoc {} :lhs (list l) :rhs r)) (:sub result))]
-;;   (simplify-one-pass new-equations (:sub result)))
+;; TODO: If I set one of the two variables to zero, in this case I get the right answer.
 
-
-;; (let [equations (extract-equations (parse-line "[...#] (0,1,2) (1,2,3) (1,2) (3) (0,2,3) {19,14,32,51}"))
-;;                       result1 (simplify-one-pass equations {})]
-;;   (simplify equations "e" (:sub result1)))
+;; (let [device (parse-line "[...#] (0,1,2) (1,2,3) (1,2) (3) (0,2,3) {19,14,32,51}")
+;;                       named-buttons (set/map-invert (name-buttons device))
+;;                       equations (extract-equations device)
+;;                       result1 (simplify-one-pass equations {})
+;;                       solved1 (assoc (find-solved-variables (:sub result1)) "b" [0])
+;;                       new-equations1 (replace-all equations solved1)
+;;                       result2 (simplify-one-pass new-equations1 solved1)
+;;                       solved2 (find-solved-variables (:sub result2))
+;;                       new-equations2 (replace-all equations solved2)
+;;                       result3 (simplify-one-pass new-equations2 solved2)
+;;                       solved3 (find-solved-variables (:sub result3))
+;;                       new-equations3 (replace-all equations solved3)
+;;                       _ (println "device" device)
+;;                       _ (println "sub" (:sub result3))
+;;                       ]
+;;                   (reduce (fn [acc [b-name [b-presses] :as sub]]
+;;                             ;; (println "sub" sub "device" device)
+;;                             (loop [joltages acc
+;;                                    n b-presses]
+;;                               ;; (println "button" b-name "=" (get named-buttons b-name) "named-buttons" named-buttons)
+;;                               (if (= n 0)
+;;                                 joltages
+;;                                 (recur (add-joltages joltages (get named-buttons b-name)) (dec n)))))
+;;                           [0 0 0 0]
+;;                           (:sub result3)))
