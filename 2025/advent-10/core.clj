@@ -229,10 +229,12 @@
 
 (defn h-sort [pos goal]
   ;; (println "h-sort pos" pos "goal" goal)
-  (->>
-   (map list goal pos)
-   (map #(- (first %) (second %)))
-   (apply +)))
+  (let [diffs (->>
+               (map list goal pos)
+               (map #(- (first %) (second %))))]
+    (if (seq (filter #(< % 0) diffs))
+      Integer/MAX_VALUE
+      (apply + diffs))))
 
 (defn unsolvable? [{:keys [joltage-requirements wiring-schematics] :as device} joltages]
   (let [remaining-joltages (map-indexed list (map - joltage-requirements joltages))
@@ -251,21 +253,23 @@
   (let [goal joltage-requirements
         buttons wiring-schematics
         button-numbers (take (count buttons) (iterate inc 0))
-        start-buttons (vec (repeat (count buttons) 0))
         start-joltages (vec (repeat (count goal) 0))
-        start {:button-presses start-buttons :joltages start-joltages}]
+        start {:button-presses (vec (repeat (count buttons) 0)) :joltages start-joltages}]
     (loop [open-set #{start}
            froms {}
            f-scores {start-joltages (sort-fn start-joltages goal)}
            g-scores {start-joltages 0}
-           iterations 0]
+           iterations 0
+           best-progress [Integer/MAX_VALUE 0 start-joltages]]
       ;; (println "open-set" open-set "froms" froms "f-scores" f-scores "g-scores" g-scores "iterations" iterations)
       ;; (flush)
       (cond (empty? open-set)
             (list :failure-no-open-nodes :iterations iterations)
             (= iterations max-iterations)
-            (throw (Exception. (str (list :fail-over-time iterations :froms-size (count froms)
-                                          :current (first (first (sort-by second (map #(list % (get f-scores (:joltages %))) open-set))))))))
+            (throw (Exception. (str {:fail-over-time iterations
+                                     :froms-size (count froms)
+                                     :current (first (first (sort-by second (map #(list % (get f-scores (:joltages %))) open-set))))
+                                     :best-progress best-progress})))
             :else
             (let [{:keys [button-presses joltages] :as current} (first (first (sort-by second (map #(list % (get f-scores (:joltages %))) open-set))))]
               (if (= joltages goal)
@@ -286,15 +290,22 @@
                         (reduce (fn [result neighbor]
                                   (if (< tentative-g-score (get g-scores neighbor Integer/MAX_VALUE))
                                     {
-                                     :froms (assoc (get result :froms) (:joltages neighbor) current)
-                                     :g-scores (assoc (get result :g-scores) (:joltages neighbor) tentative-g-score)
-                                     :f-scores (assoc (get result :f-scores) (:joltages neighbor) (+ tentative-g-score (sort-fn (:joltages neighbor) goal)))
-                                     :open-set (conj (get result :open-set) neighbor)
+                                     :froms (assoc (:froms result) (:joltages neighbor) current)
+                                     :g-scores (assoc (:g-scores result) (:joltages neighbor) tentative-g-score)
+                                     :f-scores (assoc (:f-scores result) (:joltages neighbor) (+ tentative-g-score (sort-fn (:joltages neighbor) goal)))
+                                     :open-set (conj (:open-set result) neighbor)
                                      }
                                     result))
                                 {:froms froms :g-scores g-scores :f-scores f-scores :open-set open-set}
-                                neighbors)]
-                    (recur new-open-set new-froms new-f-scores new-g-scores (inc iterations))))))))))
+                                neighbors)
+                        new-best-progress (let [scores (map #(get new-f-scores %) (map :joltages neighbors))
+                                                new-best (try (apply min (if (seq scores) scores [Integer/MAX_VALUE]))
+                                                              (catch Exception e
+                                                                (println "EXCEPTION scores" scores)))]
+                                            (if (< new-best (first best-progress))
+                                              [new-best iterations (:joltages current)]
+                                              best-progress))]
+                    (recur new-open-set new-froms new-f-scores new-g-scores (inc iterations) new-best-progress)))))))))
 
 (defn get-joltage-configurations-a* [devices]
   (map (fn [state]
@@ -547,6 +558,32 @@
 (defn find-solved-variables [sub]
   (into {} (filter #(= 1 (count (second %))) sub)))
 
+(defn simplify-loop [equations]
+  (loop [equations equations
+         v-sub {}
+         solved-vs {}
+         unsolved-vs (sort (distinct (flatten (map get-variables equations))))
+         prevous-unsolved-vs []
+         n 0]
+    (let [{:keys [sub simplified] :as result} (simplify-one-pass equations v-sub)
+          solved (find-solved-variables sub)
+          new-equations (replace-all equations solved)
+          new-unsolved-vs (sort (distinct (flatten (map get-variables simplified))))]
+      (if (zero? n)
+        (recur new-equations sub solved new-unsolved-vs unsolved-vs (inc n))
+        (println "new-equations" new-equations
+                 "new-sub" sub
+                 "solved" solved
+                 "unsolved-vs" new-unsolved-vs
+                 "previous-unsolved-vs" unsolved-vs
+                 )))))
+
+
+(simplify-one-pass (extract-equations (parse-line "[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}")) {})
+(simplify-one-pass (extract-equations (parse-line "[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}")) {})
+(simplify-one-pass (extract-equations (parse-line "[.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}")) {})
+
+
 ;; TODO: This ends up with all equations having two variables.
 
 ;; TODO: If I set one of the two variables to zero, in this case I get the right answer.
@@ -576,3 +613,66 @@
 ;;                                 (recur (add-joltages joltages (get named-buttons b-name)) (dec n)))))
 ;;                           [0 0 0 0]
 ;;                           (:sub result3)))
+
+
+(defn dot-product [v1 v2]
+  (if (not= (count v1) (count v2))
+    (throw (Exception. (format "Unequal length vectors %s, %s" v1 v2)))
+    (apply +
+           (for [i (range (count v1))]
+             (* (get v1 i) (get v2 i))))))
+
+(deftest test-dot-product
+  (is (thrown? Exception (dot-product [1 2 3] [4 5 6 7])))
+  (is (= 32 (dot-product [1 2 3] [4 5 6]))))
+
+(defn get-row [arr r]
+  (get arr r))
+
+(deftest test-get-row
+  (is (= [4 5 6] (get-row [[1 2 3] [4 5 6]] 1))))
+
+(defn get-column [arr c]
+  (vec
+   (for [i (range (count arr))]
+     (get-in arr [i c]))))
+
+(deftest test-get-column
+  (is (= [3 6] (get-column [[1 2 3] [4 5 6]] 2))))
+
+(defn transpose [arr]
+  (vec
+   (for [c (range (count (first arr)))]
+     (get-column arr c))))
+
+(deftest test-transpose
+  (is (= [[1 4] [2 5] [3 6]] (transpose [[1 2 3] [4 5 6]]))))
+
+(defn matrix-product [a b]
+  (if (not= (count (first a)) (count b))
+    (throw (Exception. (format "Unequal lengths %s, %s" a b)))
+    (vec
+     (for [i (range (count a))]
+       (vec
+        (for [j (range (count (first b)))]
+          (dot-product (get-row a i) (get-column b j))))))))
+
+    
+  
+;; 0 0 0 1
+;; 0 1 0 1
+;; 0 0 1 0 * (a b c d e f) = [3 5 4 7]
+;; 0 0 1 1
+;; 1 0 1 0
+;; 1 1 0 0
+
+;; (let [buttons [[0 0 0 1]
+;;                                [0 1 0 1]
+;;                                [0 0 1 0]
+;;                                [0 0 1 1]
+;;                                [1 0 1 0]
+;;                                [1 1 0 0]]
+;;                       goal [3 5 4 7]
+;;                       presses [[1 3 0 3 1 2]]]
+;;                   (matrix-product (transpose buttons) (transpose presses)))
+
