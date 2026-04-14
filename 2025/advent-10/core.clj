@@ -614,6 +614,9 @@
 ;;                           [0 0 0 0]
 ;;                           (:sub result3)))
 
+(defn vector+ [v1 v2]
+  (mapv + v1 v2))
+
 (defn scalar-product [v x]
   (mapv #(* % x) v))
 
@@ -684,14 +687,14 @@
 (defn over-pressed? [presses goal]
   (seq (filter (fn [p g] (> p g)) (map list presses goal))))
 
-(defn apply-presses [button presses joltage-count]
-  (let [initial (repeat joltage-count 0)]
+(defn apply-presses [buttons presses]
+  (for [p presses]
     
-
+  
 (defn increment-presses [presses buttons goal]
   (println "increment-presses" presses buttons goal)
   (let [all-nexts (for [i (range (count presses))] (update presses i inc))]
-    (remove #(over-pressed? % goal) all-nexts)))
+    (remove #(over-pressed? (%) goal) all-nexts)))
 
 
   ;; (let [max-presses (for [b buttons] (get-max-presses b goal))
@@ -726,3 +729,17 @@
               (if (nil? new-presses)
                 (list :no-more-presses current-presses)
                 (recur new-presses (inc iterations))))))))
+
+
+  ;; (let [buttons [[0 0 0 1]
+  ;;                              [0 1 0 1]
+  ;;                              [0 0 1 0]
+  ;;                              [0 0 1 1]
+  ;;                              [1 0 1 0]
+  ;;                              [1 1 0 0]]
+  ;;                     presses [2 0 1 0 0 0]]
+  ;;                 (let [press-count (range (count presses))]
+  ;;                   (reduce vector+
+  ;;                          (map (fn [[i p]]
+  ;;                                 (scalar-product (get buttons i) p))
+  ;;                               (map-indexed list presses)))))
