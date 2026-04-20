@@ -682,19 +682,22 @@
 ;;                   (matrix-product (transpose buttons) (transpose presses)))
 
 (defn get-max-presses [button goal]
-  (second (first (sort-by #(min (second %)) (filter #(= 1 (first %)) (map vector button goal))))))
+  (first (sort-by min (for [i button] (get goal i)))))
 
 (defn over-pressed? [presses goal]
   (seq (filter (fn [p g] (> p g)) (map list presses goal))))
 
-(defn apply-presses [buttons presses]
-  (for [p presses]
+;; (defn apply-presses [buttons presses]
+;;   (for [p presses]
     
   
 (defn increment-presses [presses buttons goal]
-  (println "increment-presses" presses buttons goal)
-  (let [all-nexts (for [i (range (count presses))] (update presses i inc))]
-    (remove #(over-pressed? (%) goal) all-nexts)))
+  (let [max-presses (for [b buttons] (get-max-presses b goal))
+        indexed (map (fn [i p m] (assoc {} :i i :p p :m m)) (range (count presses)) presses max-presses)
+        to-increment (filter #(< (:p %) (:m %)) indexed)]
+    (if (seq to-increment)
+      (for [i to-increment]
+        (update presses (:i i) inc)))))
 
 
   ;; (let [max-presses (for [b buttons] (get-max-presses b goal))
@@ -705,8 +708,7 @@
   ;;   (if (seq filtered)
   ;;     (let [index (first (first (sort-by #(min (first (second %))) filtered)))]
   ;;       (update presses index inc))
-  ;;     nil))
-)
+  ;;     nil)))
 
 ;; blue sparrow bathroom code - 206#
 
@@ -714,32 +716,47 @@
   (for [i (range (count presses))]
     (update presses i inc)))
 
+(defn get-button-matrix [buttons]
+  (let [joltage-count (apply max (flatten buttons))]
+    (vec
+     (for [b buttons]
+       (vec
+        (for [i (range (inc joltage-count))]
+          (if (contains? (set b) i) 1 0)))))))
+
 (defn find-presses [buttons goal]
-  (loop [current-presses #{[0 0 0 0 0 0]}
-         iterations 0]
-    ;; (println "current-presses" current-presses)
-    ;; (println "transposed" (transpose (vector current-presses)))
-    (let [current (first current-presses)]
-      (cond (> iterations 20)
-            (list :error-too-many-iterations current-presses)
-            (= (matrix-product (transpose buttons) (transpose (vector current-presses))) (transpose (vector goal)))
-            (list :result current-presses goal)
-            :else
-            (let [new-presses (increment-presses current-presses buttons goal)]
-              (if (nil? new-presses)
-                (list :no-more-presses current-presses)
-                (recur new-presses (inc iterations))))))))
+  (let [max-presses (for [b buttons] (get-max-presses b goal))
+        button-matrix (get-button-matrix buttons)]
+    (loop [current-presses [(vec (repeat (count buttons) 0))]
+           iterations 0]
+      (let [current (first current-presses)]
+        ;; (println "current" current "product" (matrix-product (transpose button-matrix) (transpose (vector current))))
+        ;; (println "current-presses" current-presses)
+        (cond (> iterations 5000)
+              (list :error-too-many-iterations (take 10 current-presses))
+              (= (transpose (vector goal)) (matrix-product (transpose button-matrix) (transpose (vector current))))
+              (list :result current goal)
+              :else
+              (let [new-presses (increment-presses current buttons goal)]
+                (if (nil? new-presses)
+                  (list :no-more-presses current-presses)
+                  (recur (sort-by #(apply + %) (distinct (concat (remove #{current} current-presses) new-presses))) (inc iterations)))))))))
 
 
-  ;; (let [buttons [[0 0 0 1]
-  ;;                              [0 1 0 1]
-  ;;                              [0 0 1 0]
-  ;;                              [0 0 1 1]
-  ;;                              [1 0 1 0]
-  ;;                              [1 1 0 0]]
-  ;;                     presses [2 0 1 0 0 0]]
-  ;;                 (let [press-count (range (count presses))]
-  ;;                   (reduce vector+
-  ;;                          (map (fn [[i p]]
-  ;;                                 (scalar-product (get buttons i) p))
-  ;;                               (map-indexed list presses)))))
+  ;; (parse-line "[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}")
+  ;; buttons [[0 0 0 1]
+  ;;          [0 1 0 1]
+  ;;          [0 0 1 0]
+  ;;          [0 0 1 1]
+  ;;          [1 0 1 0]
+  ;;          [1 1 0 0]]
+  ;; solution: [1 3 0 3 1 2]
+
+
+(defn find-presses-matrix [input]
+  (let [devices (parse-input input)]
+    (apply +
+           (map #(apply + (second %))
+                (for [device devices]
+                  (let [buttons (:wiring-schematics device)]
+                    (find-presses buttons (:joltage-requirements device))))))))
