@@ -403,26 +403,20 @@
                             :rhs (concat (map #(get named-buttons %) (filter #(some #{n} %) buttons))
                                          (negativize (list (get joltage-requirements n)))))))))
       
-(defn get-variables [{:keys [lhs rhs] :as eq}]
-  (distinct (map #(str/replace % #"\-" "") (filter string? (concat (:lhs eq) (:rhs eq))))))
+(defn get-variables [eq]
+  (distinct (map #(str/replace % #"\-" "") (filter string? eq))))
 
 (defn sum-digits [equation]
   ;; (print "sum-digits" equation)
-  (let [sum-fn (fn [equation-side] (reduce (fn [acc v]
-                                             (if (number? v)
-                                               {:sum (+ v (:sum acc))
-                                                :vs (:vs acc)}
-                                               {:sum (:sum acc)
-                                                :vs (conj (:vs acc) v)}))
-                                           {:sum 0 :vs []}
-                                           equation-side))
-        {sum :sum vs :vs} (sum-fn (:lhs equation))
-        lhs (conj vs sum)
-        {sum :sum vs :vs} (sum-fn (:rhs equation))
-        rhs (conj vs sum)
-        ;; _ (println "sum-digits result" {:lhs lhs :rhs rhs})
-        ]
-    {:lhs lhs :rhs rhs}))
+  (let [{sum :sum vs :vs} (reduce (fn [acc v]
+                                    (if (number? v)
+                                      {:sum (+ v (:sum acc))
+                                       :vs (:vs acc)}
+                                      {:sum (:sum acc)
+                                       :vs (conj (:vs acc) v)}))
+                                  {:sum 0 :vs []}
+                                  equation)]
+    (conj vs sum)))
     
 (defn normalize [eq]
   (if (= [0] (:lhs eq))
@@ -439,19 +433,17 @@
 
 (defn remove-opposites [equation]
   ;; (println "remove-opposites" equation (get-variables equation))
-  (let [normalized (normalize equation)
-        result {:lhs [0]
-                :rhs (reduce (fn [acc x]
-                               (if (and (some #{x} acc) (some #{(str/join ["-" x])} acc))
-                                 (let [;; _ (println "dropping" x)
-                                       without-v (concat (take-while #(not= x %) acc) (rest (drop-while #(not= x %) acc)))
-                                       ;; _ (println "without-v" without-v)
-                                       neg-x (str/join ["-" x])
-                                       without-neg (concat (take-while #(not= neg-x %) without-v) (rest (drop-while #(not= neg-x %) without-v)))]
-                                   without-neg)
-                                 acc))
-                             (:rhs normalized)
-                             (get-variables equation))}
+  (let [result (reduce (fn [acc x]
+                         (if (and (some #{x} acc) (some #{(str/join ["-" x])} acc))
+                           (let [;; _ (println "dropping" x)
+                                 without-v (concat (take-while #(not= x %) acc) (rest (drop-while #(not= x %) acc)))
+                                 ;; _ (println "without-v" without-v)
+                                 neg-x (str/join ["-" x])
+                                 without-neg (concat (take-while #(not= neg-x %) without-v) (rest (drop-while #(not= neg-x %) without-v)))]
+                             without-neg)
+                           acc))
+                       equation
+                       (get-variables equation))
         ;; _ (println "remove-opposites result" result)
         ]
     result))
@@ -469,15 +461,8 @@
   (is (= "a" (uses-variable? {:rhs [-19] :lhs ["a" "e"]} "a")))
   (is (= nil (uses-variable? {:rhs [-19] :lhs ["a" "e"]} "c"))))
 
-(defn remove-zero [{:keys [lhs rhs] :as eq}]
-  ;; (println "remove-zero" {:lhs lhs :rhs rhs})
-  (let [new-lhs (remove #(= 0 %) lhs)
-        new-rhs (remove #(= 0 %) rhs)
-        result {:lhs (if (empty? new-lhs) [0] new-lhs)
-                :rhs (if (empty? new-rhs) [0] new-rhs)}
-        ;; _ (println "remove-zero result" result)
-        ]
-    result))
+(defn remove-zero [eq]
+  (remove #(= 0 %) eq))
 
 (defn move-v-to-lhs [eq v]
   (let [eq (remove-zero (remove-opposites eq))
@@ -511,11 +496,8 @@
     (second (first (sort-by first sized-eqs)))))
 
 (defn replace-vars [eq sub-v replacement]
-  ;; (println "replace-vars eq" eq "sub-v" sub-v "replacement" replacement)
-  (let [sub (assoc {} sub-v replacement (first (negativize (list sub-v))) (negativize replacement))
-        ;; _ (println "replace-vars sub" sub "result" (flatten (replace sub (:rhs eq))))
-        ]
-    {:lhs [0] :rhs (flatten (replace sub (:rhs eq)))}))
+  (let [sub (assoc {} sub-v replacement (first (negativize (list sub-v))) (negativize replacement))]
+    (flatten (replace sub eq))))
 
 (deftest test-replace-vars
   (is (= {:lhs [0], :rhs ["e" -19 "-e" 19]} (replace-vars {:lhs [0] :rhs ["-a" "-e" 19]} "a" ["-e" 19]))))
@@ -537,13 +519,11 @@
      :simplified subbed}))
 
 (defn replace-all [equations sub]
-  (println "replace-all equations" equations "sub" sub)
-  (map reduce-equation
-       (for [eq equations]
-         (reduce (fn [acc [s r]]
-                   (replace-vars acc s r))
-                 eq
-                 sub))))
+  (for [eq equations]
+    (reduce (fn [acc [s r]]
+              (replace-vars acc s r))
+            eq
+            sub)))
 
 (defn simplify-one-pass [equations sub]
   (loop [equations equations
@@ -760,3 +740,66 @@
                 (for [device devices]
                   (let [buttons (:wiring-schematics device)]
                     (find-presses buttons (:joltage-requirements device))))))))
+
+
+;; OK, I'm going to try to identify the independent and dependent variables.
+;; e + f = 3
+;; b + f = 5
+;; c + d + e = 4
+;; a + b + d = 7
+
+;; (parse-line "[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}")
+(defn find-variables [device]
+  (let [buttons (:wiring-schematics device)
+        goal (:joltage-requirements device)
+        button-count (count buttons)
+        labeled-buttons (into {} (for [i (range button-count)]
+                                   [(char (+ (int \a) i)) (nth buttons i)]))
+        button-labels (set/map-invert labeled-buttons)]
+    (for [i (range (count goal))]
+      ;; [i (map #(get button-labels %) (filter (fn [b] (some #{i} b)) buttons))]
+      [i (filter (fn [b] (some #{i} b)) buttons)])))
+
+(defn extract-equations [{:keys [joltage-requirements wiring-schematics] :as device}]
+  (let [buttons wiring-schematics
+        named-buttons (name-buttons device)]
+    (sort-by count
+             (for [n (range (count joltage-requirements))]
+               (concat (map #(get named-buttons %) (filter #(some #{n} %) buttons))
+                       (negativize (list (get joltage-requirements n))))))))
+
+(defn solve-single-variable-equation [eq]
+  (let [v (first (get-variables eq))
+        count (count (filter string? eq))
+        num (apply + (filter number? eq))]
+    {:v v :eq (/ num count)}))
+
+(defn solve [device]
+  (let [buttons (:wiring-schematics device)
+        goal (:joltage-requirements device)
+        variables (find-variables device)
+        button-count (count buttons)
+        joltages-count (count goal)
+        independent-count (min joltages-count button-count)
+        dependent-count (max (- button-count joltages-count) 0)]
+    (if (> dependent-count 0)
+      :unsolvable
+      (loop [equations (extract-equations device)
+             removed-variables #{}]
+        (println "equations" equations "removed-variables" removed-variables)
+        (let [single-variable-equations (filter #(= 1 (count (get-variables %))) equations)]
+          (cond (empty? equations)
+                :done
+                (not (empty? single-variable-equations))
+                (map #(solve-single-variable-equation %) single-variable-equations)
+                :else
+                (let [equations-with-variables (filter (fn [eq] (some #(string? %) eq)) equations)
+                      eq (first equations-with-variables)
+                      v (first (filter string? eq))
+                      eq-v (negativize (remove #{v} eq))]
+                  ;; [equations eq v eq-v (replace-vars eq v eq-v)]
+                  (recur
+                   (remove empty? (map reduce-equation (replace-all equations {v eq-v})))
+                   (conj removed-variables v)))))))))
+
+;; TODO: this is solving one variable. Wrap it in another loop to solve all the variables.
