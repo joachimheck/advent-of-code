@@ -499,6 +499,13 @@
   (let [sub (assoc {} sub-v replacement (first (negativize (list sub-v))) (negativize replacement))]
     (flatten (replace sub eq))))
 
+(defn replace-all-vars [eqs subs]
+  (println "replace-all-vars" eqs subs)
+  (let [subs (into subs
+                   (for [[sk sv] subs]
+                     [(first (negativize (list sk))) (negativize sv)]))]
+    (map (fn [eq] (flatten (replace subs eq))) eqs)))
+
 (deftest test-replace-vars
   (is (= {:lhs [0], :rhs ["e" -19 "-e" 19]} (replace-vars {:lhs [0] :rhs ["-a" "-e" 19]} "a" ["-e" 19]))))
 
@@ -769,37 +776,46 @@
                        (negativize (list (get joltage-requirements n))))))))
 
 (defn solve-single-variable-equation [eq]
+  (println "solve-single-variable-equation" eq)
   (let [v (first (get-variables eq))
         count (count (filter string? eq))
         num (apply + (filter number? eq))]
     {:v v :eq (/ num count)}))
 
-(defn solve [device]
-  (let [buttons (:wiring-schematics device)
-        goal (:joltage-requirements device)
-        variables (find-variables device)
-        button-count (count buttons)
-        joltages-count (count goal)
-        independent-count (min joltages-count button-count)
-        dependent-count (max (- button-count joltages-count) 0)]
+(defn count-variables [equations]
+  ;; TODO: handle negative variables
+  (distinct (filter string? (flatten equations)))
+
+(defn solve-one-variable [equations]
+  (let [variables (count-variables equations)
+        independent-count (min (count variables) (count equations))
+        dependent-count (max (- (count variables) (count equations)) 0)
+        _ (println "variable count" (count variables) "equation count" (count equations))]
     (if (> dependent-count 0)
       :unsolvable
-      (loop [equations (extract-equations device)
+      (loop [equations equations
              removed-variables #{}]
-        (println "equations" equations "removed-variables" removed-variables)
-        (let [single-variable-equations (filter #(= 1 (count (get-variables %))) equations)]
+        ;; (println "equations" equations "removed-variables" removed-variables)
+        (let [two-variable-equations (filter #(= 2 (count (get-variables %))) equations)
+              _ (println "equations" equations)
+              _ (println "tves" two-variable-equations)]
           (cond (empty? equations)
                 :done
-                (not (empty? single-variable-equations))
-                (map #(solve-single-variable-equation %) single-variable-equations)
+                (not (empty? two-variable-equations))
+                (let [tve (first two-variable-equations)
+                      v (first (filter string? tve))
+                      eq-v (negativize (remove #{v} tve))
+                      _ (println "replacing" v "with" eq-v)]
+                  {v eq-v})
                 :else
                 (let [equations-with-variables (filter (fn [eq] (some #(string? %) eq)) equations)
                       eq (first equations-with-variables)
                       v (first (filter string? eq))
-                      eq-v (negativize (remove #{v} eq))]
-                  ;; [equations eq v eq-v (replace-vars eq v eq-v)]
+                      eq-v (negativize (remove #{v} eq))
+                      _ (println "sub" v eq-v)]
                   (recur
-                   (remove empty? (map reduce-equation (replace-all equations {v eq-v})))
+                   (remove #(zero? (count (get-variables %)))
+                           (remove empty? (map reduce-equation (replace-all equations {v eq-v}))))
                    (conj removed-variables v)))))))))
 
 ;; TODO: this is solving one variable. Wrap it in another loop to solve all the variables.
