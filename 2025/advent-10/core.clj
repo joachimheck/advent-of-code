@@ -500,7 +500,7 @@
     (flatten (replace sub eq))))
 
 (defn replace-all-vars [eqs subs]
-  (println "replace-all-vars" eqs subs)
+  ;; (println "replace-all-vars" eqs subs)
   (let [subs (into subs
                    (for [[sk sv] subs]
                      [(first (negativize (list sk))) (negativize sv)]))]
@@ -782,12 +782,12 @@
         num (apply + (filter number? eq))]
     {:v v :eq (/ num count)}))
 
-(defn count-variables [equations]
-  ;; TODO: handle negative variables
-  (distinct (filter string? (flatten equations)))
+(defn get-variables [equations]
+  (distinct (map #(str/replace % #"-" "") (filter string? (flatten equations)))))
 
 (defn solve-one-variable [equations]
-  (let [variables (count-variables equations)
+  (println "solve-one-variable" equations)
+  (let [variables (get-variables equations)
         independent-count (min (count variables) (count equations))
         dependent-count (max (- (count variables) (count equations)) 0)
         _ (println "variable count" (count variables) "equation count" (count equations))]
@@ -795,27 +795,70 @@
       :unsolvable
       (loop [equations equations
              removed-variables #{}]
-        ;; (println "equations" equations "removed-variables" removed-variables)
-        (let [two-variable-equations (filter #(= 2 (count (get-variables %))) equations)
-              _ (println "equations" equations)
-              _ (println "tves" two-variable-equations)]
-          (cond (empty? equations)
-                :done
-                (not (empty? two-variable-equations))
-                (let [tve (first two-variable-equations)
-                      v (first (filter string? tve))
-                      eq-v (negativize (remove #{v} tve))
-                      _ (println "replacing" v "with" eq-v)]
-                  {v eq-v})
-                :else
-                (let [equations-with-variables (filter (fn [eq] (some #(string? %) eq)) equations)
-                      eq (first equations-with-variables)
-                      v (first (filter string? eq))
-                      eq-v (negativize (remove #{v} eq))
-                      _ (println "sub" v eq-v)]
-                  (recur
-                   (remove #(zero? (count (get-variables %)))
-                           (remove empty? (map reduce-equation (replace-all equations {v eq-v}))))
-                   (conj removed-variables v)))))))))
+        (println "loop: equations" equations "removed-variables" removed-variables)
+        (let [one-variable-equations (filter #(= 1 (count (get-variables %))) equations)
+              _ (println "oves" one-variable-equations)]
+          (if (seq one-variable-equations)
+            (recur (remove (set one-variable-equations) equations)
+                   (reduce (fn [acc eq]
+                             (let [v (first (get-variables eq))
+                                   eq-v (or (negativize (remove #{v} eq)) 0)]
+                               (conj acc [v eq-v])))
+                           {}
+                           one-variable-equations))
+            (let [two-variable-equations (filter #(= 2 (count (get-variables %))) equations)
+                  _ (println "equations" equations)
+                  _ (println "tves" two-variable-equations)]
+              (cond (empty? equations)
+                    :done
+                    (not (empty? two-variable-equations))
+                    (let [tve (first two-variable-equations)
+                          v (first (filter string? tve))
+                          eq-v (negativize (remove #{v} tve))
+                          _ (println "replacing" v "with" eq-v)]
+                      {v eq-v})
+                    :else
+                    (let [equations-with-variables (filter (fn [eq] (some #(string? %) eq)) equations)
+                          eq (first equations-with-variables)
+                          v (first (filter string? eq))
+                          eq-v (negativize (remove #{v} eq))
+                          _ (println "sub" v eq-v)]
+                      (recur
+                       (remove #(zero? (count (get-variables %)))
+                               (remove empty? (map reduce-equation (replace-all equations {v eq-v}))))
+                       (conj removed-variables v)))))))))))
 
 ;; TODO: this is solving one variable. Wrap it in another loop to solve all the variables.
+
+(defn solve-variables [equations]
+  (println "solve-variables" equations)
+  (let [variables (get-variables equations)
+        independent-count (min (count variables) (count equations))
+        dependent-count (max (- (count variables) (count equations)) 0)
+        _ (println "variable count" (count variables) "equation count" (count equations))]
+    (loop [n (dec independent-count)
+           equations equations
+           subs {}]
+      (println "loop n" n "equations" equations "subs" subs)
+      (if (zero? n)
+        {:subs subs :equations equations}
+        (let [shortest-eq (first (sort-by #(count (get-variables %)) equations))]
+          (let [v (first (get-variables shortest-eq))
+                raw-eq-v (negativize (remove #{v} shortest-eq))
+                eq-v (if (empty? raw-eq-v)
+                       [0]
+                       raw-eq-v)
+                ;; _ (println "v" v "shortest-eq" shortest-eq "eq-v" eq-v)
+                combined-subs (conj subs [v eq-v])
+                new-subs (reduce (fn [acc k]
+                                   (assoc acc k (reduce-equation (first (replace-all-vars (list (get combined-subs k)) combined-subs)))))
+                                 combined-subs
+                                 (keys combined-subs))]
+            (recur (dec n)
+                   (distinct (remove #{shortest-eq} (remove empty? (map reduce-equation (replace-all-vars equations new-subs)))))
+                   new-subs)))))))
+
+;; (let [device (parse-line "[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}")
+;;                       equations (extract-equations device)]
+;;                   (solve-variables equations))
+;; e is (), not (0).
