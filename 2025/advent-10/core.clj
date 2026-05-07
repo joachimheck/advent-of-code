@@ -462,7 +462,10 @@
   (is (= nil (uses-variable? {:rhs [-19] :lhs ["a" "e"]} "c"))))
 
 (defn remove-zero [eq]
-  (remove #(= 0 %) eq))
+  (let [new-eq (remove #(= 0 %) eq)]
+    (if (empty? new-eq)
+      (list 0)
+      new-eq)))
 
 (defn move-v-to-lhs [eq v]
   (let [eq (remove-zero (remove-opposites eq))
@@ -566,9 +569,9 @@
                  )))))
 
 
-(simplify-one-pass (extract-equations (parse-line "[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}")) {})
-(simplify-one-pass (extract-equations (parse-line "[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}")) {})
-(simplify-one-pass (extract-equations (parse-line "[.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}")) {})
+;; (simplify-one-pass (extract-equations (parse-line "[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}")) {})
+;; (simplify-one-pass (extract-equations (parse-line "[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}")) {})
+;; (simplify-one-pass (extract-equations (parse-line "[.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}")) {})
 
 
 ;; TODO: This ends up with all equations having two variables.
@@ -785,6 +788,9 @@
 (defn get-variables [equations]
   (distinct (map #(str/replace % #"-" "") (filter string? (flatten equations)))))
 
+(defn get-variables-with-sign [equations]
+  (distinct (filter string? (flatten equations))))
+
 (defn solve-one-variable [equations]
   (println "solve-one-variable" equations)
   (let [variables (get-variables equations)
@@ -839,26 +845,68 @@
     (loop [n (dec independent-count)
            equations equations
            subs {}]
-      (println "loop n" n "equations" equations "subs" subs)
-      (if (zero? n)
-        {:subs subs :equations equations}
-        (let [shortest-eq (first (sort-by #(count (get-variables %)) equations))]
-          (let [v (first (get-variables shortest-eq))
-                raw-eq-v (negativize (remove #{v} shortest-eq))
-                eq-v (if (empty? raw-eq-v)
-                       [0]
-                       raw-eq-v)
-                ;; _ (println "v" v "shortest-eq" shortest-eq "eq-v" eq-v)
-                combined-subs (conj subs [v eq-v])
-                new-subs (reduce (fn [acc k]
-                                   (assoc acc k (reduce-equation (first (replace-all-vars (list (get combined-subs k)) combined-subs)))))
-                                 combined-subs
-                                 (keys combined-subs))]
-            (recur (dec n)
-                   (distinct (remove #{shortest-eq} (remove empty? (map reduce-equation (replace-all-vars equations new-subs)))))
-                   new-subs)))))))
+      (let [variable-count (count (get-variables equations))]
+        ;; (println "loop n" n "equations" equations "subs" subs)
+        (if (or (zero? n) (> (- variable-count (count equations)) 1))
+          {:subs subs :equations equations}
+          (let [shortest-eq (first (sort-by #(count (get-variables %)) equations))]
+            (let [v (first (get-variables-with-sign shortest-eq))
+                  v-is-negative? (= \- (get v 0))
+                  v (str/replace v #"-" "")
+                  v-count (count (filter #{v (str/join ["-" v])} (get-variables shortest-eq)))
+                  _ (if (> v-count 1) (throw (Exception. (format "Multiple instances of variable" v ":" shortest-eq))))
+                  raw-eq-v (if v-is-negative?
+                             (remove #{v (str/join ["-" v])} shortest-eq)
+                             (negativize (remove #{v (str/join ["-" v])} shortest-eq)))
+                  eq-v (if (empty? raw-eq-v)
+                         [0]
+                         raw-eq-v)
+                  ;; _ (println "v" v "shortest-eq" shortest-eq "eq-v" eq-v)
+                  combined-subs (conj subs [v eq-v])
+                  new-subs (reduce (fn [acc k]
+                                     (assoc acc k (reduce-equation (first (replace-all-vars (list (get combined-subs k)) combined-subs)))))
+                                   combined-subs
+                                   (keys combined-subs))]
+              (recur (dec n)
+                     (distinct (remove #(or (empty? %) (= shortest-eq %) (zero? (count (get-variables %))))
+                                       (map reduce-equation (replace-all-vars equations new-subs))))
+                     new-subs))))))))
 
-;; (let [device (parse-line "[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}")
-;;                       equations (extract-equations device)]
-;;                   (solve-variables equations))
-;; e is (), not (0).
+(defn multiply-vector [v n]
+  ;; (println "multiply-vector" v n)
+  (for [ve v]
+    (* ve n)))
+
+(defn add-vectors [v1 v2]
+  (println "add-vectors" v1 v2)
+  (map #(apply + %) (map list v1 v2)))
+
+(defn find-answer [device]
+  (let [equations (extract-equations device)
+        _ (println "equations" equations)
+        button-labels (set/map-invert (name-buttons device))
+        _ (println "button-labels" button-labels)
+        goal (:joltage-requirements device)
+        subs (:subs (solve-variables equations))
+        free-variables (get-variables (vals subs))
+        v (first free-variables)]
+    (loop [n 0
+           v-val 0]
+      (if (> n 10)
+        :exit-over-n
+        (let [presses (reduce (fn [acc k]
+                                (assoc acc k (reduce-equation (first (replace-all-vars (list (get subs k)) {v [v-val]})))))
+                              subs
+                              (keys subs))
+              _ (println "presses" presses)
+              sub-joltages (for [[pv p] presses]
+                             (multiply-vector (get button-labels pv) (first p)))
+              _ (println "sub-joltages" sub-joltages)
+              total (reduce (fn [v1 v2] (add-vectors v1 v2))
+                            sub-joltages)]
+          total)))))
+
+;; (let [device (parse-line "[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}")]
+;;                   (find-answer device))
+
+;; TODO: I think the sub-joltages aren't listing all the joltages? add-vectors is getting vectors with length 3.
