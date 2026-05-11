@@ -842,12 +842,13 @@
         independent-count (min (count variables) (count equations))
         dependent-count (max (- (count variables) (count equations)) 0)
         _ (println "variable count" (count variables) "equation count" (count equations))]
-    (loop [n (dec independent-count)
+    (loop [n independent-count
            equations equations
            subs {}]
       (let [variable-count (count (get-variables equations))]
-        ;; (println "loop n" n "equations" equations "subs" subs)
-        (if (or (zero? n) (> (- variable-count (count equations)) 1))
+        (println "loop n" n "equations" equations "subs" subs)
+        (if (or (zero? n) (empty? equations))
+          ;; (> (- variable-count (count equations)) 1)
           {:subs subs :equations equations}
           (let [shortest-eq (first (sort-by #(count (get-variables %)) equations))]
             (let [v (first (get-variables-with-sign shortest-eq))
@@ -861,7 +862,7 @@
                   eq-v (if (empty? raw-eq-v)
                          [0]
                          raw-eq-v)
-                  ;; _ (println "v" v "shortest-eq" shortest-eq "eq-v" eq-v)
+                  _ (println "v" v "shortest-eq" shortest-eq "eq-v" eq-v)
                   combined-subs (conj subs [v eq-v])
                   new-subs (reduce (fn [acc k]
                                      (assoc acc k (reduce-equation (first (replace-all-vars (list (get combined-subs k)) combined-subs)))))
@@ -878,8 +879,16 @@
     (* ve n)))
 
 (defn add-vectors [v1 v2]
-  (println "add-vectors" v1 v2)
+  ;; (println "add-vectors" v1 v2)
   (map #(apply + %) (map list v1 v2)))
+
+(defn get-min-var-value [v eqs]
+  (apply max
+         (for [eq (filter #(some #{v} %) eqs)]
+           (first (negativize (filter #(number? %) eq))))))
+
+(deftest test-get-min-var-value
+  (is (= 1 (get-min-var-value ["d" [["-b" "d" -1]]] "d"))))
 
 (defn find-answer [device]
   (let [equations (extract-equations device)
@@ -887,26 +896,47 @@
         button-labels (set/map-invert (name-buttons device))
         _ (println "button-labels" button-labels)
         goal (:joltage-requirements device)
+        joltage-count (count goal)
+        binary-buttons (into {}
+                             (for [[n bs] button-labels]
+                               [n (for [i (range joltage-count)]
+                                    (if (some #{i} bs) 1 0))]))
+        _ (println "binary-buttons" binary-buttons)
         subs (:subs (solve-variables equations))
+        _ (println "subs" subs)
         free-variables (get-variables (vals subs))
         v (first free-variables)]
     (loop [n 0
-           v-val 0]
+           v-val (get-min-var-value v equations)]
+      (println "v" v "v-val" v-val)
       (if (> n 10)
         :exit-over-n
         (let [presses (reduce (fn [acc k]
+                                (println "reduce" [acc k] (get subs k) v v-val)
                                 (assoc acc k (reduce-equation (first (replace-all-vars (list (get subs k)) {v [v-val]})))))
                               subs
                               (keys subs))
-              _ (println "presses" presses)
+              presses (into {} (map (fn [[k v]] [k (first v)]) presses))
+              _ (println "presses" presses "binary-buttons" binary-buttons)
               sub-joltages (for [[pv p] presses]
-                             (multiply-vector (get button-labels pv) (first p)))
+                             (do
+                               (println "pv p bb[pv]" [pv p] (get binary-buttons pv))
+                               (multiply-vector (get binary-buttons pv) p)))
               _ (println "sub-joltages" sub-joltages)
               total (reduce (fn [v1 v2] (add-vectors v1 v2))
                             sub-joltages)]
-          total)))))
+          {:subs subs
+           :presses (sort (remove #(zero? (second %)) presses))
+           :press-count (apply + (vals presses))
+           :total total
+           :goal goal
+           :success? (= goal total)})))))
 
-;; (let [device (parse-line "[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}")]
-;;                   (find-answer device))
+;; (let [device1 (parse-line "[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}")
+;;                       device2 (parse-line "[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}")
+;;                       device3 (parse-line "[.###.#] (0,1,2,3,4) (0,3,4) (0,1,2,4,5) (1,2) {10,11,11,5,10,5}")
+;;                       equations (extract-equations device2)]
+;;                   (find-answer device3))
 
-;; TODO: I think the sub-joltages aren't listing all the joltages? add-vectors is getting vectors with length 3.
+;; TODO: I'm getting negative values for my variables. I think I need to compute the substitutions first,
+;; then use those to compute the minimum variable values.
