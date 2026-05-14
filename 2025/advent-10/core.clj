@@ -888,7 +888,8 @@
            (first (negativize (filter #(number? %) eq))))))
 
 (deftest test-get-min-var-value
-  (is (= 1 (get-min-var-value ["d" [["-b" "d" -1]]] "d"))))
+  (is (= 2 (get-min-var-value "d" [["-b" "d" -2]])))
+  (is (= 0 (get-min-var-value "d" [["b" "d" 2]]))))
 
 (defn find-answer [device]
   (let [equations (extract-equations device)
@@ -907,12 +908,13 @@
         free-variables (get-variables (vals subs))
         v (first free-variables)]
     (loop [n 0
-           v-val (get-min-var-value v equations)]
+           v-val 0 ;; (get-min-var-value v equations)
+           ]
       (println "v" v "v-val" v-val)
       (if (> n 10)
         :exit-over-n
         (let [presses (reduce (fn [acc k]
-                                (println "reduce" [acc k] (get subs k) v v-val)
+                                (println "reduce" [acc k] v v-val)
                                 (assoc acc k (reduce-equation (first (replace-all-vars (list (get subs k)) {v [v-val]})))))
                               subs
                               (keys subs))
@@ -920,17 +922,22 @@
               _ (println "presses" presses "binary-buttons" binary-buttons)
               sub-joltages (for [[pv p] presses]
                              (do
-                               (println "pv p bb[pv]" [pv p] (get binary-buttons pv))
+                               ;; (println "pv p bb[pv]" [pv p] (get binary-buttons pv))
                                (multiply-vector (get binary-buttons pv) p)))
               _ (println "sub-joltages" sub-joltages)
               total (reduce (fn [v1 v2] (add-vectors v1 v2))
-                            sub-joltages)]
-          {:subs subs
-           :presses (sort (remove #(zero? (second %)) presses))
-           :press-count (apply + (vals presses))
-           :total total
-           :goal goal
-           :success? (= goal total)})))))
+                            sub-joltages)
+              _ (println "total" total "goal" goal)
+              success (and (= goal total) (empty? (filter #(neg? %) (vals presses))))
+              _ (println "success?" success)]
+          (if success
+            {:subs subs
+             :presses (sort (remove #(zero? (second %)) presses))
+             :press-count (apply + (vals presses))
+             :total total
+             :goal goal
+             :success? (= goal total)}
+            (recur (inc n) (inc v-val))))))))
 
 ;; (let [device1 (parse-line "[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}")
 ;;                       device2 (parse-line "[...#.] (0,2,3,4) (2,3) (0,4) (0,1,2) (1,2,3,4) {7,5,12,7,2}")
@@ -940,3 +947,38 @@
 
 ;; TODO: I'm getting negative values for my variables. I think I need to compute the substitutions first,
 ;; then use those to compute the minimum variable values.
+
+(defn get-number [eq]
+  (first (filter #(number? %) eq)))
+
+(defn remove-variable [eq v]
+  (remove #{v (str/join ["-" v])} eq))
+
+(defn remove-number [eq]
+  (remove #(number? %) eq))
+
+(defn find-var-min-max
+  ([eq] (distinct (apply concat (find-var-min-max {} eq))))
+  ([subs eq]
+   (let [vars (get-variables [eq])
+         num (* -1 (get-number eq))]
+     (if (= 1 (count vars))
+       (assoc subs (first vars) num)
+       (apply concat
+              (for [v vars]
+                (for [i (range (inc num))]
+                  (let [n (get-number eq)]
+                    (find-var-min-max (assoc subs v i) (conj (remove-number (remove-variable eq v)) (+ n i)))))))))))
+
+(defn find-var-ranges [eq]
+  (let [vars (get-variables [eq])
+        values (find-var-min-max eq)
+        by-var (for [v vars]
+                 {:v v
+                  :values (for [v-map values]
+                            (get v-map v))})]
+    (for [{:keys [v values]} by-var]
+      {:v v :min (apply min values) :max (apply max values)})))
+
+;; TODO: find-var-min-max doesn't handle negative variables.
+
