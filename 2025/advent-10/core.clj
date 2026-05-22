@@ -6,6 +6,10 @@
 (require '[clojure.math :as math])
 (require '[clojure.set :as set])
 (require '[clojure.test :refer :all])
+(import '[org.apache.commons.math3.linear MatrixUtils])
+(import '[org.apache.commons.math3.linear LUDecomposition])
+(import '[org.apache.commons.math3.linear ArrayRealVector])
+(import '[org.apache.commons.math3.linear SingularValueDecomposition])
 
 (def small-input "small-input.txt")
 (def large-input "large-input.txt")
@@ -982,3 +986,34 @@
 
 ;; TODO: find-var-min-max doesn't handle negative variables.
 
+
+(let [data (into-array (map double-array [[1 2] [3 4]]))
+      matrix (MatrixUtils/createRealMatrix data)]
+  matrix)
+
+;; DecompositionSolver solver = new LUDecomposition(coefficients).getSolver();
+;; RealVector constants = new ArrayRealVector(new double[] { 8, -1 }, false);
+;; RealVector solution = solver.solve(constants);
+
+;; (let [data [[1 2] [3 4]]
+;;                       array-data (into-array (map double-array data))
+;;                       matrix (MatrixUtils/createRealMatrix array-data)
+;;                       decomposition (LUDecomposition. matrix)
+;;                       solver (. decomposition getSolver)
+;;                       constants (ArrayRealVector. (double-array [8.0 -1.0]) false)
+;; ]
+;;   (. solver solve constants))
+
+
+;; (let [device (parse-line "[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}")
+;;                       buttons (:wiring-schematics device)
+;;                       goal (:joltage-requirements device)
+;;                       goal-vector (double-array goal)
+;;                       b-matrix (get-button-matrix buttons)
+;;                       x-matrix (into-array (map double-array b-matrix))
+;;                       matrix (MatrixUtils/createRealMatrix x-matrix)
+;;                       decomposition (SingularValueDecomposition. matrix)
+;;                       solver (. decomposition getSolver)]
+;;                   (. solver solve goal-vector))
+
+;; TODO: No matching method solve found taking 1 args for class org.apache.commons.math3.linear.SingularValueDecomposition$Solver
