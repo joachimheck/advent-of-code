@@ -6,10 +6,21 @@
 (require '[clojure.math :as math])
 (require '[clojure.set :as set])
 (require '[clojure.test :refer :all])
+(require '[clojure.core.matrix :as matrix])
+(require '[clojure.core.matrix.linear :as linear])
+
+(matrix/set-current-implementation :vectorz)
+
 (import '[org.apache.commons.math3.linear MatrixUtils])
 (import '[org.apache.commons.math3.linear LUDecomposition])
 (import '[org.apache.commons.math3.linear ArrayRealVector])
 (import '[org.apache.commons.math3.linear SingularValueDecomposition])
+(import '[org.apache.commons.math3.linear QRDecomposition])
+
+(import '[org.ojalgo.array Array2D])
+(import '[org.ojalgo.matrix MatrixR064])
+(import '[org.ojalgo.matrix.store PhysicalStore])
+(import '[org.ojalgo.matrix.store R064Store])
 
 (def small-input "small-input.txt")
 (def large-input "large-input.txt")
@@ -1013,7 +1024,20 @@
 ;;                       x-matrix (into-array (map double-array b-matrix))
 ;;                       matrix (MatrixUtils/createRealMatrix x-matrix)
 ;;                       decomposition (SingularValueDecomposition. matrix)
+;;
+;;                       decomposition (QRDecomposition. matrix)
+;;
 ;;                       solver (. decomposition getSolver)]
 ;;                   (. solver solve goal-vector))
 
 ;; TODO: No matching method solve found taking 1 args for class org.apache.commons.math3.linear.SingularValueDecomposition$Solver
+
+;; PhysicalStore.Factory<Double, R064Store> storeFactory = R064Store.FACTORY;
+;; R064Store storeA = storeFactory.makeEye(5, 5);
+
+
+;; (let [device (parse-line "[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}")
+;;                       buttons (:wiring-schematics device)
+;;                       button-matrix (get-button-matrix buttons)
+;;                       goal (:joltage-requirements device)]
+;;                   (linear/least-squares button-matrix goal))
