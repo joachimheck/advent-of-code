@@ -1,4 +1,6 @@
-(ns advent-10.core)
+(ns advent-10.core
+  ;; (:use [uncomplicate.neanderthal core native])
+)
 
 (require '[clojure.pprint :as pp])
 (require '[clojure.repl :refer :all])
@@ -8,8 +10,10 @@
 (require '[clojure.test :refer :all])
 (require '[clojure.core.matrix :as matrix])
 (require '[clojure.core.matrix.linear :as linear])
+;; (require '[uncomplicate.neanderthal core native])
 
 (matrix/set-current-implementation :vectorz)
+;; (matrix/set-current-implementation :neanderthal)
 
 (import '[org.apache.commons.math3.linear MatrixUtils])
 (import '[org.apache.commons.math3.linear LUDecomposition])
@@ -1036,8 +1040,17 @@
 ;; R064Store storeA = storeFactory.makeEye(5, 5);
 
 
+;; a solution: [1 3 0 3 1 2]
 ;; (let [device (parse-line "[.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}")
 ;;                       buttons (:wiring-schematics device)
 ;;                       button-matrix (get-button-matrix buttons)
 ;;                       goal (:joltage-requirements device)]
 ;;                   (linear/least-squares button-matrix goal))
+
+
+;; (let [usv (linear/svd (transpose [[1 0 0] [0 1 0] [0 0 1] [1 1 1]]))
+;;                       U* (matrix/transpose (:U usv))
+;;                       V (matrix/transpose (:V* usv))
+;;                       ;; a* (matrix/inner-product V (:S usv) U*)
+;;                       ]
+;;                   [(:V* usv) V (:S usv) U*])
