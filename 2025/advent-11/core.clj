@@ -8,6 +8,7 @@
 (require '[clojure.test :refer :all])
 
 (def small-input "small-input.txt")
+(def small-input-2 "small-input-2.txt")
 (def large-input "large-input.txt")
 (def test-input "test-input.txt")
 
@@ -43,11 +44,12 @@
 ;; Part 1
 ;; How many paths lead from "you" to "out"?
 
-(defn find-paths-to-out [input]
+(defn find-paths-to-out [input start]
   (let [output-map (parse-input input)]
-    (loop [open-paths [["you"]]
+    (loop [open-paths [[start]]
            finished []
            n 0]
+      (println "n" n)
       (cond (empty? open-paths)
             {:result finished}
             (> n 10)
@@ -58,14 +60,14 @@
             (let [extended (apply concat (for [p open-paths]
                                            (let [end (last p)
                                                  nexts (get output-map end)]
-                                             (for [n nexts]
+                                             (for [n (remove (set p) nexts)]
                                                (conj p n)))))
                   new-extended (remove #(= (last %) "out") extended)
                   new-finished (concat finished (filter #(= (last %) "out") extended))]
               (recur new-extended new-finished (inc n)))))))
 
 (defn count-paths-to-out [input]
-  (count (:result (find-paths-to-out input))))
+  (count (:result (find-paths-to-out input "you"))))
 
 
 ;; (time (count-paths-to-out small-input))
@@ -74,3 +76,98 @@
 ;; (time (count-paths-to-out large-input))
 ;; "Elapsed time: 50.8217 msecs"
 ;; 701
+
+
+
+;; Part 2
+;; Count the paths from svr to out that also visit both dac and fft.
+(defn has-duplicates? [path]
+  (> (apply max (vals (frequencies path))) 1))
+
+(deftest test-has-duplicates?
+  (is (true? (has-duplicates? ["you" "bbb" "eee" "out" "eee"])))
+  (is (false? (has-duplicates? ["you" "bbb" "eee" "out"]))))
+
+(defn is-success? [path]
+  (boolean (and (some #{"dac"} path) (some #{"fft"} path) (= "out" (last path)))))
+
+(deftest test-is-success?
+  (is (true? (is-success? ["svr" "dac" "fft" "out"])))
+  (is (false? (is-success? ["svr" "aaa"]))))
+
+(defn is-failure? [path]
+  (boolean (or (has-duplicates? path) (and (= "out" (last path)) (not (is-success? path))))))
+
+(defn find-paths-to-out-2 [input]
+  (let [output-map (parse-input input)]
+    (loop [open-paths [["svr"]]
+           successes []
+           failures []
+           n 0]
+      (println "n" n)
+      ;; (println "open-paths" open-paths)
+      (cond (empty? open-paths)
+            {:successes successes}
+            (> n 10)
+            {:error :error-over-n
+             :open-paths open-paths
+             :successes successes
+             :failures failures}
+            :else
+            (let [extended (apply concat (for [p open-paths]
+                                           (let [end (last p)
+                                                 nexts (get output-map end)]
+                                             (for [n nexts]
+                                               (conj p n)))))
+                  ;; _ (println "extended" extended)
+                  {new-successes true others false} (group-by is-success? extended)
+                  {new-failures true new-extended false} (group-by is-failure? others)
+                  ;; _ (println "new-extended" new-extended)
+                  ]
+              (recur new-extended new-successes new-failures (inc n)))))))
+
+(defn count-paths-to-out-2 [input]
+  (count
+   (filter #(and (some #{"dac"} %) (some #{"fft"} %))
+           (:result (find-paths-to-out input "svr")))))
+
+(defn find-all-paths [input start]
+  (let [output-map (parse-input input)]
+    (loop [open-paths [[start]]
+           with-duplicates []
+           n 0]
+      (println "n" n)
+      ;; (println "open-paths" open-paths)
+      (cond (empty? open-paths)
+            {:with-duplicates with-duplicates}
+            (> n 10)
+            {:error :error-over-n
+             :with-duplicates with-duplicates}
+            :else
+            (let [extended (apply concat (for [p open-paths]
+                                           (let [end (last p)
+                                                 nexts (get output-map end)]
+                                             (for [n nexts]
+                                               (conj p n)))))
+                  new-with-duplicates (filter has-duplicates? extended)
+                  ]
+              (recur extended new-with-duplicates (inc n)))))))
+
+(def memo-data (atom {}))
+
+(defn find-paths [node path-map]
+  (let [memo-result (get @memo-data node)
+        _ (if (= node "out") (println "out node:" memo-result))]
+    (if memo-result
+      memo-result
+      (let [sub-paths (map #(find-paths % path-map) (get path-map node))
+            result (map #(concat (list node) %) sub-paths)
+            _ (if (= "out" node) (println "out result" result))
+]
+        (reset! memo-data (assoc @memo-data node result))
+        result))))
+
+;; find-paths should be generating a map entry for each node, not just two huge nested entries.
+;; (let [path-map (parse-input small-input-2)]
+;;                   (reset! memo-data {})
+;;                   (find-paths "svr" path-map))
