@@ -154,20 +154,31 @@
               (recur extended new-with-duplicates (inc n)))))))
 
 (def memo-data (atom {}))
+(def fn-count (atom 0))
 
 (defn find-paths [node path-map]
-  (let [memo-result (get @memo-data node)
-        _ (if (= node "out") (println "out node:" memo-result))]
-    (if memo-result
-      memo-result
-      (let [sub-paths (map #(find-paths % path-map) (get path-map node))
-            result (map #(concat (list node) %) sub-paths)
-            _ (if (= "out" node) (println "out result" result))
-]
-        (reset! memo-data (assoc @memo-data node result))
-        result))))
+  (if (> @fn-count 5000)
+    (throw (Exception. "error-over-n"))
+    (do
+      (reset! fn-count (inc @fn-count))
+      (let [memo-result (get @memo-data node)]
+        (if memo-result
+          memo-result
+          (let [sub-paths (mapcat #(find-paths % path-map) (get path-map node))
+                result (if (empty? sub-paths)
+                         (list (list node))
+                         (map #(concat (list node) %) sub-paths))]
+            (reset! memo-data (assoc @memo-data node result))
+            result))))))
 
 ;; find-paths should be generating a map entry for each node, not just two huge nested entries.
 ;; (let [path-map (parse-input small-input-2)]
 ;;                   (reset! memo-data {})
 ;;                   (find-paths "svr" path-map))
+
+;; (let [path-map (parse-input large-input)]
+;;                    (reset! memo-data {})
+;;                    (reset! fn-count 0)
+;;                    (time (try (let [result (find-paths "svr" path-map)]
+;;                                 (println "result count" (count result)))
+;;                               (catch Exception e (println "fn-count" @fn-count "m-d-count" (count @memo-data))))))
