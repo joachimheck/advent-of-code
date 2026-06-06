@@ -155,30 +155,37 @@
 
 (def memo-data (atom {}))
 (def fn-count (atom 0))
+(def memo-count (atom 0))
 
-(defn find-paths [node path-map]
-  (if (> @fn-count 5000)
+(defn find-paths [node target path-map]
+  (if (>= @fn-count 500)
     (throw (Exception. "error-over-n"))
     (do
+      (if (zero? (mod @fn-count 100))
+        (println "fn-count:" @fn-count))
       (reset! fn-count (inc @fn-count))
       (let [memo-result (get @memo-data node)]
         (if memo-result
           memo-result
-          (let [sub-paths (mapcat #(find-paths % path-map) (get path-map node))
-                result (if (empty? sub-paths)
+          (let [sub-paths (mapcat #(find-paths % target path-map) (get path-map node))
+                _ (if (some #{true} (map has-duplicates? sub-paths))
+                    (do
+                      (println "sub-paths with duplicates:" sub-paths)
+                      (throw (Exception. "error: duplicates!"))))
+                result (if (or (= target node) (empty? sub-paths))
                          (list (list node))
-                         (map #(concat (list node) %) sub-paths))]
+                         (map #(cons node %) sub-paths))]
+            (reset! memo-count (inc @memo-count))
             (reset! memo-data (assoc @memo-data node result))
             result))))))
 
-;; find-paths should be generating a map entry for each node, not just two huge nested entries.
-;; (let [path-map (parse-input small-input-2)]
-;;                   (reset! memo-data {})
-;;                   (find-paths "svr" path-map))
-
 ;; (let [path-map (parse-input large-input)]
-;;                    (reset! memo-data {})
-;;                    (reset! fn-count 0)
-;;                    (time (try (let [result (find-paths "svr" path-map)]
-;;                                 (println "result count" (count result)))
-;;                               (catch Exception e (println "fn-count" @fn-count "m-d-count" (count @memo-data))))))
+;;                   (reset! memo-data {})
+;;                   (reset! fn-count 0)
+;;                   (reset! memo-count 0)
+;;                   (time (try (let [result (find-paths "svr" path-map)]
+;;                                (println "result count" (count result)))
+;;                              (catch Exception e (println "fn-count" @fn-count "m-d-count" (count @memo-data)))))
+;;                   {:fn-count @fn-count :memo-count @memo-count :map-count (count path-map)})
+
+;; I'm trying to first find all the paths to "dac" and "fft", then all the paths to "out", but it isn't working.
