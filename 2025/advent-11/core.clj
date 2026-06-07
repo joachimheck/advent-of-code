@@ -156,8 +156,9 @@
 (def memo-data (atom {}))
 (def fn-count (atom 0))
 (def memo-count (atom 0))
+(def find-paths-result (atom #{}))
 
-(defn find-paths [node target path-map]
+(defn find-paths [node target target2 path-map]
   (if (>= @fn-count 500)
     (throw (Exception. "error-over-n"))
     (do
@@ -167,12 +168,13 @@
       (let [memo-result (get @memo-data node)]
         (if memo-result
           memo-result
-          (let [sub-paths (mapcat #(find-paths % target path-map) (get path-map node))
+          (let [sub-paths (mapcat #(find-paths % target target2 path-map) (get path-map node))
                 _ (if (some #{true} (map has-duplicates? sub-paths))
                     (do
                       (println "sub-paths with duplicates:" sub-paths)
                       (throw (Exception. "error: duplicates!"))))
-                result (if (or (= target node) (empty? sub-paths))
+                result (if (or (= target node) (= target2 node)
+                               (empty? sub-paths))
                          (list (list node))
                          (map #(cons node %) sub-paths))]
             (reset! memo-count (inc @memo-count))
@@ -189,3 +191,22 @@
 ;;                   {:fn-count @fn-count :memo-count @memo-count :map-count (count path-map)})
 
 ;; I'm trying to first find all the paths to "dac" and "fft", then all the paths to "out", but it isn't working.
+
+;; svr -> fft -> dac -> out
+
+(defn find-paths-to-node [path goal1 goal2 path-map]
+  (if (> (count path) 600)
+    nil
+    (let [node (last path)]
+      (cond (or (= node goal1) (= node goal2))
+            path
+            (= node "out")
+            nil
+            :else
+            (let [next-paths (map #(conj path %) (get path-map node))
+                  nested-result (remove #(or (nil? %) (empty? %)) (map #(find-paths-to-node % goal1 goal2 path-map) next-paths))]
+              (if (> (count nested-result) 1)
+                nested-result
+                (first nested-result)))))))
+
+;; (find-paths-to-node ["svr"] "dac" "fft" (parse-input small-input-2))
