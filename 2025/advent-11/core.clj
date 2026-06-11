@@ -194,19 +194,64 @@
 
 ;; svr -> fft -> dac -> out
 
-(defn find-paths-to-node [path goal1 goal2 path-map]
-  (if (> (count path) 600)
-    nil
-    (let [node (last path)]
-      (cond (or (= node goal1) (= node goal2))
-            path
-            (= node "out")
-            nil
+(defn check-for-loops [tree]
+  (loop [old #{"svr"}
+         current #{"svr"}
+         n 0
+         dups-found #{}]
+    (let [new-old (set/union old current)
+          new-current (set (mapcat #(get tree %) current))
+          mid-nodes (set/intersection new-current #{"dac" "fft"})]
+      (if (seq mid-nodes)
+        (println "found mid-nodes" mid-nodes))
+      (cond (>= n 50)
+            :error-over-n
+            (empty? current)
+            {:no-loop-detected n :dups-found (count dups-found)}
             :else
-            (let [next-paths (map #(conj path %) (get path-map node))
-                  nested-result (remove #(or (nil? %) (empty? %)) (map #(find-paths-to-node % goal1 goal2 path-map) next-paths))]
-              (if (> (count nested-result) 1)
-                nested-result
-                (first nested-result)))))))
+            (let [duplicates (set/intersection new-current new-old)]
+              (if duplicates
+                (recur new-old (set (remove duplicates new-current)) (inc n) (set/union dups-found duplicates))
+                (recur new-old new-current (inc n) dups-found)))))))
+
+(def find-paths-visited (atom #{}))
+
+(defn find-paths-to-node
+  ([node goal tree]
+   ;; (reset! find-paths-visited #{})
+   (find-paths-to-node node goal 0 tree))
+  ([node goal depth tree]
+   (if (> depth 50)
+     nil
+     (cond (= node goal)
+           (list (list node))
+           (= node "out")
+           nil
+           :else
+           (let [sub-nodes (remove @find-paths-visited (get tree node))
+                 _ (reset! find-paths-visited (conj @find-paths-visited node))
+                 sub-results (remove @find-paths-visited
+                                     (remove empty?
+                                             (remove nil?
+                                                     (mapcat #(find-paths-to-node % goal (inc depth) tree) sub-nodes))))
+                 ;; _ (println "node" node "visited" @find-paths-visited "sub-results" (doall sub-results))
+                 ;; _ (println "mapped" (doall (map #(conj % node) sub-results)))
+                 ]
+             (map #(conj % node) sub-results))))))
 
 ;; (find-paths-to-node ["svr"] "dac" "fft" (parse-input small-input-2))
+
+
+;; (count (find-paths-to-node "svr" "fft" (parse-input large-input)))
+;; 2
+;; (count (find-paths-to-node "fft" "dac" (parse-input large-input)))
+;; 2
+;; (count (find-paths-to-node "dac" "out" (parse-input large-input)))
+;; 26
+;; (* 2 2 26)
+;; 104
+;; Too low.
+
+;; (reset! find-paths-visited #{})
+;; (count (find-paths-to-node "svr" "dac" (parse-input large-input)))
+;; After this, @find-paths-visited contains "fft" even though it isn't on any of the paths.
