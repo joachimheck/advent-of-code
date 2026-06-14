@@ -250,23 +250,57 @@
 ;; (count (find-paths-to-node "svr" "dac" (parse-input large-input)))
 ;; After this, @find-paths-visited contains "fft" even though it isn't on any of the paths.
 
+(defn get-tree-subset [start goal tree]
+  (let [available-nodes (loop [nodes #{}
+                               edge-nodes #{start}
+                               n 0]
+                          ;; (println "nodes" nodes "edge-nodes" edge-nodes)
+                          (if (> (count nodes) 600)
+                            (throw (Exception. {:status :failure
+                                                :reason :over-n
+                                                :n n
+                                                :node-count (count (set/union nodes edge-nodes))}))
+                            (let [new-nodes (set/union nodes edge-nodes)
+                                  new-edge-nodes (set (mapcat #(get tree %) edge-nodes))]
+                              (if (some #{goal} new-edge-nodes)
+                                ;; {:status :success
+                                ;;  :node-count (count (set/union nodes new-edge-nodes))
+                                ;;  :n n}
+                                (set/union new-nodes new-edge-nodes)
+                                (recur new-nodes new-edge-nodes (inc n))))))]
+    (apply dissoc tree (remove available-nodes (keys tree)))))
+
 (defn find-paths-to-node-recur [node goal tree]
-  (loop [remaining-paths (list [node])
-         paths []
-         n 0]
-    ;; (println "loop:" "remaining-paths" remaining-paths "paths" paths)
-    (if (> (count remaining-paths) 30000)
-      :error-over-n
-      (if (empty? remaining-paths)
-        paths
-        (let [current-path (first remaining-paths)
-              current-node (last current-path)
-              new-remaining-paths (remove has-duplicates? (concat remaining-paths (map #(conj current-path %) (get tree current-node))))]
-          (recur (rest new-remaining-paths)
-                 (if (= (last current-path) goal)
-                   (conj paths current-path)
-                   paths)
-                 (inc n)))))))
+  (let [tree (get-tree-subset node goal tree)]
+    (println "tree size" (count tree)
+             "terminal nodes" (filter #(some #{goal} (second %)) tree)
+             "end nodes" (filter #(= goal (first %)) tree))
+    (loop [remaining-paths (list [node])
+           paths []
+           n 0]
+      (println "loop " n (count remaining-paths) "remaining-paths" remaining-paths "paths" paths)
+      (if (or (> (count remaining-paths) 5000)
+              (> n 200))
+        {:status :error-over-n
+         :path-count (count paths)
+         :remaining-path-count (count remaining-paths)
+         :first-remaining (first remaining-paths)}
+        (if (empty? remaining-paths)
+          {:status :finished
+           :paths paths
+           :n n}
+          (let [current-path (first (sort-by #(- (count %)) remaining-paths))
+                current-node (last current-path)
+                dup-count (count (filter has-duplicates? (map #(conj current-path %) (get tree current-node))))
+                _ (if (> dup-count 0) (println "dup count" dup-count))
+                _ (if (= node goal) (println "found goal"))
+                new-remaining-paths (concat remaining-paths (remove has-duplicates? (map #(conj current-path %) (get tree current-node))))]
+            (recur (rest new-remaining-paths)
+                   (if (= (last current-path) goal)
+                     (conj paths current-path)
+                     paths)
+                   (inc n))))))))
 
 ;; (find-paths-to-node-recur "svr" "fft" (parse-input large-input))
-;; Runs for a long time now that I added duplicate removal.
+;; doesn't find a path!
+
