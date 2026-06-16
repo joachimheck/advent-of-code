@@ -277,28 +277,37 @@
              "end nodes" (filter #(= goal (first %)) tree))
     (loop [remaining-paths (list [node])
            paths []
+           dup-count 0
            n 0]
-      (println "loop " n (count remaining-paths) "remaining-paths" remaining-paths "paths" paths)
+      ;; (println "loop " n (count remaining-paths) "remaining-paths" remaining-paths "paths" paths)
+      (if (= 0 (mod n 1000000)) (println "n" n "remaining-paths" (count remaining-paths)))
       (if (or (> (count remaining-paths) 5000)
-              (> n 200))
+              (> n 40000000))
         {:status :error-over-n
          :path-count (count paths)
+         :paths (if (< (count paths) 50) paths)
          :remaining-path-count (count remaining-paths)
-         :first-remaining (first remaining-paths)}
+         ;; :first-remaining (first remaining-paths)
+         :dup-count dup-count}
         (if (empty? remaining-paths)
           {:status :finished
+           :path-count (count paths)
            :paths paths
+           :dup-count dup-count
            :n n}
-          (let [current-path (first (sort-by #(- (count %)) remaining-paths))
+          (let [current-path (first remaining-paths)
                 current-node (last current-path)
-                dup-count (count (filter has-duplicates? (map #(conj current-path %) (get tree current-node))))
+                sub-nodes (get tree current-node)
+                sub-paths (map #(conj current-path %) sub-nodes)
                 _ (if (> dup-count 0) (println "dup count" dup-count))
                 _ (if (= node goal) (println "found goal"))
-                new-remaining-paths (concat remaining-paths (remove has-duplicates? (map #(conj current-path %) (get tree current-node))))]
-            (recur (rest new-remaining-paths)
+                ;; _ (println "current node" current-node ":" (get tree current-node))
+                new-remaining-paths (concat sub-paths (rest remaining-paths))]
+            (recur new-remaining-paths
                    (if (= (last current-path) goal)
                      (conj paths current-path)
                      paths)
+                   (+ dup-count (- (count sub-nodes) (count sub-paths)))
                    (inc n))))))))
 
 ;; (find-paths-to-node-recur "svr" "fft" (parse-input large-input))
