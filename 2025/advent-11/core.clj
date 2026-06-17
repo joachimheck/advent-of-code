@@ -299,10 +299,15 @@
                 current-node (last current-path)
                 sub-nodes (get tree current-node)
                 sub-paths (map #(conj current-path %) sub-nodes)
-                _ (if (> dup-count 0) (println "dup count" dup-count))
-                _ (if (= node goal) (println "found goal"))
+                ;; _ (if (> dup-count 0) (println "dup count" dup-count))
+                ;; _ (if (= node goal) (println "found goal"))
                 ;; _ (println "current node" current-node ":" (get tree current-node))
-                new-remaining-paths (concat sub-paths (rest remaining-paths))]
+                new-remaining-paths (concat sub-paths (rest remaining-paths))
+
+                ;; (first (filter #(some #{current-node} %) paths)
+                ;; rest-of-path (if (some #{current-node} paths-nodes)
+                               
+                               ]
             (recur new-remaining-paths
                    (if (= (last current-path) goal)
                      (conj paths current-path)
@@ -313,3 +318,13 @@
 ;; (find-paths-to-node-recur "svr" "fft" (parse-input large-input))
 ;; doesn't find a path!
 
+(defn count-paths 
+  ([start goal tree]
+   (if (= start "svr")
+     (reset! memo-data {}))
+   (if (= start "out")
+     1
+     (let [sub-nodes (get tree start)
+           path-count (apply + (map #(count-paths % goal tree) sub-nodes))]
+       (do (reset! memo-data (assoc @memo-data start path-count))
+           path-count)))))

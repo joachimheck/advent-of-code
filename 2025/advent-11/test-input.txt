@@ -1,0 +1,9 @@
+svr: a
+a: b c
+b: d
+c: d
+d: e f
+e: g
+f: g
+g: out
+
