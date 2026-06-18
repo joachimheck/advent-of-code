@@ -318,13 +318,29 @@
 ;; (find-paths-to-node-recur "svr" "fft" (parse-input large-input))
 ;; doesn't find a path!
 
-(defn count-paths 
+(defn count-paths
   ([start goal tree]
-   (if (= start "svr")
-     (reset! memo-data {}))
-   (if (= start "out")
-     1
-     (let [sub-nodes (get tree start)
-           path-count (apply + (map #(count-paths % goal tree) sub-nodes))]
-       (do (reset! memo-data (assoc @memo-data start path-count))
-           path-count)))))
+   (reset! memo-data {:invocations 0 goal 1})
+   (count-paths start goal tree 0))
+  ([node goal tree depth]
+   (println "count-paths" node (get tree node) (= node goal) depth @memo-data)
+    (do
+      ;; (println "incrementing invocations" node (get tree node) (get @memo-data :invocations))
+      (swap! memo-data #(update % :invocations inc))
+      (if (> (get @memo-data :invocations) 10)
+        (throw (Exception. "too many invocations")))
+      (if (> depth 10)
+        0)
+      (if (= node goal)
+        1
+        (let [sub-nodes (get tree node)
+              memo-count (get @memo-data node)
+              path-count (if memo-count
+                           memo-count
+                           (do
+                             (println "entering sub-nodes" sub-nodes)
+                             (get (swap! memo-data #(assoc % node (apply + (map (fn [n] (count-paths n goal tree (inc depth))) sub-nodes)))) node)))]
+          path-count)))))
+
+;; (time (count-paths "svr" "out" (parse-input small-input-2)))
+;; I don't know why or how it repeatedly calls count-paths with "out" and "out", in a loop.
