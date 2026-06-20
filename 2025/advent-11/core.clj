@@ -323,11 +323,11 @@
    (reset! memo-data {:invocations 0 goal 1})
    (count-paths start goal tree 0))
   ([node goal tree depth]
-   (println "count-paths" node (get tree node) (= node goal) depth @memo-data)
+   ;; (println "count-paths" node (get tree node) (= node goal) depth @memo-data)
     (do
       ;; (println "incrementing invocations" node (get tree node) (get @memo-data :invocations))
       (swap! memo-data #(update % :invocations inc))
-      (if (> (get @memo-data :invocations) 10)
+      (if (> (get @memo-data :invocations) 10000)
         (throw (Exception. "too many invocations")))
       (if (> depth 10)
         0)
@@ -337,10 +337,30 @@
               memo-count (get @memo-data node)
               path-count (if memo-count
                            memo-count
-                           (do
-                             (println "entering sub-nodes" sub-nodes)
-                             (get (swap! memo-data #(assoc % node (apply + (map (fn [n] (count-paths n goal tree (inc depth))) sub-nodes)))) node)))]
+                           (let [sub-count (apply + (map (fn [n] (count-paths n goal tree (inc depth))) sub-nodes))
+                                   swap-result (swap! memo-data #(assoc % node sub-count))
+                                   ;; _ (println "swap-result" swap-result)
+                                   count-from-memo (get swap-result node)]
+                               count-from-memo
+                             ;; (get (swap! memo-data #(assoc % node (apply + (map (fn [n] (count-paths n goal tree (inc depth))) sub-nodes)))) node)
+                             ))
+              ;; _ (println "path-count" path-count)
+              ]
           path-count)))))
 
 ;; (time (count-paths "svr" "out" (parse-input small-input-2)))
 ;; I don't know why or how it repeatedly calls count-paths with "out" and "out", in a loop.
+
+
+;; (time (let [input (parse-input small-input-2)]
+;;                         (* (count-paths "svr" "fft" input)
+;;                            (count-paths "fft" "dac" input)
+;;                            (count-paths "dac" "out" input))))
+;; "Elapsed time: 1.8343 msecs"
+;; 2
+;; (time (let [input (parse-input large-input)]
+;;                         (* (count-paths "svr" "fft" input)
+;;                            (count-paths "fft" "dac" input)
+;;                            (count-paths "dac" "out" input))))
+;; "Elapsed time: 20.8266 msecs"
+;; 390108778818526
