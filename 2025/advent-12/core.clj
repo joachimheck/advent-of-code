@@ -35,19 +35,43 @@
         shape-inputs (get groups true)
         region-inputs (filter #(re-find #"\d+x\d+" %) lines)
         ]
-    {:shapes (map (fn [l]
-                    {(parse-long (second (re-matches #"(\d+):" (first l))))
-                     (rest l)})
-                  shape-inputs)
-     ;; "4x4: 0 0 0 0 2 0"
-     ;; :regions (map (fn [r]
-     ;;                 (println "matching" r)
-     ;;                 (re-matches #"(\d+)x(\d+):(.+)" r))#"
-     ;;               region-inputs)
+    {:shapes (into {}
+                   (map (fn [l]
+                          {(parse-long (second (re-matches #"(\d+):" (first l))))
+                           (mapv vec (rest l))})
+                        shape-inputs))
      :regions (map (fn [r]
-                     (rest (re-find #"(\d+)x(\d+): (\d+) (\d+) (\d+) (\d+) (\d+) (\d+)" r)))
+                     (let [parsed (re-find #"(\d+)x(\d+): (\d+) (\d+) (\d+) (\d+) (\d+) (\d+)" r)]
+                       {:width (parse-long (nth parsed 1))
+                        :length (parse-long (nth parsed 2))
+                        :counts (mapv parse-long (drop 3 parsed))}))
                    region-inputs)
-     }
-    ))
+     }))
 
 ;; Part 1
+;; How many regions can fit all the desired presents?
+(defn rotate [shape]
+  (mapv vec
+        (for [i (range 0 3)]
+          (for [j (range 2 -1 -1)]
+            (get-in shape [j i])))))
+
+(defn flip [shape]
+  ;; 0 1 2  2 1 0
+  ;; 3 4 5  5 4 3
+  ;; 6 7 8  8 7 6
+  (mapv vec
+        (for [j (range 0 3)]
+          (for [i (range 0 3)]
+            (get-in shape [j (- 2 i)])))))
+
+(defn format-shape [shape]
+  (str/join "\n"
+            (for [j (range 0 3)]
+              (str/join
+               (for [i (range 0 3)]
+                 (get-in shape [j i]))))))
+
+(defn make-all-variations [shape]
+  (concat (take 4 (iterate rotate shape))
+          (take 4 (iterate rotate (flip shape)))))
