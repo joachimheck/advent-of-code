@@ -73,8 +73,9 @@
                  (get-in shape [j i]))))))
 
 (defn make-all-variations [shape]
-  (concat (take 4 (iterate rotate shape))
-          (take 4 (iterate rotate (flip shape)))))
+  (distinct
+   (concat (take 4 (iterate rotate shape))
+           (take 4 (iterate rotate (flip shape))))))
 
 (defn get-positions [shape]
   (remove nil?
