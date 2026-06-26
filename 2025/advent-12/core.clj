@@ -73,8 +73,11 @@
                  (get-in shape [j i]))))))
 
 (defn make-all-variations [shape]
-  (concat (take 4 (iterate rotate shape))
-          (take 4 (iterate rotate (flip shape)))))
+  (if (empty? shape)
+    nil
+    (distinct
+     (concat (take 4 (iterate rotate shape))
+             (take 4 (iterate rotate (flip shape)))))))
 
 (defn get-positions [shape]
   (remove nil?
@@ -91,7 +94,7 @@
 (defn overlap? [ps1 ps2]
   (some (set ps1) ps2))
 
-(defn add-shape [{:keys [width height grid] :as state} shape [x y] shape-id]
+(defn add-shape [{:keys [width length grid] :as state} shape [x y] shape-id]
   (reduce (fn [state p]
             (if (get (:grid state) p)
               (reduced nil)
@@ -102,15 +105,58 @@
 (defn shape-size [shape]
   (count (filter #{\#} (flatten shape))))
 
-(defn space-remaining [{:keys [width height shape-positions]}]
-  (println "space-remaining" width height shape-positions)
-  (- (* width height) (apply + (map count shape-positions))))
+(defn space-remaining [{:keys [width length shape-positions]}]
+  (println "space-remaining" width length shape-positions)
+  (- (* width length) (apply + (map count shape-positions))))
 
-(defn format-grid [{:keys [width height grid]}]
+(defn format-grid [{:keys [width length grid]}]
   (str/join "\n"
-            (for [j (range 0 height)]
+            (for [j (range 0 length)]
               (str/join
                (for [i (range 0 width)]
                  (if-let [id (get grid [i j])]
                    id
                    \.))))))
+
+(defn fit-shapes [width length shapes]
+  (if (< (* width length) (apply + (map shape-size shapes)))
+    :not-enough-space
+    (loop [shapes shapes
+           variations []
+           states []
+           new-states [{:width width :length length :grid {}}]
+           id (char (dec (int \A)))
+           n 0]
+      ;; (println "fit-shapes" "shapes:" shapes "variations:"  variations "state count:" (count states) "new state count:" (count new-states) "id:" id "n:" n)
+      (cond (> n 100)
+            :error-over-n
+            (and (empty? shapes) (empty? variations))
+            {:finished new-states}
+            (empty? variations)
+            (recur (rest shapes) (make-all-variations (first shapes)) new-states [] (char (inc (int id))) (inc n))
+            :else
+            (let [add-states (apply concat
+                                    (apply concat
+                                           (remove empty?
+                                                   (for [state states]
+                                                     (do
+                                                       (remove #(or (nil? %) (empty? %))
+                                                               (for [x (range (- width 2))]
+                                                                 (remove #(or (nil? %) (empty? %))
+                                                                         (for [y (range (- length 2))]
+                                                                           (add-shape state (first variations) [x y] id))))))))))]
+              (recur shapes (rest variations) states (concat new-states add-states) id (inc n)))))))
+ 
+(defn analyze-region [shape-map {:keys [width length counts] :as region}]
+  (let [shapes (apply concat
+                      (for [i (range (count counts))]
+                        (repeat (get counts i) (get shape-map i))))]
+    (if (seq (fit-shapes width length shapes))
+      :region-fillable
+      :region-not-fillable)))
+
+;; (let [input (parse-input small-input)
+;;                       shapes (:shapes input)
+;;                       regions (:regions input)]
+;;                   (time (analyze-region shapes (nth (:regions input) 1))))
+;; This is very slow. Maybe I should move the states for comprehension into the loop and check n?
