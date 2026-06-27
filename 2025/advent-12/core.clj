@@ -118,6 +118,23 @@
                    id
                    \.))))))
 
+(defn flip-horizontal [{:keys [width length grid] :as state}]
+  (assoc state :grid
+         (into {} (for [[[x y] z] grid]
+                    [[(- width x) y] z]))))
+
+(defn flip-vertical [{:keys [width length grid] :as state}]
+  (assoc state :grid
+         (into {} (for [[[x y] z] grid]
+                    [[x (- length y)] z]))))
+
+(defn states-equivalent? [{:keys [width length grid] :as state1} {:keys [width length grid] :as state2}]
+  (or (= state1 (flip-horizontal state2))
+      (= state1 (flip-vertical state2))))
+
+(defn make-equivalent-states [{:keys [width length grid] :as state}]
+  [(flip-horizontal state) (flip-vertical state) (flip-vertical (flip-horizontal state))])
+
 (defn fit-shapes [width length shapes]
   (if (< (* width length) (apply + (map shape-size shapes)))
     :not-enough-space
@@ -125,15 +142,19 @@
            variations []
            states []
            new-states [{:width width :length length :grid {}}]
+           ignore-states #{}
            id (char (dec (int \A)))
            n 0]
-      ;; (println "fit-shapes" "shapes:" shapes "variations:"  variations "state count:" (count states) "new state count:" (count new-states) "id:" id "n:" n)
+      (println "fit-shapes" "state count:" (count states) "new state count:" (count new-states) "ignore state count:" (count ignore-states)
+               "variation count:" (count variations) "id:" id "n:" n)
       (cond (> n 100)
             :error-over-n
             (and (empty? shapes) (empty? variations))
             {:finished new-states}
             (empty? variations)
-            (recur (rest shapes) (make-all-variations (first shapes)) new-states [] (char (inc (int id))) (inc n))
+            (let [ignore-removed (remove ignore-states new-states)
+                  _ (println "Removed" (- (count new-states) (count ignore-removed)) "states")]
+              (recur (rest shapes) (make-all-variations (first shapes)) ignore-removed [] #{} (char (inc (int id))) (inc n)))
             :else
             (let [add-states (apply concat
                                     (apply concat
@@ -144,19 +165,28 @@
                                                                (for [x (range (- width 2))]
                                                                  (remove #(or (nil? %) (empty? %))
                                                                          (for [y (range (- length 2))]
-                                                                           (add-shape state (first variations) [x y] id))))))))))]
-              (recur shapes (rest variations) states (concat new-states add-states) id (inc n)))))))
- 
+                                                                           (add-shape state (first variations) [x y] id))))))))))
+                  equivalent-states (set (mapcat make-equivalent-states add-states))
+                  _ (println (format-grid (first add-states)))
+                  ]
+              (recur shapes (rest variations) states (concat new-states add-states) (set/union ignore-states equivalent-states) id (inc n)))))))
+
 (defn analyze-region [shape-map {:keys [width length counts] :as region}]
   (let [shapes (apply concat
                       (for [i (range (count counts))]
                         (repeat (get counts i) (get shape-map i))))]
-    (if (seq (fit-shapes width length shapes))
-      :region-fillable
-      :region-not-fillable)))
+    (let [fitted (fit-shapes width length shapes)]
+      (if (seq fitted)
+        {:region-fillable (first (:finished fitted))}
+        :region-not-fillable))))
 
 ;; (let [input (parse-input small-input)
 ;;                       shapes (:shapes input)
 ;;                       regions (:regions input)]
 ;;                   (time (analyze-region shapes (nth (:regions input) 1))))
 ;; This is very slow. Maybe I should move the states for comprehension into the loop and check n?
+
+;; (let [input (parse-input small-input)
+;;                       shapes (:shapes input)
+;;                       regions (:regions input)]
+;;                   (time (println (format-grid (:region-fillable (analyze-region shapes (nth (:regions input) 1)))))))
