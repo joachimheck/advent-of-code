@@ -167,18 +167,22 @@
                                                                          (for [y (range (- length 2))]
                                                                            (add-shape state (first variations) [x y] id))))))))))
                   equivalent-states (set (mapcat make-equivalent-states add-states))
-                  _ (println (format-grid (first add-states)))
+                  _ (if (not (empty? add-states)) (println (format-grid (first add-states))))
                   ]
               (recur shapes (rest variations) states (concat new-states add-states) (set/union ignore-states equivalent-states) id (inc n)))))))
+
+(defn fit-shapes-dfs [width length shapes]
+  ;; TODO: is it faster to do a dfs? Or simpler?
+  )
 
 (defn analyze-region [shape-map {:keys [width length counts] :as region}]
   (let [shapes (apply concat
                       (for [i (range (count counts))]
                         (repeat (get counts i) (get shape-map i))))]
     (let [fitted (fit-shapes width length shapes)]
-      (if (seq fitted)
+      (if (:finished fitted)
         {:region-fillable (first (:finished fitted))}
-        :region-not-fillable))))
+        {:region-not-fillable fitted}))))
 
 ;; (let [input (parse-input small-input)
 ;;                       shapes (:shapes input)
