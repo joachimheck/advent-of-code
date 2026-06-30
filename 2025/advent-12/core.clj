@@ -171,9 +171,45 @@
                   ]
               (recur shapes (rest variations) states (concat new-states add-states) (set/union ignore-states equivalent-states) id (inc n)))))))
 
+;; for each shape
+;;  for each variation
+;;   for each position
+;;    add shape to state
+
 (defn fit-shapes-dfs [width length shapes]
-  ;; TODO: is it faster to do a dfs? Or simpler?
-  )
+  (let [initial-states [{:length length :width width :grid {}}]]
+    (loop [shapes shapes
+           id (char (int \A))
+           states initial-states]
+      (if (empty? shapes)
+        states
+        (recur (rest shapes)
+               (char (inc (int id)))
+               (loop [states states
+                      new-states []]
+                 (if (empty? states)
+                   new-states
+                   (recur (rest states)
+                          (concat new-states
+                                  (loop [variations (make-all-variations (first shapes))
+                                         new-states []]
+                                    (if (empty? variations)
+                                      new-states
+                                      (recur (rest variations)
+                                             (concat new-states
+                                                     (loop [xs (range (- width 2))
+                                                            new-states []]
+                                                       (if (empty? xs)
+                                                         new-states
+                                                         (recur (rest xs) 
+                                                                (concat new-states
+                                                                        (let [x (first xs)]
+                                                                          (loop [ys (range (- length 2))
+                                                                                 new-states []]
+                                                                            (let [y (first ys)]
+                                                                              (if (empty? ys)
+                                                                                (remove nil? new-states)
+                                                                                (recur (rest ys) (conj new-states (add-shape (first states) (first variations) [x y] id))))))))))))))))))))))))
 
 (defn analyze-region [shape-map {:keys [width length counts] :as region}]
   (let [shapes (apply concat
@@ -194,3 +230,15 @@
 ;;                       shapes (:shapes input)
 ;;                       regions (:regions input)]
 ;;                   (time (println (format-grid (:region-fillable (analyze-region shapes (nth (:regions input) 1)))))))
+
+(defn analyze-region-dfs [shape-map {:keys [width length counts] :as region}]
+  (let [shapes (apply concat
+                      (for [i (range (count counts))]
+                        (repeat (get counts i) (get shape-map i))))]
+    (fit-shapes-dfs width length shapes)))
+
+;; (let [input (parse-input small-input)
+;;                       shapes (:shapes input)
+;;                       regions (:regions input)]
+;;                   (time (println (format-grid (first (analyze-region-dfs shapes (nth regions 1)))))))
+;; Stack Overflow :(
