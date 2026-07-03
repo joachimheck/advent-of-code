@@ -171,10 +171,25 @@
                   ]
               (recur shapes (rest variations) states (concat new-states add-states) (set/union ignore-states equivalent-states) id (inc n)))))))
 
-;; for each shape
-;;  for each variation
-;;   for each position
-;;    add shape to state
+(defn analyze-region [shape-map {:keys [width length counts] :as region}]
+  (let [shapes (apply concat
+                      (for [i (range (count counts))]
+                        (repeat (get counts i) (get shape-map i))))]
+    (let [fitted (fit-shapes width length shapes)]
+      (if (:finished fitted)
+        {:region-fillable (first (:finished fitted))}
+        {:region-not-fillable fitted}))))
+
+;; (let [input (parse-input small-input)
+;;                       shapes (:shapes input)
+;;                       regions (:regions input)]
+;;                   (time (analyze-region shapes (nth (:regions input) 1))))
+;; This is very slow. Maybe I should move the states for comprehension into the loop and check n?
+
+;; (let [input (parse-input small-input)
+;;                       shapes (:shapes input)
+;;                       regions (:regions input)]
+;;                   (time (println (format-grid (:region-fillable (analyze-region shapes (nth (:regions input) 1)))))))
 
 (defn fit-shapes-dfs [width length shapes]
   (let [initial-states [{:length length :width width :grid {}}]]
@@ -211,34 +226,52 @@
                                                                                 (remove nil? new-states)
                                                                                 (recur (rest ys) (conj new-states (add-shape (first states) (first variations) [x y] id))))))))))))))))))))))))
 
-(defn analyze-region [shape-map {:keys [width length counts] :as region}]
-  (let [shapes (apply concat
-                      (for [i (range (count counts))]
-                        (repeat (get counts i) (get shape-map i))))]
-    (let [fitted (fit-shapes width length shapes)]
-      (if (:finished fitted)
-        {:region-fillable (first (:finished fitted))}
-        {:region-not-fillable fitted}))))
-
-;; (let [input (parse-input small-input)
-;;                       shapes (:shapes input)
-;;                       regions (:regions input)]
-;;                   (time (analyze-region shapes (nth (:regions input) 1))))
-;; This is very slow. Maybe I should move the states for comprehension into the loop and check n?
-
-;; (let [input (parse-input small-input)
-;;                       shapes (:shapes input)
-;;                       regions (:regions input)]
-;;                   (time (println (format-grid (:region-fillable (analyze-region shapes (nth (:regions input) 1)))))))
-
 (defn analyze-region-dfs [shape-map {:keys [width length counts] :as region}]
   (let [shapes (apply concat
                       (for [i (range (count counts))]
                         (repeat (get counts i) (get shape-map i))))]
     (fit-shapes-dfs width length shapes)))
 
+(def recursion-count (atom 0))
+
+(defn fit-shapes-recurse
+  ([width length shape-map]
+   (reset! recursion-count 0)
+   (let [shape-ids (map-indexed (fn [i s] (vector s (char (+ (int \A) i)))) shape-map)]
+     (fit-shapes-recurse {:width width :length length :grid {}} shape-ids)))
+  ([{:keys [width length grid] :as state} shape-ids]
+   (if (empty? shape-ids)
+     (list state)
+     (let [[shape id] (first shape-ids)]
+       (remove #(or (nil? %) (empty? %))
+               (apply concat
+                      (for [variation (make-all-variations shape)
+                            x (range (quot width 2))
+                            y (range (quot length 2))]
+                        (do
+                          (if (> (swap! recursion-count inc) 100000000)
+                            (throw (Exception. (format "too many iterations %s %d %d" variation x y))))
+                          (if-let [new-state (add-shape state variation [x y] id)]
+                            (fit-shapes-recurse new-state (rest shape-ids)))))))))))
+
+(defn analyze-region-recurse [shape-map {:keys [width length counts] :as region}]
+  (let [shapes (apply concat
+                      (for [i (range (count counts))]
+                        (repeat (get counts i) (get shape-map i))))
+        _ (println "Maximum steps:" (* (long (math/pow (* 4 (quot (- width 2) 2) (quot (- length 2) 2)) (count shapes)))))
+        result (fit-shapes-recurse width length shapes)]
+    (if result
+      {:c (count result) :r (first result)}
+      result)))
+
 ;; (let [input (parse-input small-input)
 ;;                       shapes (:shapes input)
-;;                       regions (:regions input)]
-;;                   (time (println (format-grid (first (analyze-region-dfs shapes (nth regions 1)))))))
-;; Stack Overflow :(
+;;                       regions (:regions input)
+;;                       result (analyze-region-recurse shapes (nth regions 1))]
+;;                   (if result
+;;                     (println "c" (:c result) "rc" @recursion-count "\n" (if (:r result) (format-grid (:r result))))))
+;; Maximum steps: 64000000
+;; c 0 rc 66144 
+;;  nil
+;; nil
+;; advent-12.core> 
