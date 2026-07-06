@@ -96,11 +96,11 @@
 
 (defn add-shape [{:keys [width length grid] :as state} shape [x y] shape-id]
   (reduce (fn [state p]
-            (if (get (:grid state) p)
-              (reduced nil)
-              (assoc-in state [:grid p] shape-id)))
-          state
-          (translate [x y] (get-positions shape))))
+              (if (get (:grid state) p)
+                (reduced nil)
+                (assoc-in state [:grid p] shape-id)))
+            state
+            (translate [x y] (get-positions shape))))
 
 (defn shape-size [shape]
   (count (filter #{\#} (flatten shape))))
@@ -235,31 +235,31 @@
 (def recursion-count (atom 0))
 
 (defn fit-shapes-recurse
-  ([width length shape-map]
+  ([width length shapes max-recursion]
    (reset! recursion-count 0)
-   (let [shape-ids (map-indexed (fn [i s] (vector s (char (+ (int \A) i)))) shape-map)]
-     (fit-shapes-recurse {:width width :length length :grid {}} shape-ids)))
-  ([{:keys [width length grid] :as state} shape-ids]
+   (let [shape-ids (map-indexed (fn [i s] (vector s (char (+ (int \A) i)))) shapes)]
+     (fit-shapes-recurse {:width width :length length :grid {}} shape-ids max-recursion)))
+  ([{:keys [width length grid] :as state} shape-ids max-recursion]
    (if (empty? shape-ids)
      (list state)
      (let [[shape id] (first shape-ids)]
        (remove #(or (nil? %) (empty? %))
                (apply concat
                       (for [variation (make-all-variations shape)
-                            x (range (quot width 2))
-                            y (range (quot length 2))]
+                            x (range (- width 2))
+                            y (range (- length 2))]
                         (do
-                          (if (> (swap! recursion-count inc) 100000000)
-                            (throw (Exception. (format "too many iterations %s %d %d" variation x y))))
+                          (if (> (swap! recursion-count inc) max-recursion)
+                            (throw (Exception. (format "too many iterations %d" @recursion-count))))
                           (if-let [new-state (add-shape state variation [x y] id)]
-                            (fit-shapes-recurse new-state (rest shape-ids)))))))))))
+                            (fit-shapes-recurse new-state (rest shape-ids) max-recursion))))))))))
 
-(defn analyze-region-recurse [shape-map {:keys [width length counts] :as region}]
+(defn analyze-region-recurse [shape-map {:keys [width length counts] :as region} max-recursion]
   (let [shapes (apply concat
                       (for [i (range (count counts))]
                         (repeat (get counts i) (get shape-map i))))
-        _ (println "Maximum steps:" (* (long (math/pow (* 4 (quot (- width 2) 2) (quot (- length 2) 2)) (count shapes)))))
-        result (fit-shapes-recurse width length shapes)]
+        _ (println "Maximum steps:" (long (math/pow (* 4 width length) (count shapes))))
+        result (fit-shapes-recurse width length shapes max-recursion)]
     (if result
       {:c (count result) :r (first result)}
       result)))
@@ -275,3 +275,20 @@
 ;;  nil
 ;; nil
 ;; advent-12.core> 
+
+(defn analyze-all-recurse [input max-recursion]
+  (let [initial-state (parse-input input)
+        regions (:regions initial-state)
+        shape-map (:shapes initial-state)]
+    (println "Regions that can fit all shapes:"
+             (count (remove nil?
+                            (for [r (range (count regions))]
+                              (let [{:keys [width length counts] :as region} (nth regions r)
+                                    shapes (apply concat
+                                                  (for [i (range (count counts))]
+                                                    (repeat (get counts i) (get shape-map i))))
+                                    ;; result (time (try (first (fit-shapes-recurse width length shapes max-recursion))
+                                    ;;                   (catch Exception e (str "caught exception: " (.getMessage e)))))
+                                    result (try (first (fit-shapes-recurse width length shapes max-recursion))
+                                                (catch Exception e nil))]
+                                result)))))))
