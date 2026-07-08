@@ -276,19 +276,33 @@
 ;; nil
 ;; advent-12.core> 
 
+;; First non-fitting region:
+;; 48x49: 71 54 57 70 51 56
+(defn can-fit? [shape-map {:keys [width length counts] :as region}]
+  (let [shape-sizes (into {} (map (fn [[i s]] (vector i (count (get-positions s)))) shape-map))
+        region-area (* width length)
+        shape-area (apply + (for [c (range (count counts))]
+                              (* (get counts c) (get shape-sizes c))))
+        ;; _ (println "region-area" region-area "shape-area" shape-area)
+        ]
+    (<= shape-area region-area)))
+
 (defn analyze-all-recurse [input max-recursion]
   (let [initial-state (parse-input input)
-        regions (:regions initial-state)
-        shape-map (:shapes initial-state)]
-    (println "Regions that can fit all shapes:"
-             (count (remove nil?
-                            (for [r (range (count regions))]
-                              (let [{:keys [width length counts] :as region} (nth regions r)
-                                    shapes (apply concat
-                                                  (for [i (range (count counts))]
-                                                    (repeat (get counts i) (get shape-map i))))
-                                    ;; result (time (try (first (fit-shapes-recurse width length shapes max-recursion))
-                                    ;;                   (catch Exception e (str "caught exception: " (.getMessage e)))))
-                                    result (try (first (fit-shapes-recurse width length shapes max-recursion))
-                                                (catch Exception e nil))]
-                                result)))))))
+        shape-map (:shapes initial-state)
+        regions (filter #(can-fit? shape-map %) (:regions initial-state))]
+    (println "first region" (first regions))
+    (println "first failed region" (first (filter #(not (can-fit? shape-map %)) (:regions initial-state))))
+    (printf "Regions that can fit all shapes (%d iterations): %d/%d\n"
+            max-recursion
+            (count (remove nil?
+                           (for [{:keys [width length counts] :as region} regions]
+                             (let [shapes (apply concat
+                                                 (for [i (range (count counts))]
+                                                   (repeat (get counts i) (get shape-map i))))
+                                   result (try (first (fit-shapes-recurse width length shapes max-recursion))
+                                               (catch Exception e nil))]
+                               result))))
+            (count regions))))
+
+;; TODO: Could I keep track of the number of unusable spaces and, at each iteration, check that there's still enough space?
